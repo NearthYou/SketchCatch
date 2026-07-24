@@ -73,7 +73,7 @@ const response: ReverseEngineeringScanResponse = {
   }
 };
 
-/** 선택 상태와 사용자 확인 경계를 실제 패널 props로 조립해 SSR 결과를 검증한다. */
+/** 실제 보드 미리보기 props를 조립해 SSR 결과를 검증한다. */
 function renderPanel(
   placement: "original" | "compiled",
   options: {
@@ -85,17 +85,12 @@ function renderPanel(
     readonly edgeCount?: number;
     readonly discoveredResources?: readonly DiscoveredResource[];
     readonly hasCurrentBoardResources?: boolean;
-    readonly importDecisionComplete?: boolean;
-    readonly importDecisionOptions?: ReverseEngineeringResultPanelProps["importDecisionOptions"];
-    readonly selectedReadyResourceIds?: readonly string[];
-    readonly acknowledgedReviewOnlyResourceIds?: readonly string[];
     readonly coverage?: ReverseEngineeringServiceCoverage;
     readonly scanErrors?: readonly ReverseEngineeringScanError[];
     readonly layoutSummary?: readonly string[];
   } = {}
 ): string {
   const props: ReverseEngineeringResultPanelProps = {
-    acknowledgedReviewOnlyResourceIds: options.acknowledgedReviewOnlyResourceIds ?? [],
     applyMessage: options.applyMessage ?? null,
     applicationMode: options.applicationMode ?? "replace",
     applyState: options.applyState ?? "idle",
@@ -112,22 +107,14 @@ function renderPanel(
     },
     createProjectOnApply: false,
     hasCurrentBoardResources: options.hasCurrentBoardResources ?? false,
-    importDecisionComplete: options.importDecisionComplete ?? true,
-    importDecisionOptions: options.importDecisionOptions ?? {
-      ready: [],
-      reviewOnly: [],
-      invalidResourceIds: []
-    },
     logs: [],
     layoutSummary: options.layoutSummary ?? [],
     onAppendToCurrentBoard() {},
     onApplicationModeChange() {},
     onCompilePlacement() {},
     onKeepOriginalPlacement() {},
-    onReadyResourceToggle() {},
     onReplaceCurrentBoard() {},
     onRetryScan() {},
-    onReviewOnlyResourceToggle() {},
     permissionRecoveryHref: "/dashboard/settings?tab=aws&next=reverse&awsConnectionId=connection-1",
     placement,
     response: {
@@ -156,8 +143,7 @@ function renderPanel(
           }
         : undefined
     },
-    selectedCandidateId: "candidate-structure-auto",
-    selectedReadyResourceIds: options.selectedReadyResourceIds ?? []
+    selectedCandidateId: "candidate-structure-auto"
   };
 
   return renderToStaticMarkup(createElement(ReverseEngineeringResultPanel, props));
@@ -206,14 +192,7 @@ test("기본 미리보기는 핵심 수치와 세 가지 행동만 먼저 보여
         config: {},
         analysisExcluded: true
       }
-    ],
-    importDecisionOptions: {
-      ready: [{ id: "resource-1", label: "서비스 VPC", status: "ready" }],
-      reviewOnly: [
-        { id: "resource-2", label: "서비스 역할", status: "unsupported_resource_type" }
-      ],
-      invalidResourceIds: []
-    }
+    ]
   });
 
   assert.match(html, /aria-label="미리보기"/);
@@ -226,10 +205,10 @@ test("기본 미리보기는 핵심 수치와 세 가지 행동만 먼저 보여
   assert.match(html, /hidden=""/);
   assert.match(html, /리소스 이름 또는 종류 검색/);
   assert.match(html, /전체[^0-9]*2/);
-  assert.match(html, /수정 가능[^0-9]*1/);
-  assert.match(html, /확인 필요[^0-9]*1/);
+  assert.match(html, /보드 표시[^0-9]*2/);
+  assert.match(html, /추가 확인[^0-9]*1/);
   assert.match(html, /보드에 표시되지 않거나 읽지 못한 항목은 자동으로 적용하지 않습니다/);
-  assert.match(html, /Terraform으로 관리할 리소스 선택/);
+  assert.doesNotMatch(html, /Terraform으로 관리할 리소스 선택/);
   assert.doesNotMatch(html, /<h3>스캔 요약<\/h3>/);
   assert.doesNotMatch(html, /<h3>선택한 배치 적용<\/h3>/);
 });
@@ -593,25 +572,12 @@ test("현재 보드에서는 실제로 적용할 replace 또는 append 배치를
   assert.match(html, /<button[^>]*aria-busy="false"(?![^>]*disabled="")[^>]*>보드에 적용<\/button>/);
 });
 
-test("Terraform 가져오기 선택 상태가 있어도 Board 적용을 막지 않는다", () => {
-  const html = renderPanel("original", {
-    boardNodeCount: 2,
-    importDecisionComplete: false,
-    importDecisionOptions: {
-      ready: [{ id: "ready-resource", label: "고객 파일", status: "ready" }],
-      reviewOnly: [{ id: "review-resource", label: "암호화 키", status: "manual_review" }],
-      invalidResourceIds: []
-    }
-  });
+test("Reverse Engineering 상세 정보에는 Terraform 가져오기 선택을 표시하지 않는다", () => {
+  const html = renderPanel("original", { boardNodeCount: 2 });
 
-  assert.match(html, /Terraform으로 관리할 리소스 선택/);
-  assert.match(html, /고객 파일/);
-  assert.match(html, /기존 AWS 리소스를 Terraform으로 가져와 수정/);
-  assert.match(html, /보드에서만 확인할 리소스/);
-  assert.match(html, /암호화 키/);
-  assert.match(html, /추가 확인이 필요/);
-  assert.match(html, /보드에서만 확인할 리소스를 모두 확인해 주세요/);
+  assert.doesNotMatch(html, /Terraform으로 관리할 리소스 선택/);
+  assert.doesNotMatch(html, /기존 AWS 리소스를 Terraform으로 가져와 수정/);
+  assert.doesNotMatch(html, /보드에서만 확인할 리소스를 모두 확인해 주세요/);
   assert.match(html, /<button[^>]*aria-busy="false"[^>]*>보드에 적용<\/button>/);
   assert.doesNotMatch(html, /<button[^>]*disabled=""[^>]*>보드에 적용<\/button>/);
-  assert.doesNotMatch(html, /검토 전용/);
 });

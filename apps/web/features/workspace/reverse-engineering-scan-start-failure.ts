@@ -14,6 +14,18 @@ export function getReverseEngineeringStartFailure(error: unknown): ReverseEngine
     };
   }
 
+  if (
+    error instanceof ApiClientError &&
+    error.code === "REVERSE_ENGINEERING_SCAN_RETRYABLE" &&
+    /AWS SSO 로그인이 만료/u.test(error.message)
+  ) {
+    return {
+      action: "retry",
+      description: "터미널에서 aws sso login을 실행한 뒤 다시 가져와 주세요.",
+      title: "AWS SSO 로그인이 만료되었습니다."
+    };
+  }
+
   return {
     action: "retry",
     description: "잠시 후 다시 시도해 주세요.",

@@ -6,6 +6,7 @@ import {
   AWS_IMPORT_PROBE_EXECUTORS,
   probeApplicationAutoScaling,
   probeApiGatewayTopology,
+  probeApiGatewayV2Topology,
   probeCloudControl,
   probeAwsImportAccess,
   probeCloudFrontTopology,
@@ -435,6 +436,43 @@ test("API Gateway probe는 첫 REST API의 resource, method, integration, deploy
   );
 });
 
+test("API Gateway V2 probe는 첫 HTTP/WebSocket API의 integration, route와 stage를 한 건씩 확인한다", async () => {
+  const commands: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const outcome = await probeApiGatewayV2Topology({
+    async send(command) {
+      const value = command as { constructor: { name: string }; input: Record<string, unknown> };
+      commands.push({ name: value.constructor.name, input: value.input });
+      if (value.constructor.name === "GetApisCommand") {
+        return { Items: [{ ApiId: "http-api" }] };
+      }
+      return {};
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(
+    commands.map((command) => command.name),
+    ["GetApisCommand", "GetIntegrationsCommand", "GetRoutesCommand", "GetStagesCommand"]
+  );
+  assert.deepEqual(commands[0]?.input, { MaxResults: "1" });
+  assert.deepEqual(commands[1]?.input, { ApiId: "http-api", MaxResults: "1" });
+  assert.deepEqual(commands[2]?.input, { ApiId: "http-api", MaxResults: "1" });
+  assert.deepEqual(commands[3]?.input, { ApiId: "http-api", MaxResults: "1" });
+});
+
+test("API Gateway V2 probe는 API가 없으면 catalog만 읽는다", async () => {
+  const commands: string[] = [];
+  const outcome = await probeApiGatewayV2Topology({
+    async send(command) {
+      commands.push(command.constructor.name);
+      return { Items: [] };
+    }
+  });
+
+  assert.equal(outcome, "success");
+  assert.deepEqual(commands, ["GetApisCommand"]);
+});
+
 test("상세 probe는 권한 거부를 성공으로 숨기지 않는다", async () => {
   const denied = Object.assign(new Error("denied"), { name: "AccessDeniedException" });
   await assert.rejects(
@@ -485,6 +523,17 @@ test("상세 probe는 권한 거부를 성공으로 숨기지 않는다", async 
       async send(command) {
         if (command.constructor.name === "GetRestApisCommand") {
           return { items: [{ id: "rest-api" }] };
+        }
+        throw denied;
+      }
+    }),
+    denied
+  );
+  await assert.rejects(
+    probeApiGatewayV2Topology({
+      async send(command) {
+        if (command.constructor.name === "GetApisCommand") {
+          return { Items: [{ ApiId: "http-api" }] };
         }
         throw denied;
       }

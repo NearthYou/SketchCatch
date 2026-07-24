@@ -14,7 +14,6 @@ import type {
   ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
-import type { ReverseEngineeringImportDecisionOptions } from "./reverse-engineering-import-decision";
 import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
@@ -26,7 +25,6 @@ import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "partial" | "error";
 export type ReverseEngineeringResultPanelProps = {
-  readonly acknowledgedReviewOnlyResourceIds: readonly string[];
   readonly applyMessage: string | null;
   readonly applicationMode: ReverseEngineeringBoardApplicationMode;
   readonly applyState: ReverseEngineeringApplyState;
@@ -34,21 +32,16 @@ export type ReverseEngineeringResultPanelProps = {
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
-  readonly importDecisionComplete: boolean;
-  readonly importDecisionOptions: ReverseEngineeringImportDecisionOptions;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly layoutSummary: readonly string[];
   readonly onAppendToCurrentBoard: () => void;
   readonly onApplicationModeChange: (mode: ReverseEngineeringBoardApplicationMode) => void;
   readonly onCompilePlacement: () => void;
   readonly onKeepOriginalPlacement: () => void;
-  readonly onReadyResourceToggle: (resourceId: string) => void;
   readonly onReplaceCurrentBoard: () => void;
   readonly onRetryScan: () => void;
-  readonly onReviewOnlyResourceToggle: (resourceId: string) => void;
   readonly permissionRecoveryHref: string;
   readonly response: ReverseEngineeringScanResponse;
-  readonly selectedReadyResourceIds: readonly string[];
   readonly selectedCandidateId: string;
   readonly placement: ReverseEngineeringPlacement;
 };
@@ -142,26 +135,20 @@ const SECURITY_PROVIDER_RESOURCE_TYPES = new Set([
 
 // 기본 화면에는 보드 미리보기와 사용자가 바로 고를 행동만 남깁니다.
 export function ReverseEngineeringResultPanel({
-  acknowledgedReviewOnlyResourceIds,
   applyMessage,
   applicationMode,
   applyState,
   comparison,
   hasCurrentBoardResources,
-  importDecisionComplete,
-  importDecisionOptions,
   layoutSummary,
   onAppendToCurrentBoard,
   onApplicationModeChange,
   onCompilePlacement,
   onKeepOriginalPlacement,
-  onReadyResourceToggle,
   onReplaceCurrentBoard,
-  onReviewOnlyResourceToggle,
   permissionRecoveryHref,
   placement,
-  response,
-  selectedReadyResourceIds
+  response
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -432,10 +419,10 @@ export function ReverseEngineeringResultPanel({
                 전체 <strong>{summary.discoveredCount}</strong>
               </span>
               <span>
-                수정 가능 <strong>{importDecisionOptions.ready.length}</strong>
+                보드 표시 <strong>{summary.boardCount}</strong>
               </span>
               <span>
-                확인 필요 <strong>{importDecisionOptions.reviewOnly.length}</strong>
+                추가 확인 <strong>{summary.reviewOnlyCount}</strong>
               </span>
               <span>
                 못 읽음 <strong>{summary.unreadableServiceCount}</strong>
@@ -508,74 +495,6 @@ export function ReverseEngineeringResultPanel({
                     <li key={message}>{message}</li>
                   ))}
                 </ul>
-              ) : null}
-            </section>
-
-            <section className={styles.detailSection} aria-label="Terraform 가져오기 선택">
-              <h3>Terraform으로 관리할 리소스 선택</h3>
-              <p className={styles.sectionDescription}>
-                선택한 리소스만 기존 AWS 리소스로 가져와 수정할 수 있게 합니다.
-              </p>
-              {importDecisionOptions.ready.length > 0 ? (
-                <ul className={styles.importDecisionList}>
-                  {importDecisionOptions.ready.map((option) => (
-                    <li className={styles.importDecisionItem} key={option.id}>
-                      <label>
-                        <input
-                          checked={selectedReadyResourceIds.includes(option.id)}
-                          onChange={() => onReadyResourceToggle(option.id)}
-                          type="checkbox"
-                        />
-                        <span className={styles.importDecisionCopy}>
-                          <strong>{option.label}</strong>
-                          <span>기존 AWS 리소스를 Terraform으로 가져와 수정할 수 있게 합니다.</span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={styles.hint}>
-                  이번 적용에서 바로 Terraform으로 가져올 리소스는 없습니다.
-                </p>
-              )}
-
-              {importDecisionOptions.reviewOnly.length > 0 ? (
-                <div className={styles.importDecisionReview}>
-                  <strong>보드에서만 확인할 리소스</strong>
-                  <p>아래 항목은 내용을 확인해야 계속할 수 있습니다.</p>
-                  <ul className={styles.importDecisionList}>
-                    {importDecisionOptions.reviewOnly.map((option) => (
-                      <li className={styles.importDecisionItem} key={option.id}>
-                        <label>
-                          <input
-                            checked={acknowledgedReviewOnlyResourceIds.includes(option.id)}
-                            onChange={() => onReviewOnlyResourceToggle(option.id)}
-                            type="checkbox"
-                          />
-                          <span className={styles.importDecisionCopy}>
-                            <strong>{option.label}</strong>
-                            <span>
-                              {option.status === "unsupported_resource_type"
-                                ? "현재 보드에서 수정하거나 배포할 수 없는 종류입니다."
-                                : "Terraform으로 옮기기 전에 추가 확인이 필요합니다."}
-                            </span>
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {importDecisionOptions.invalidResourceIds.length > 0 ? (
-                <p className={styles.error} role="alert">
-                  가져오기 상태를 확인하지 못한 리소스가 있습니다.
-                </p>
-              ) : !importDecisionComplete ? (
-                <p className={styles.warning} role="status">
-                  보드에서만 확인할 리소스를 모두 확인해 주세요.
-                </p>
               ) : null}
             </section>
 

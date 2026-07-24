@@ -18,6 +18,13 @@ import {
   GetStagesCommand
 } from "@aws-sdk/client-api-gateway";
 import {
+  ApiGatewayV2Client,
+  GetApisCommand,
+  GetIntegrationsCommand as GetApiGatewayV2IntegrationsCommand,
+  GetRoutesCommand as GetApiGatewayV2RoutesCommand,
+  GetStagesCommand as GetApiGatewayV2StagesCommand
+} from "@aws-sdk/client-apigatewayv2";
+import {
   CloudFrontClient,
   GetDistributionConfigCommand,
   GetOriginAccessControlCommand,
@@ -999,16 +1006,23 @@ export async function probeCloudWatchMetadata(
   return "success";
 }
 
-/** gg: API Gateway production executor는 첫 REST API topology probe만 실행합니다. */
+/** gg: API Gateway V1·V2 topology reader가 같은 최소 GET 권한으로 읽히는지 함께 확인합니다. */
 async function probeApiGateway(
   context: AwsImportProbeExecutorContext
 ): Promise<AwsImportProbeOutcome> {
-  const client = bindAbortSignal(
+  const restClient = bindAbortSignal(
     new APIGatewayClient({ region: context.region, credentials: context.credentials }),
     context.abortSignal
   );
-  return probeApiGatewayTopology({
-    send: (command) => (client as unknown as AwsImportProbeReadClient).send(command)
+  await probeApiGatewayTopology({
+    send: (command) => (restClient as unknown as AwsImportProbeReadClient).send(command)
+  });
+  const v2Client = bindAbortSignal(
+    new ApiGatewayV2Client({ region: context.region, credentials: context.credentials }),
+    context.abortSignal
+  );
+  return probeApiGatewayV2Topology({
+    send: (command) => (v2Client as unknown as AwsImportProbeReadClient).send(command)
   });
 }
 
@@ -1059,6 +1073,37 @@ export async function probeApiGatewayTopology(
   await client.send(new GetAuthorizersCommand({ restApiId, limit: 1 }));
   await client.send(new GetModelsCommand({ restApiId, limit: 1 }));
   await client.send(new GetRequestValidatorsCommand({ restApiId, limit: 1 }));
+  return "success";
+}
+
+/** gg: V2는 첫 HTTP/WebSocket API의 Integration·Route·Stage만 한 건씩 읽어 direct reader 권한을 확인합니다. */
+export async function probeApiGatewayV2Topology(
+  client: AwsImportProbeReadClient
+): Promise<AwsImportProbeOutcome> {
+  const listed = (await client.send(new GetApisCommand({ MaxResults: "1" }))) as {
+    Items?: Array<{ ApiId?: string }>;
+  };
+  const apiId = listed.Items?.[0]?.ApiId;
+  if (!apiId) return "success";
+
+  await client.send(
+    new GetApiGatewayV2IntegrationsCommand({
+      ApiId: apiId,
+      MaxResults: "1"
+    })
+  );
+  await client.send(
+    new GetApiGatewayV2RoutesCommand({
+      ApiId: apiId,
+      MaxResults: "1"
+    })
+  );
+  await client.send(
+    new GetApiGatewayV2StagesCommand({
+      ApiId: apiId,
+      MaxResults: "1"
+    })
+  );
   return "success";
 }
 

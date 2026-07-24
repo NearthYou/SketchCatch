@@ -168,6 +168,7 @@ export function classifyReverseEngineeringConnectionFailure(
     errorName === "ssocredentialprovidererror" ||
     message.includes("aws sso credentials") ||
     message.includes("credentials from sso") ||
+    message.includes("aws sso 로그인") ||
     message.includes("sso session") ||
     message.includes("sso token") ||
     message.includes(".aws/sso/cache")

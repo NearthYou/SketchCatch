@@ -11,6 +11,7 @@ import {
   type ReverseEngineeringScanRecord,
   type ReverseEngineeringRepository
 } from "./reverse-engineering-service.js";
+import { classifyReverseEngineeringConnectionFailure } from "./reverse-engineering-public-errors.js";
 
 const accessContext: ProjectAccessContext = {
   kind: "user",
@@ -326,6 +327,21 @@ test("preview의 서버 AWS SSO 만료는 Role 권한 안내가 아닌 재로그
       /aws sso login/u.test(error.message) &&
       !/--profile|CredentialsProvider|\/Users\/private/iu.test(error.message)
   );
+});
+
+test("한글로 감싼 AWS SSO 만료도 Role 설정 오류로 바꾸지 않는다", () => {
+  const classified = classifyReverseEngineeringConnectionFailure(
+    Object.assign(new Error("AWS SSO 로그인이 만료되었습니다. aws sso login을 실행해 주세요."), {
+      name: "CredentialsProviderError"
+    })
+  );
+
+  assert.deepEqual(classified, {
+    internalCode: "caller_sso_session_expired",
+    publicReason: "retry",
+    publicMessage:
+      "AWS SSO 로그인이 만료되었습니다. 터미널에서 aws sso login을 실행한 뒤 다시 시도해 주세요."
+  });
 });
 
 function createVerifiedConnection(): AwsConnection {

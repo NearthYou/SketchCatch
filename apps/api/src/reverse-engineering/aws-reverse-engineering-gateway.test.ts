@@ -1432,6 +1432,31 @@ test("ALL 스캔은 API Gateway ARN inventory와 전용 REST API ID를 하나로
   assert.deepEqual(records[0], detailedRecord);
 });
 
+test("ALL 스캔은 API Gateway V2 ARN inventory와 opaque direct API를 하나로 합치고 direct topology를 우선한다", () => {
+  const apiId = "a1b2c3d4e5";
+  const genericRecord = safeRecord(
+    "AWS::ApiGatewayV2::Api",
+    `arn:aws:apigateway:ap-northeast-2::/apis/${apiId}`,
+    "V2 API · generic"
+  );
+  const detailedRecord: AwsDiscoveredResourceRecord = {
+    ...genericRecord,
+    providerResourceId: "apigwv2-ref-0123456789abcdef01234567",
+    displayName: "orders-http-api",
+    config: { protocolType: "HTTP" },
+    relationships: [{ type: "contains", targetProviderResourceId: "apigwv2-route-ref" }],
+    serverOnly: {
+      providerResourceId: apiId,
+      terraformImportId: apiId
+    }
+  };
+
+  const records = uniqueDiscoveredRecordsByProviderId([genericRecord, detailedRecord]);
+
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0], detailedRecord);
+});
+
 test("API Gateway reader는 resource policy 원문 대신 존재 marker만 기록한다", async () => {
   const policy = JSON.stringify({
     Statement: [{ Resource: "arn:aws:execute-api:ap-northeast-2:123456789012:*" }]
@@ -1791,6 +1816,10 @@ test("Cloud Control은 전용 reader가 없는 선택 종류와 하위 구성만
     "AWS::Lambda::EventSourceMapping"
   ]);
   assert.deepEqual(getAwsCloudControlProviderResourceTypes(scanInput(["VPC"])), []);
+  assert.deepEqual(
+    getAwsCloudControlProviderResourceTypes(scanInput(["API_GATEWAY_WEBSOCKET_API"])),
+    []
+  );
 });
 
 test("AWS catalog의 모든 scan 선택은 실제 reader 경로를 가진다", () => {
@@ -1879,20 +1908,29 @@ test("전용 상세 reader만 필요한 종류는 generic inventory 중복 조�
     assert.equal(shouldReadUnknownResourceGroup(input), false);
   }
 
+  const lambdaPlan = createAwsReverseEngineeringReaderPlan(scanInput(["LAMBDA"]));
+  assert.equal(lambdaPlan.detailedResources, true, "LAMBDA 상세 reader");
+  assert.equal(lambdaPlan.cloudControlResources, true, "LAMBDA 하위 구성 inventory");
+  assert.equal(lambdaPlan.unknownResources, true, "LAMBDA generic fallback");
+
   for (const resourceType of [
-    "LAMBDA",
     "API_GATEWAY_REST_API",
+    "API_GATEWAY_AUTHORIZER",
     "API_GATEWAY_RESOURCE",
     "API_GATEWAY_METHOD",
     "API_GATEWAY_INTEGRATION",
     "API_GATEWAY_DEPLOYMENT",
-    "API_GATEWAY_STAGE"
+    "API_GATEWAY_STAGE",
+    "API_GATEWAY_WEBSOCKET_API",
+    "API_GATEWAY_V2_ROUTE",
+    "API_GATEWAY_V2_INTEGRATION",
+    "API_GATEWAY_V2_STAGE"
   ] as const) {
     const plan = createAwsReverseEngineeringReaderPlan(scanInput([resourceType]));
 
     assert.equal(plan.detailedResources, true, `${resourceType} 상세 reader`);
-    assert.equal(plan.cloudControlResources, true, `${resourceType} 하위 구성 inventory`);
-    assert.equal(plan.unknownResources, true, `${resourceType} generic fallback`);
+    assert.equal(plan.cloudControlResources, false, `${resourceType} Cloud Control 중복 조회 방지`);
+    assert.equal(plan.unknownResources, false, `${resourceType} generic inventory 중복 조회 방지`);
   }
 
   const unknownPlan = createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"]));

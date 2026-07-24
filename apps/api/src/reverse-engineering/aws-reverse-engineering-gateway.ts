@@ -613,11 +613,16 @@ const DETAILED_REVERSE_ENGINEERING_TYPES = new Set<ResourceType>([
   "KMS_KEY",
   "KMS_ALIAS",
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
   "API_GATEWAY_DEPLOYMENT",
-  "API_GATEWAY_STAGE"
+  "API_GATEWAY_STAGE",
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE"
 ]);
 
 const DEDICATED_REVERSE_ENGINEERING_RESOURCE_TYPES = new Set<ResourceType>([
@@ -649,11 +654,16 @@ const DEDICATED_REVERSE_ENGINEERING_RESOURCE_TYPES = new Set<ResourceType>([
   "KMS_KEY",
   "KMS_ALIAS",
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
   "API_GATEWAY_DEPLOYMENT",
   "API_GATEWAY_STAGE",
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE",
   "ECR_REPOSITORY",
   "SECRETS_MANAGER_SECRET",
   "APPLICATION_AUTO_SCALING_TARGET",
@@ -5388,6 +5398,21 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
     return `AWS::ApiGateway::RestApi:${restApiId}`;
   }
 
+  // API Gateway V2 direct reader는 공개 ID를 opaque hash로 쓰므로, generic ARN과는
+  // server-only API ID를 기준으로 합쳐야 같은 HTTP/WebSocket API가 두 번 보이지 않습니다.
+  if (record.providerResourceType === "AWS::ApiGatewayV2::Api") {
+    const configId = getNonEmptyStringValue(record.config["apiId"]);
+    const exactId =
+      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ??
+      getNonEmptyStringValue(record.serverOnly?.terraformImportId);
+    const arnId = /^arn:[^:]+:apigateway:[^:]+::\/apis\/([^/]+)$/u.exec(
+      record.providerResourceId
+    )?.[1];
+    const apiId = exactId ?? configId ?? arnId ?? record.providerResourceId;
+
+    return `AWS::ApiGatewayV2::Api:${apiId}`;
+  }
+
   return record.providerResourceId;
 }
 
@@ -5446,6 +5471,7 @@ const DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE = new Map<string, st
   ["AWS::EC2::Image", "imageId"],
   ["AWS::Logs::LogGroup", "logGroupName"],
   ["AWS::ApiGateway::RestApi", "name"],
+  ["AWS::ApiGatewayV2::Api", "protocolType"],
   ["AWS::CloudWatch::Alarm", "alarmName"],
   ["AWS::Events::Rule", "name"],
   ["AWS::Lambda::Function", "functionName"],
@@ -5672,6 +5698,11 @@ function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string 
       return "eventbridge";
     case "API_GATEWAY_REST_API":
       return "api-gateway";
+    case "API_GATEWAY_WEBSOCKET_API":
+    case "API_GATEWAY_V2_ROUTE":
+    case "API_GATEWAY_V2_INTEGRATION":
+    case "API_GATEWAY_V2_STAGE":
+      return "api-gateway-v2";
     case "LAMBDA":
     case "LAMBDA_PERMISSION":
       return "lambda";

@@ -302,6 +302,32 @@ async function readRestApiFamily(input: {
     state.advancedFeatures.add("resource_policy");
   }
 
+  // Cloud Control does not provide a reliable Authorizer handler in every account/region.
+  // Read it with the REST API topology instead so the method relationship has one source of truth.
+  const authorizers = await readFamilyPagedCollection<Authorizer>(
+    state,
+    "authorizers",
+    async (position) => {
+      const response = await sendApiGatewayCommand<GetAuthorizersCommandOutput>(
+        input.client,
+        new GetAuthorizersCommand({ restApiId: input.restApiId, position })
+      );
+
+      return {
+        items: response.items ?? [],
+        nextToken: response.position,
+        truncated: readAwsPaginationTruncated(response)
+      };
+    }
+  );
+  const authorizerIdentities = addAuthorizerRecords({
+    ...input,
+    state,
+    restApiIdentity,
+    authorizers
+  });
+  if (authorizers.length > 0) state.advancedFeatures.add("authorizers");
+
   const resources = await readFamilyPagedCollection<Resource>(
     state,
     "resources",
@@ -325,7 +351,8 @@ async function readRestApiFamily(input: {
     state,
     restApiIdentity,
     resources,
-    rootResourceId
+    rootResourceId,
+    authorizerIdentities
   });
 
   const deployments = await readFamilyPagedCollection<Deployment>(
@@ -360,24 +387,6 @@ async function readRestApiFamily(input: {
     return response.item ?? [];
   });
   addStageRecords({ ...input, state, restApiIdentity, stages, deploymentIdentities });
-
-  const authorizers = await readFamilyPagedCollection<Authorizer>(
-    state,
-    "authorizers",
-    async (position) => {
-      const response = await sendApiGatewayCommand<GetAuthorizersCommandOutput>(
-        input.client,
-        new GetAuthorizersCommand({ restApiId: input.restApiId, position })
-      );
-
-      return {
-        items: response.items ?? [],
-        nextToken: response.position,
-        truncated: readAwsPaginationTruncated(response)
-      };
-    }
-  );
-  if (authorizers.length > 0) state.advancedFeatures.add("authorizers");
 
   const models = await readFamilyPagedCollection<Model>(state, "models", async (position) => {
     const response = await sendApiGatewayCommand<GetModelsCommandOutput>(
@@ -470,6 +479,7 @@ async function addResourceAndMethodRecords(input: {
   readonly restApiIdentity: RecordIdentity;
   readonly resources: readonly Resource[];
   readonly rootResourceId?: string | undefined;
+  readonly authorizerIdentities: ReadonlyMap<string, RecordIdentity>;
 }): Promise<void> {
   for (const resource of input.resources) {
     const resourceId = getNonEmptyString(resource.id);
@@ -486,7 +496,8 @@ async function addResourceAndMethodRecords(input: {
             resource,
             resourceId,
             resourceIdentity: input.restApiIdentity,
-            requestedHttpMethod
+            requestedHttpMethod,
+            authorizerIdentities: input.authorizerIdentities
           });
         }
       }
@@ -532,7 +543,8 @@ async function addResourceAndMethodRecords(input: {
         resource,
         resourceId,
         resourceIdentity,
-        requestedHttpMethod
+        requestedHttpMethod,
+        authorizerIdentities: input.authorizerIdentities
       });
     }
   }
@@ -549,6 +561,7 @@ async function addMethodAndIntegrationRecord(input: {
   readonly resourceId: string;
   readonly resourceIdentity: RecordIdentity;
   readonly requestedHttpMethod: string;
+  readonly authorizerIdentities: ReadonlyMap<string, RecordIdentity>;
 }): Promise<void> {
   const httpMethod = input.requestedHttpMethod.trim().toUpperCase();
   if (httpMethod.length === 0) {
@@ -576,6 +589,17 @@ async function addMethodAndIntegrationRecord(input: {
   }
 
   addMethodAdvancedFeatures(input.state, method);
+  const authorizerId = getNonEmptyString(method.authorizerId);
+  const authorizerIdentity = authorizerId
+    ? input.authorizerIdentities.get(authorizerId)
+    : undefined;
+  if (
+    authorizerId &&
+    !authorizerIdentity &&
+    !input.state.failures.some((failure) => failure.scope === "authorizers")
+  ) {
+    markFamilyIncomplete(input.state, "authorizers", "invalid_response");
+  }
   const methodIdentity = createIdentity(
     "AWS::ApiGateway::Method",
     `${input.restApiId}/${input.resourceId}/${httpMethod}`
@@ -584,6 +608,7 @@ async function addMethodAndIntegrationRecord(input: {
     identity: methodIdentity,
     familyIdentity: input.restApiIdentity,
     parentIdentity: input.resourceIdentity,
+    relatedIdentities: authorizerIdentity ? [authorizerIdentity] : [],
     region: input.region,
     displayName: `${httpMethod} ${getNonEmptyString(input.resource.path) ?? "/"}`,
     publicConfig: createPublicMethodConfig(method, httpMethod),
@@ -636,6 +661,46 @@ async function addMethodAndIntegrationRecord(input: {
     })
   });
   addTopologyRecord(input.state, integrationRecord, "integrations");
+}
+
+/** gg: Authorizer는 RestApi의 하위 실제 리소스로 보존하고, Method가 참조할 때만 관계를 연결합니다. */
+function addAuthorizerRecords(input: {
+  readonly restApiId: string;
+  readonly region: string;
+  readonly state: FamilyReadState;
+  readonly restApiIdentity: RecordIdentity;
+  readonly authorizers: readonly Authorizer[];
+}): ReadonlyMap<string, RecordIdentity> {
+  const identities = new Map<string, RecordIdentity>();
+
+  for (const authorizer of input.authorizers) {
+    const authorizerId = getNonEmptyString(authorizer.id);
+    if (!authorizerId || identities.has(authorizerId)) {
+      markFamilyIncomplete(input.state, "authorizers", "invalid_response");
+      continue;
+    }
+
+    const identity = createIdentity(
+      "AWS::ApiGateway::Authorizer",
+      `${input.restApiId}/${authorizerId}`
+    );
+    identities.set(authorizerId, identity);
+    addTopologyRecord(
+      input.state,
+      createTopologyRecord({
+        identity,
+        familyIdentity: input.restApiIdentity,
+        parentIdentity: input.restApiIdentity,
+        region: input.region,
+        displayName: getNonEmptyString(authorizer.name) ?? "API Gateway Authorizer",
+        publicConfig: createPublicAuthorizerConfig(authorizer),
+        serverOnlyConfig: createServerOnlyAuthorizerConfig(authorizer, input.restApiId, authorizerId)
+      }),
+      "authorizers"
+    );
+  }
+
+  return identities;
 }
 
 /** gg: Deployment 목록을 모두 보존해 Stage가 가리키는 정확한 배포 identity를 server-only로 연결합니다. */
@@ -1032,6 +1097,40 @@ function createServerOnlyRestApiConfig(
     disableExecuteApiEndpoint: restApi.disableExecuteApiEndpoint,
     policyBody: restApi.policy,
     tags: restApi.tags
+  };
+}
+
+/** gg: Authorizer의 URI·provider ARN은 공개하지 않고 기능 유형과 존재 여부만 보드 미리보기에 둡니다. */
+function createPublicAuthorizerConfig(authorizer: Authorizer): Readonly<Record<string, unknown>> {
+  return {
+    type: authorizer.type,
+    hasAuthorizerUri: Boolean(getNonEmptyString(authorizer.authorizerUri)),
+    hasCredentials: Boolean(getNonEmptyString(authorizer.authorizerCredentials)),
+    providerArnCount: authorizer.providerARNs?.length ?? 0,
+    hasIdentitySource: Boolean(getNonEmptyString(authorizer.identitySource)),
+    hasValidationExpression: Boolean(getNonEmptyString(authorizer.identityValidationExpression)),
+    resultTtlInSeconds: authorizer.authorizerResultTtlInSeconds
+  };
+}
+
+/** gg: 실제 AWS 값은 Terraform을 만들기 전까지 server-only scan detail에만 보존합니다. */
+function createServerOnlyAuthorizerConfig(
+  authorizer: Authorizer,
+  restApiId: string,
+  authorizerId: string
+): Readonly<Record<string, unknown>> {
+  return {
+    restApiId,
+    authorizerId,
+    name: authorizer.name,
+    type: authorizer.type,
+    authorizerUri: authorizer.authorizerUri,
+    authorizerCredentials: authorizer.authorizerCredentials,
+    identitySource: authorizer.identitySource,
+    identityValidationExpression: authorizer.identityValidationExpression,
+    providerARNs: authorizer.providerARNs,
+    authType: authorizer.authType,
+    authorizerResultTtlInSeconds: authorizer.authorizerResultTtlInSeconds
   };
 }
 

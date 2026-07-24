@@ -131,6 +131,16 @@ test("보드 적용은 Terraform 선택이나 확인 없이 빈 observe-only 결
   assert.match(applyFlow, /importDecision/);
 });
 
+test("Reverse Engineering 결과는 Terraform 선택 상태를 만들거나 상세 패널에 넘기지 않는다", () => {
+  assert.doesNotMatch(panelSource, /createReverseEngineeringImportDecisionOptions/);
+  assert.doesNotMatch(panelSource, /isReverseEngineeringImportDecisionComplete/);
+  assert.doesNotMatch(panelSource, /const \[selectedReadyResourceIds/);
+  assert.doesNotMatch(panelSource, /const \[acknowledgedReviewOnlyResourceIds/);
+  assert.doesNotMatch(panelSource, /onReadyResourceToggle=/);
+  assert.doesNotMatch(panelSource, /onReviewOnlyResourceToggle=/);
+  assert.doesNotMatch(panelSource, /importDecisionOptions=/);
+});
+
 test("replace와 append는 mode별 하나의 정리본만 미리보고 적용한다", () => {
   assert.match(panelSource, /useState<ReverseEngineeringBoardApplicationMode>\("replace"\)/);
   assert.match(panelSource, /type ReverseEngineeringOrganizedDiagrams/);

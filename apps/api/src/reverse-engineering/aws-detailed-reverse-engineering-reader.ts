@@ -10,6 +10,10 @@ import {
   type AwsApiGatewayRestTopologyReadResult
 } from "./aws-api-gateway-rest-topology-reader.js";
 import {
+  readAwsApiGatewayV2Topology,
+  type AwsApiGatewayV2TopologyReadResult
+} from "./aws-api-gateway-v2-topology-reader.js";
+import {
   readDetailedIamResources,
   type AwsDetailedIamReadResult
 } from "./aws-iam-reverse-engineering-reader.js";
@@ -38,6 +42,10 @@ export type AwsDetailedReverseEngineeringReaderDependencies = {
     region: string,
     credentials: TerraformAwsCredentialEnv
   ) => Promise<AwsApiGatewayRestTopologyReadResult>;
+  readApiGatewayV2: (
+    region: string,
+    credentials: TerraformAwsCredentialEnv
+  ) => Promise<AwsApiGatewayV2TopologyReadResult>;
 };
 
 const IAM_RESOURCE_TYPES = new Set<ResourceType>([
@@ -49,11 +57,18 @@ const LAMBDA_RESOURCE_TYPES = new Set<ResourceType>(["LAMBDA", "LAMBDA_PERMISSIO
 const KMS_RESOURCE_TYPES = new Set<ResourceType>(["KMS_KEY", "KMS_ALIAS"]);
 const API_GATEWAY_RESOURCE_TYPES = new Set<ResourceType>([
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
   "API_GATEWAY_DEPLOYMENT",
   "API_GATEWAY_STAGE"
+]);
+const API_GATEWAY_V2_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE"
 ]);
 const PROVIDER_RESOURCE_TYPES_BY_SELECTION = new Map<ResourceType, readonly string[]>([
   ["IAM_ROLE", ["AWS::IAM::Role"]],
@@ -64,11 +79,16 @@ const PROVIDER_RESOURCE_TYPES_BY_SELECTION = new Map<ResourceType, readonly stri
   ["KMS_KEY", ["AWS::KMS::Key"]],
   ["KMS_ALIAS", ["AWS::KMS::Alias"]],
   ["API_GATEWAY_REST_API", ["AWS::ApiGateway::RestApi"]],
+  ["API_GATEWAY_AUTHORIZER", ["AWS::ApiGateway::Authorizer"]],
   ["API_GATEWAY_RESOURCE", ["AWS::ApiGateway::Resource"]],
   ["API_GATEWAY_METHOD", ["AWS::ApiGateway::Method"]],
   ["API_GATEWAY_INTEGRATION", ["AWS::ApiGateway::Integration"]],
   ["API_GATEWAY_DEPLOYMENT", ["AWS::ApiGateway::Deployment"]],
-  ["API_GATEWAY_STAGE", ["AWS::ApiGateway::Stage"]]
+  ["API_GATEWAY_STAGE", ["AWS::ApiGateway::Stage"]],
+  ["API_GATEWAY_WEBSOCKET_API", ["AWS::ApiGatewayV2::Api"]],
+  ["API_GATEWAY_V2_ROUTE", ["AWS::ApiGatewayV2::Route"]],
+  ["API_GATEWAY_V2_INTEGRATION", ["AWS::ApiGatewayV2::Integration"]],
+  ["API_GATEWAY_V2_STAGE", ["AWS::ApiGatewayV2::Stage"]]
 ]);
 const SERVICE_ERROR_PRIORITY = new Map<ReverseEngineeringScanError["reason"], number>([
   ["permission_denied", 0],
@@ -84,7 +104,8 @@ const DEFAULT_DEPENDENCIES: AwsDetailedReverseEngineeringReaderDependencies = {
   readIam: readDetailedIamResources,
   readLambda: readDetailedLambdaResources,
   readKms: readKmsWithDefaultClient,
-  readApiGateway: (region, credentials) => readAwsApiGatewayRestTopology({ region, credentials })
+  readApiGateway: (region, credentials) => readAwsApiGatewayRestTopology({ region, credentials }),
+  readApiGatewayV2: (region, credentials) => readAwsApiGatewayV2Topology({ region, credentials })
 };
 
 /**
@@ -127,6 +148,14 @@ export async function readAwsDetailedReverseEngineeringResources(
         .readApiGateway(input.region, credentials)
         .then(toApiGatewayDiscoveryResult)
         .catch(() => createThrownReaderFailure("API_GATEWAY_REST_API", "api-gateway"))
+    );
+  }
+  if (shouldReadDetailedFamily(input, API_GATEWAY_V2_RESOURCE_TYPES)) {
+    reads.push(
+      dependencies
+        .readApiGatewayV2(input.region, credentials)
+        .then(toApiGatewayV2DiscoveryResult)
+        .catch(() => createThrownReaderFailure("API_GATEWAY_WEBSOCKET_API", "api-gateway-v2"))
     );
   }
 
@@ -350,6 +379,78 @@ function toApiGatewayDiscoveryResult(
   };
 }
 
+/** gg: HTTP/WebSocket API도 REST API와 같은 공개 hash 관계로 합치고, exact V2 ID·URI·변수는 private detail에만 둡니다. */
+function toApiGatewayV2DiscoveryResult(
+  result: AwsApiGatewayV2TopologyReadResult
+): AwsProviderDiscoveryResult {
+  const familyById = new Map(result.families.map((family) => [family.publicApiRecordId, family]));
+  const serverOnlyById = new Map(
+    result.serverOnlyRecords.map((record) => [record.publicRecordId, record])
+  );
+  const records = result.publicRecords.map((publicRecord): AwsDiscoveredResourceRecord => {
+    const family = familyById.get(publicRecord.familyRecordId);
+    const serverOnly = serverOnlyById.get(publicRecord.recordId);
+    const tagEvidence = createApiGatewayV2ApiTagEvidence({
+      catalogReadComplete: result.catalogReadComplete,
+      familyReadComplete: family?.readComplete === true,
+      providerResourceType: publicRecord.providerResourceType,
+      serverOnlyConfig: serverOnly?.serverOnlyConfig
+    });
+
+    return {
+      providerResourceType: publicRecord.providerResourceType,
+      providerResourceId: publicRecord.recordId,
+      displayName: publicRecord.displayName,
+      region: publicRecord.region,
+      config: {
+        ...publicRecord.config,
+        managementReady: family?.managementReady === true,
+        reverseEngineeringDetailsComplete: family?.readComplete === true,
+        reverseEngineeringDetailsVersion: 1,
+        apiGatewayV2TopologyClassification: family?.classification ?? "incomplete",
+        apiGatewayV2AdvancedFeatures: family?.advancedFeatures ?? [],
+        ...tagEvidence.publicConfig
+      },
+      relationships: [
+        ...publicRecord.relatedRecordIds.map((targetProviderResourceId) => ({
+          type: "depends_on" as const,
+          targetProviderResourceId
+        })),
+        ...(publicRecord.parentRecordId
+          ? [
+              {
+                type: "contains" as const,
+                targetProviderResourceId: publicRecord.parentRecordId
+              }
+            ]
+          : [])
+      ],
+      ...(serverOnly
+        ? {
+            serverOnly: {
+              providerResourceId: serverOnly.terraformImportId,
+              terraformImportId: serverOnly.terraformImportId,
+              config: {
+                ...serverOnly.serverOnlyConfig,
+                ...tagEvidence.serverOnlyConfig,
+                parentProviderResourceType: serverOnly.parentProviderResourceType,
+                parentTerraformImportId: serverOnly.parentTerraformImportId,
+                relatedTerraformImportIdentities: serverOnly.relatedTerraformImportIdentities
+              }
+            }
+          }
+        : {})
+    };
+  });
+
+  return {
+    records,
+    scanErrors: result.failures.map((failure) =>
+      createSafeReaderError("API_GATEWAY_WEBSOCKET_API", "api-gateway-v2", failure.outcome)
+    )
+  };
+}
+
 /** gg: REST API tag는 catalog와 family가 모두 완전할 때만 공개 sanitizer의 완료 evidence로 넘깁니다. */
 function createApiGatewayRestApiTagEvidence(input: {
   readonly catalogReadComplete: boolean;
@@ -367,6 +468,28 @@ function createApiGatewayRestApiTagEvidence(input: {
   const tags = readStringMap(input.serverOnlyConfig?.["tags"]);
   const tagsReadComplete = input.catalogReadComplete && input.familyReadComplete && tags !== null;
 
+  return {
+    publicConfig: tagsReadComplete ? { tags, tagsReadComplete: true } : { tagsReadComplete: false },
+    serverOnlyConfig: { tagsReadComplete }
+  };
+}
+
+/** gg: V2 API tag도 catalog·family가 모두 완전한 경우에만 공개 sanitizer의 완료 evidence로 넘깁니다. */
+function createApiGatewayV2ApiTagEvidence(input: {
+  readonly catalogReadComplete: boolean;
+  readonly familyReadComplete: boolean;
+  readonly providerResourceType: string;
+  readonly serverOnlyConfig: Readonly<Record<string, unknown>> | undefined;
+}): {
+  readonly publicConfig: Readonly<Record<string, unknown>>;
+  readonly serverOnlyConfig: Readonly<Record<string, unknown>>;
+} {
+  if (input.providerResourceType !== "AWS::ApiGatewayV2::Api") {
+    return { publicConfig: {}, serverOnlyConfig: {} };
+  }
+
+  const tags = readStringMap(input.serverOnlyConfig?.["tags"]);
+  const tagsReadComplete = input.catalogReadComplete && input.familyReadComplete && tags !== null;
   return {
     publicConfig: tagsReadComplete ? { tags, tagsReadComplete: true } : { tagsReadComplete: false },
     serverOnlyConfig: { tagsReadComplete }

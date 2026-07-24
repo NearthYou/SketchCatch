@@ -63,7 +63,7 @@ test("선택한 상세 reader만 실행하고 exact import 정보는 server-only
   assert.doesNotMatch(JSON.stringify(lambda?.config), /private-token-never-public/u);
 });
 
-test("ALL은 IAM, Lambda, KMS, API Gateway 상세 reader를 각각 한 번만 실행한다", async () => {
+test("ALL은 IAM, Lambda, KMS, API Gateway REST/V2 상세 reader를 각각 한 번만 실행한다", async () => {
   const calls: string[] = [];
 
   const result = await readAwsDetailedReverseEngineeringResources(
@@ -72,8 +72,8 @@ test("ALL은 IAM, Lambda, KMS, API Gateway 상세 reader를 각각 한 번만 �
     createDependencies(calls)
   );
 
-  assert.deepEqual(calls.sort(), ["api-gateway", "iam", "kms", "lambda"]);
-  assert.equal(result.records.length, 9);
+  assert.deepEqual(calls.sort(), ["api-gateway", "api-gateway-v2", "iam", "kms", "lambda"]);
+  assert.equal(result.records.length, 13);
   const stage = result.records.find(
     (record) => record.providerResourceType === "AWS::ApiGateway::Stage"
   );
@@ -190,6 +190,98 @@ test("API Gateway Stage만 선택하면 Stage의 parent와 deployment 의존성�
     { type: "depends_on", targetProviderResourceId: "api-deployment-ref" },
     { type: "contains", targetProviderResourceId: "api-ref" }
   ]);
+});
+
+test("API Gateway Authorizer는 전용 reader로 읽고 RestApi parent만 함께 남긴다", async () => {
+  const dependencies = createDependencies([]);
+  const baseResult = await dependencies.readApiGateway("ap-northeast-2", CREDENTIALS);
+  dependencies.readApiGateway = async () => ({
+    ...baseResult,
+    publicRecords: [
+      ...baseResult.publicRecords,
+      {
+        recordId: "api-authorizer-ref",
+        familyRecordId: "api-ref",
+        providerResourceType: "AWS::ApiGateway::Authorizer",
+        displayName: "Orders Authorizer",
+        region: "ap-northeast-2",
+        config: { type: "REQUEST", hasAuthorizerUri: true },
+        parentRecordId: "api-ref",
+        relatedRecordIds: []
+      }
+    ],
+    serverOnlyRecords: [
+      ...baseResult.serverOnlyRecords,
+      {
+        publicRecordId: "api-authorizer-ref",
+        familyPublicRestApiRecordId: "api-ref",
+        providerResourceType: "AWS::ApiGateway::Authorizer",
+        terraformImportId: "api-123/authorizer-456",
+        parentProviderResourceType: "AWS::ApiGateway::RestApi",
+        parentTerraformImportId: "api-123",
+        relatedTerraformImportIdentities: [],
+        serverOnlyConfig: {
+          restApiId: "api-123",
+          authorizerId: "authorizer-456",
+          authorizerUri: "private-server-only-uri"
+        }
+      }
+    ]
+  });
+
+  const result = await readAwsDetailedReverseEngineeringResources(
+    {
+      provider: "aws",
+      region: "ap-northeast-2",
+      resourceTypes: ["API_GATEWAY_AUTHORIZER"]
+    },
+    CREDENTIALS,
+    dependencies
+  );
+
+  assert.deepEqual(result.records.map((record) => record.providerResourceId).sort(), [
+    "api-authorizer-ref",
+    "api-ref"
+  ]);
+  const authorizer = result.records.find(
+    (record) => record.providerResourceType === "AWS::ApiGateway::Authorizer"
+  );
+  assert.deepEqual(authorizer?.relationships, [
+    { type: "contains", targetProviderResourceId: "api-ref" }
+  ]);
+  assert.equal(authorizer?.serverOnly?.terraformImportId, "api-123/authorizer-456");
+  assert.equal(authorizer?.serverOnly?.config?.["authorizerUri"], "private-server-only-uri");
+  assert.equal("authorizerUri" in (authorizer?.config ?? {}), false);
+});
+
+test("API Gateway V2 Route 선택은 전용 reader를 통해 API·Integration parent 관계를 함께 남긴다", async () => {
+  const calls: string[] = [];
+  const result = await readAwsDetailedReverseEngineeringResources(
+    {
+      provider: "aws",
+      region: "ap-northeast-2",
+      resourceTypes: ["API_GATEWAY_V2_ROUTE"]
+    },
+    CREDENTIALS,
+    createDependencies(calls)
+  );
+
+  assert.deepEqual(calls, ["api-gateway-v2"]);
+  assert.deepEqual(result.records.map((record) => record.providerResourceId).sort(), [
+    "v2-api-ref",
+    "v2-integration-ref",
+    "v2-route-ref"
+  ]);
+  const route = result.records.find(
+    (record) => record.providerResourceType === "AWS::ApiGatewayV2::Route"
+  );
+  assert.deepEqual(route?.relationships, [
+    { type: "depends_on", targetProviderResourceId: "v2-integration-ref" },
+    { type: "contains", targetProviderResourceId: "v2-api-ref" }
+  ]);
+  assert.equal(route?.serverOnly?.terraformImportId, "api-v2-123/route-456");
+  assert.equal(route?.serverOnly?.config?.["target"], "integrations/integration-789");
+  assert.equal("target" in (route?.config ?? {}), false);
 });
 
 test("UI가 API Gateway 하위 선택을 RestApi로 정규화해도 topology 전체를 남긴다", async () => {
@@ -541,6 +633,109 @@ function createDependencies(calls: string[]): AwsDetailedReverseEngineeringReade
             parentTerraformImportId: "api-123",
             relatedTerraformImportIdentities: [],
             serverOnlyConfig: { pathPart: "unused" }
+          }
+        ],
+        failures: []
+      };
+    },
+    async readApiGatewayV2() {
+      calls.push("api-gateway-v2");
+      return {
+        catalogReadComplete: true,
+        families: [
+          {
+            publicApiRecordId: "v2-api-ref",
+            protocolType: "HTTP",
+            readComplete: true,
+            classification: "simple",
+            managementReady: true,
+            advancedFeatures: []
+          }
+        ],
+        publicRecords: [
+          {
+            recordId: "v2-api-ref",
+            familyRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Api",
+            displayName: "Orders HTTP API",
+            region: "ap-northeast-2",
+            config: { protocolType: "HTTP", tagCount: 1 },
+            relatedRecordIds: []
+          },
+          {
+            recordId: "v2-integration-ref",
+            familyRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Integration",
+            displayName: "Orders integration",
+            region: "ap-northeast-2",
+            config: { integrationType: "AWS_PROXY", hasIntegrationUri: true },
+            parentRecordId: "v2-api-ref",
+            relatedRecordIds: []
+          },
+          {
+            recordId: "v2-route-ref",
+            familyRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Route",
+            displayName: "GET /orders",
+            region: "ap-northeast-2",
+            config: { routeKey: "GET /orders", hasTarget: true },
+            parentRecordId: "v2-api-ref",
+            relatedRecordIds: ["v2-integration-ref"]
+          },
+          {
+            recordId: "v2-stage-ref",
+            familyRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Stage",
+            displayName: "$default",
+            region: "ap-northeast-2",
+            config: { autoDeploy: true },
+            parentRecordId: "v2-api-ref",
+            relatedRecordIds: []
+          }
+        ],
+        serverOnlyRecords: [
+          {
+            publicRecordId: "v2-api-ref",
+            familyPublicApiRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Api",
+            terraformImportId: "api-v2-123",
+            relatedTerraformImportIdentities: [],
+            serverOnlyConfig: { apiId: "api-v2-123", tags: { Environment: "production" } }
+          },
+          {
+            publicRecordId: "v2-integration-ref",
+            familyPublicApiRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Integration",
+            terraformImportId: "api-v2-123/integration-789",
+            parentProviderResourceType: "AWS::ApiGatewayV2::Api",
+            parentTerraformImportId: "api-v2-123",
+            relatedTerraformImportIdentities: [],
+            serverOnlyConfig: { integrationId: "integration-789", integrationUri: "private-uri" }
+          },
+          {
+            publicRecordId: "v2-route-ref",
+            familyPublicApiRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Route",
+            terraformImportId: "api-v2-123/route-456",
+            parentProviderResourceType: "AWS::ApiGatewayV2::Api",
+            parentTerraformImportId: "api-v2-123",
+            relatedTerraformImportIdentities: [
+              {
+                providerResourceType: "AWS::ApiGatewayV2::Integration",
+                terraformImportId: "api-v2-123/integration-789"
+              }
+            ],
+            serverOnlyConfig: { routeId: "route-456", target: "integrations/integration-789" }
+          },
+          {
+            publicRecordId: "v2-stage-ref",
+            familyPublicApiRecordId: "v2-api-ref",
+            providerResourceType: "AWS::ApiGatewayV2::Stage",
+            terraformImportId: "api-v2-123/$default",
+            parentProviderResourceType: "AWS::ApiGatewayV2::Api",
+            parentTerraformImportId: "api-v2-123",
+            relatedTerraformImportIdentities: [],
+            serverOnlyConfig: { stageName: "$default", stageVariables: { private: "never-public" } }
           }
         ],
         failures: []
