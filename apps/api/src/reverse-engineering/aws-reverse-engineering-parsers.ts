@@ -51,7 +51,8 @@ export function parseVpcsFromXml(xml: string, region: string): AwsDiscoveredReso
         instanceTenancy: extractTag(item, "instanceTenancy"),
         isDefault: extractBooleanTag(item, "isDefault"),
         providerParameters: createXmlParameterSnapshot(item),
-        state: extractTag(item, "state")
+        state: extractTag(item, "state"),
+        tags: extractTags(item)
       },
       relationships: []
     };
@@ -79,6 +80,7 @@ export function parseSubnetsFromXml(xml: string, region: string): AwsDiscoveredR
         providerParameters: createXmlParameterSnapshot(item),
         state: extractTag(item, "state"),
         subnetArn: extractTag(item, "subnetArn"),
+        tags: extractTags(item),
         vpcId,
         availabilityZone: extractTag(item, "availabilityZone"),
         availabilityZoneId: extractTag(item, "availabilityZoneId")
@@ -201,7 +203,8 @@ export function parseInternetGatewaysFromXml(
       region,
       config: {
         attachments: extractInternetGatewayAttachments(item),
-        providerParameters: createXmlParameterSnapshot(item)
+        providerParameters: createXmlParameterSnapshot(item),
+        tags: extractTags(item)
       },
       relationships: vpcIds.map((vpcId) => createRelationship("attached_to", vpcId))
     };
@@ -237,6 +240,7 @@ export function parseRouteTablesFromXml(
         associations: extractRouteTableAssociations(item),
         providerParameters: createXmlParameterSnapshot(item),
         routes: extractRouteTableRoutes(item),
+        tags: extractTags(item),
         vpcId
       },
       relationships
@@ -306,7 +310,8 @@ export function parseSecurityGroupsFromXml(
         vpcId,
         egress: egress.rules,
         ingress: ingress.rules,
-        securityGroupRulesComplete: ingress.complete && egress.complete
+        securityGroupRulesComplete: ingress.complete && egress.complete,
+        tags: extractTags(item)
       },
       relationships: [
         ...(vpcId ? [createRelationship("depends_on", vpcId)] : []),
@@ -354,6 +359,7 @@ export function parseInstancesFromXml(xml: string, region: string): AwsDiscovere
         securityGroupIds: groupIds,
         state: extractNestedTag(item, "state", "name"),
         subnetId,
+        tags: extractTags(item),
         virtualizationType: extractTag(item, "virtualizationType"),
         vpcId: extractTag(item, "vpcId")
       },
@@ -395,6 +401,7 @@ export function parseRdsInstancesFromXml(
         storageEncrypted: extractBooleanTag(item, "StorageEncrypted"),
         storageType: extractTag(item, "StorageType"),
         subnetIds,
+        tags: extractTags(item),
         vpcSecurityGroupIds: securityGroupIds
       },
       relationships: [
@@ -721,9 +728,14 @@ function extractNameTag(xml: string): string | null {
 }
 
 function extractTags(xml: string): Array<{ key: string; value: string }> {
-  return extractSetItems(xml, "tagSet").flatMap((item) => {
-    const key = extractTag(item, "key");
-    const value = extractTag(item, "value");
+  return [
+    ...extractSetItems(xml, "tagSet"),
+    ...extractSetItems(xml, "TagList", "Tag")
+  ].flatMap((item) => {
+    const key = extractTag(item, "key") ?? extractTag(item, "Key");
+    const value =
+      extractTagIncludingEmptyValue(item, "value") ??
+      extractTagIncludingEmptyValue(item, "Value");
 
     return key !== null && value !== null ? [{ key, value }] : [];
   });
@@ -752,6 +764,13 @@ function extractTag(xml: string, tagName: string): string | null {
   const value = extractTagBodies(xml, tagName)[0];
 
   return value ? unescapeXml(value) : null;
+}
+
+// 태그 값은 빈 문자열도 AWS에서 유효한 설정이므로, 태그 파싱에서만 빈 값과 누락을 구분합니다.
+function extractTagIncludingEmptyValue(xml: string, tagName: string): string | null {
+  const value = extractTagBodies(xml, tagName)[0];
+
+  return value === undefined ? null : unescapeXml(value);
 }
 
 function extractNestedTag(xml: string, parentTagName: string, childTagName: string): string | null {

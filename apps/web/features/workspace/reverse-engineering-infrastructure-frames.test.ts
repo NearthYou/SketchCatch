@@ -17,7 +17,10 @@ test("AWS 태그를 Project, Service, Environment 순서로 사용해 표시 프
       }),
       architectureNode("project-db", "DYNAMODB_TABLE", 220, 100, {
         reverseEngineeringObservedConfig: {
-          tags: { Project: "store", Environment: "production" }
+          tags: [
+            { key: "Project", value: "store" },
+            { key: "Environment", value: "production" }
+          ]
         }
       }),
       architectureNode("service-worker", "LAMBDA", 420, 100, {

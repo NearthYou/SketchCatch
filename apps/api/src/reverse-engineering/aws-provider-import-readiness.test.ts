@@ -288,6 +288,38 @@ test("실제 Query parser의 완전한 fixture는 핵심 리소스 import 준비
   assert.ok(result.importSuggestions.every((suggestion) => suggestion.handoffReady));
 });
 
+test("EC2 Query 태그는 Terraform 값과 원본 관찰 설정에 함께 보존한다", async () => {
+  const [vpc] = parseVpcsFromXml(
+    `<DescribeVpcsResponse><vpcSet><item>
+      <vpcId>vpc-tagged</vpcId>
+      <cidrBlock>10.0.0.0/16</cidrBlock>
+      <instanceTenancy>default</instanceTenancy>
+      <tagSet>
+        <item><key>Project</key><value>store</value></item>
+        <item><key>Environment</key><value>production</value></item>
+      </tagSet>
+    </item></vpcSet></DescribeVpcsResponse>`,
+    region
+  );
+  assert.ok(vpc);
+
+  const result = await scan([vpc]);
+  const [node] = result.architectureJson.nodes;
+  const expectedTags = [
+    { key: "Project", value: "store" },
+    { key: "Environment", value: "production" }
+  ];
+
+  assert.equal(node?.config["reverseEngineeringManagement"], "managed");
+  assert.deepEqual(node?.config["tags"], { Project: "store", Environment: "production" });
+  assert.deepEqual(
+    (node?.config["reverseEngineeringObservedConfig"] as Record<string, unknown> | undefined)?.[
+      "tags"
+    ],
+    expectedTags
+  );
+});
+
 test("Subnet Route Table Association import ID는 association ID 대신 subnet/table 조합을 사용한다", async () => {
   const result = await scan(completeRouteTableAssociationRecords());
   const association = result.discoveredResources.find(

@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   parseAddressesFromXml,
+  parseInstancesFromXml,
+  parseInternetGatewaysFromXml,
   parseNatGatewaysFromXml,
+  parseRdsInstancesFromXml,
   parseRouteTablesFromXml,
-  parseSecurityGroupsFromXml
+  parseSecurityGroupsFromXml,
+  parseSubnetsFromXml,
+  parseVpcsFromXml
 } from "./aws-reverse-engineering-parsers.js";
 
 test("EIP XML은 allocation ID와 안전한 association 분류만 보존한다", () => {
@@ -189,6 +194,55 @@ test("NAT 주소가 전이 또는 실패 상태이면 자동 관리 준비가 �
   );
 
   assert.equal(record?.config["addressStatusesReady"], false);
+});
+
+test("EC2·RDS Query reader는 응답에 포함된 태그를 모든 관리 가능 리소스에 보존한다", () => {
+  const expectedTags = [
+    { key: "Project", value: "store" },
+    { key: "Environment", value: "production" },
+    { key: "Optional", value: "" }
+  ];
+  const tagSet = `
+    <tagSet>
+      <item><key>Project</key><value>store</value></item>
+      <item><key>Environment</key><value>production</value></item>
+      <item><key>Optional</key><value></value></item>
+    </tagSet>`;
+  const records = [
+    ...parseVpcsFromXml(
+      `<DescribeVpcsResponse><vpcSet><item><vpcId>vpc-main</vpcId>${tagSet}</item></vpcSet></DescribeVpcsResponse>`,
+      "ap-northeast-2"
+    ),
+    ...parseSubnetsFromXml(
+      `<DescribeSubnetsResponse><subnetSet><item><subnetId>subnet-main</subnetId>${tagSet}</item></subnetSet></DescribeSubnetsResponse>`,
+      "ap-northeast-2"
+    ),
+    ...parseInternetGatewaysFromXml(
+      `<DescribeInternetGatewaysResponse><internetGatewaySet><item><internetGatewayId>igw-main</internetGatewayId>${tagSet}</item></internetGatewaySet></DescribeInternetGatewaysResponse>`,
+      "ap-northeast-2"
+    ),
+    ...parseRouteTablesFromXml(
+      `<DescribeRouteTablesResponse><routeTableSet><item><routeTableId>rtb-main</routeTableId>${tagSet}</item></routeTableSet></DescribeRouteTablesResponse>`,
+      "ap-northeast-2"
+    ),
+    ...parseSecurityGroupsFromXml(
+      `<DescribeSecurityGroupsResponse><securityGroupInfo><item><groupId>sg-main</groupId><groupName>main</groupName>${tagSet}</item></securityGroupInfo></DescribeSecurityGroupsResponse>`,
+      "ap-northeast-2"
+    ),
+    ...parseInstancesFromXml(
+      `<DescribeInstancesResponse><reservationSet><item><instancesSet><item><instanceId>i-main</instanceId>${tagSet}</item></instancesSet></item></reservationSet></DescribeInstancesResponse>`,
+      "ap-northeast-2"
+    ),
+    ...parseRdsInstancesFromXml(
+      `<DescribeDBInstancesResponse><DescribeDBInstancesResult><DBInstances><DBInstance><DBInstanceIdentifier>database-main</DBInstanceIdentifier><TagList><Tag><Key>Project</Key><Value>store</Value></Tag><Tag><Key>Environment</Key><Value>production</Value></Tag><Tag><Key>Optional</Key><Value></Value></Tag></TagList></DBInstance></DBInstances></DescribeDBInstancesResult></DescribeDBInstancesResponse>`,
+      "ap-northeast-2"
+    )
+  ];
+
+  assert.equal(records.length, 7);
+  for (const record of records) {
+    assert.deepEqual(record.config["tags"], expectedTags, record.providerResourceType);
+  }
 });
 
 test("Route Table XML에서 테이블과 subnet/main/gateway association을 각각 보존한다", () => {
