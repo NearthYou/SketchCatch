@@ -355,6 +355,74 @@ export function compileArchitectureBoardCandidates(
   );
 }
 
+/**
+ * gg: 큰 읽기 전용 미리보기는 source Diagram의 의미를 다시 해석하지 않고, 한 번의 안전한
+ * 시각 배치만 계산합니다. 저장 전에는 이 결과도 후보일 뿐이며 원본 Board를 바꾸지 않습니다.
+ */
+export function compileArchitectureBoardResponsiveVisualLayoutCandidates(
+  input: ArchitectureBoardCompilationInput
+): readonly ArchitectureBoardCompilationProposal[] {
+  const sourceDiagram = input.currentDiagram
+    ? cloneDiagram(input.currentDiagram)
+    : convertArchitectureJsonToDiagramJson(input.architecture);
+  const sourceArchitecture = convertDiagramJsonToArchitectureJson(sourceDiagram);
+  const protectedNodeIds = new Set(
+    sourceDiagram.nodes.filter((node) => node.locked).map((node) => node.id)
+  );
+  const sourceQuality = createResponsiveVisualLayoutQuality(sourceDiagram);
+  const sourceProposal: ArchitectureBoardCompilationProposal = {
+    architecture: cloneArchitecture(sourceArchitecture),
+    changes: [],
+    diagnostics: [],
+    diagram: cloneDiagram(sourceDiagram),
+    quality: {
+      after: structuredClone(sourceQuality),
+      before: structuredClone(sourceQuality),
+      compilationDistance: 0
+    },
+    provenance: {
+      candidateId: "source-visual-layout:responsive",
+      candidateIds: ["source-visual-layout:responsive"],
+      compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
+      layoutProfileIds: [],
+      modulePatternIds: [],
+      modulePatternRepresentativeTemplateIds: [],
+      modulePatternSourceTemplateIds: [],
+      referenceTemplateIds: []
+    }
+  };
+  const layouts = layoutAutomaticDiagramCandidates({
+    edges: createDiagramLayoutEdges(sourceDiagram),
+    nodes: sourceDiagram.nodes,
+    protectedNodeIds,
+    searchMode: "responsive"
+  });
+
+  return layouts.map((layout) =>
+    createBoardVisualLayoutProposal(
+      sourceProposal,
+      layout,
+      sourceArchitecture,
+      sourceDiagram
+    )
+  );
+}
+
+/** gg: 빠른 미리보기 후보도 기존 순위와 안전 검사에 필요한 visual 품질 지표는 유지합니다. */
+function createResponsiveVisualLayoutQuality(
+  diagram: DiagramJson
+): ArchitectureBoardCompilationQuality {
+  const visual = evaluateDiagram(diagram);
+
+  return {
+    metrics: { ...visual, compilationDistance: 0 },
+    score: visual.score,
+    semanticDiagnosticPenalty: 0,
+    structuralPenalty: 0,
+    visualPenalty: visual.score
+  };
+}
+
 /** 한 layout 전략을 기존 proposal 모양과 품질 finding으로 다시 감쌉니다. */
 function createBoardVisualLayoutProposal(
   selected: ArchitectureBoardCompilationProposal,

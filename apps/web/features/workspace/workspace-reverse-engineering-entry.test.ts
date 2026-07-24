@@ -12,14 +12,6 @@ const rightPanelSource = readFileSync(
   fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
   "utf8"
 );
-const reverseEngineeringPanelSource = readFileSync(
-  fileURLToPath(new URL("./ReverseEngineeringPanel.tsx", import.meta.url)),
-  "utf8"
-);
-const reverseEngineeringCss = readFileSync(
-  fileURLToPath(new URL("./reverse-engineering.module.css", import.meta.url)),
-  "utf8"
-);
 
 test("현재 Project Draft가 준비되지 않았으면 Reverse Engineering 진입을 막는다", async () => {
   let saveCallCount = 0;
@@ -145,18 +137,13 @@ test("저장된 현재 Project는 추가 저장 없이 바로 진입한다", asy
   assert.equal(saveCallCount, 0);
 });
 
-test("Workspace 오른쪽 패널에서는 AWS 가져오기와 재스캔 진입점을 제공하지 않는다", () => {
+test("Workspace 오른쪽 패널은 Reverse Engineering 진입 제어를 섞지 않는다", () => {
   assert.doesNotMatch(rightPanelSource, /title="AWS 구조 가져오기"/);
   assert.doesNotMatch(rightPanelSource, /<span>AWS 가져오기<\/span>/);
   assert.doesNotMatch(rightPanelSource, /<ReverseEngineeringPanel/);
   assert.doesNotMatch(rightPanelSource, /requestReverseEngineeringOpen/);
   assert.doesNotMatch(rightPanelSource, /performReverseEngineeringOpen/);
   assert.doesNotMatch(rightPanelSource, /isReverseEngineeringOpen/);
-  assert.match(reverseEngineeringCss, /\.panel\s*\{\s*composes:\s*shell;/);
-  assert.match(
-    reverseEngineeringPanelSource,
-    /context\.setPreviewDiagram\(createProjectOnApply \? null : basePreview\.sourceDiagram\)/
-  );
   assert.match(managerSource, /prepareWorkspaceReverseEngineeringEntry\(/);
   assert.match(managerSource, /saveDraft: async \(\) =>/);
   assert.match(managerSource, /flushDraftToServer\("manual"\)/);

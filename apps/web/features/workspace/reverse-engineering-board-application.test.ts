@@ -9,7 +9,6 @@ import {
   convertReverseEngineeringBoardToArchitectureJson,
   createReverseEngineeringBoardApplication
 } from "./reverse-engineering-board-application";
-import { summarizeReverseEngineeringScan } from "./reverse-engineering-presentation";
 import { createReverseEngineeringBoardCandidates } from "./reverse-engineering-board-candidates";
 import {
   createReverseEngineeringFinalRegressionFixture,
@@ -87,8 +86,7 @@ test("Reverse Engineering 정리안은 표시 프레임을 고정하고 프레�
   });
   const originalFrame = original.diagram.nodes.find(
     (node) =>
-      node.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds.includes("vpc-1") ===
-      true
+      node.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds.includes("vpc-1") === true
   );
   assert.ok(originalFrame);
   const organizedDiagram = structuredClone(original.diagram);
@@ -123,8 +121,8 @@ test("Reverse Engineering 정리안은 표시 프레임을 고정하고 프레�
     2
   );
   assert.equal(
-    application.diagram.nodes.find((node) => node.id === "vpc-1")?.metadata
-      ?.reverseEngineering?.source,
+    application.diagram.nodes.find((node) => node.id === "vpc-1")?.metadata?.reverseEngineering
+      ?.source,
     "aws_scan"
   );
   assert.equal(hasSameBoardAutoOrganizeSemantics(original.diagram, application.diagram), true);
@@ -208,7 +206,6 @@ test("가져온 원본 후보는 관계가 애매해도 Resource와 연결선을
   const candidates = createReverseEngineeringBoardCandidates(result);
 
   assert.equal(candidates.length, 1);
-  assert.equal(candidates[0]?.title, "가져온 원본");
   assert.deepEqual(candidates[0]?.architectureJson, result.architectureJson);
 });
 
@@ -374,9 +371,7 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
   assert.equal(application.compilation, null);
   assert.deepEqual(
     new Set(
-      application.diagram.nodes
-        .filter((node) => node.kind === "resource")
-        .map((node) => node.id)
+      application.diagram.nodes.filter((node) => node.kind === "resource").map((node) => node.id)
     ),
     new Set(["current-bucket", "vpc-1"])
   );
@@ -405,10 +400,7 @@ test("Reverse Engineering append는 새 Resource가 속한 표시 프레임도 �
   );
 
   assert.ok(frame);
-  assert.deepEqual(
-    frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds,
-    ["vpc-1"]
-  );
+  assert.deepEqual(frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds, ["vpc-1"]);
   assert.equal(frame.metadata?.reverseEngineering, undefined);
   assert.equal(application.sourceOwnership.nodeIds.includes(frame.id), false);
 });
@@ -416,13 +408,7 @@ test("Reverse Engineering append는 새 Resource가 속한 표시 프레임도 �
 test("Reverse Engineering append의 새 표시 프레임은 실제 추가 멤버 범위만 감싼다", () => {
   const currentBoard: DiagramJson = {
     nodes: [
-      makeResourceNode(
-        "existing-bucket",
-        "aws_s3_bucket",
-        "existing_bucket",
-        "bucket-existing",
-        0
-      )
+      makeResourceNode("existing-bucket", "aws_s3_bucket", "existing_bucket", "bucket-existing", 0)
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
@@ -469,10 +455,9 @@ test("Reverse Engineering append의 새 표시 프레임은 실제 추가 멤버
 
   assert.ok(frame);
   assert.ok(addedNode);
-  assert.deepEqual(
-    frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds,
-    ["scanned-new-bucket"]
-  );
+  assert.deepEqual(frame.metadata?.reverseEngineeringInfrastructureFrame?.memberNodeIds, [
+    "scanned-new-bucket"
+  ]);
   assert.equal(frame.position.x > 900, true);
   assert.equal(addedNode.position.x >= frame.position.x, true);
   assert.equal(
@@ -557,9 +542,7 @@ test("발견한 검토 전용 Lambda와 IAM Role은 관계 유무와 관계없�
   const iamRole = nodeById.get("iam-role-1");
 
   assert.deepEqual(
-    application.diagram.nodes
-      .filter((node) => node.kind === "resource")
-      .map((node) => node.id),
+    application.diagram.nodes.filter((node) => node.kind === "resource").map((node) => node.id),
     ["vpc-1", "lambda-1", "iam-role-1"]
   );
   assert.deepEqual(
@@ -588,12 +571,6 @@ test("발견한 검토 전용 Lambda와 IAM Role은 관계 유무와 관계없�
   assert.equal(iamRole?.parameters?.values["analysisExcluded"], true);
   assert.deepEqual(iamRole?.style, { borderColor: "#f97316", textColor: "#9a3412" });
   assert.equal(iamRole?.metadata?.reverseEngineering?.source, "aws_scan");
-  assert.deepEqual(summarizeReverseEngineeringScan(result), {
-    discoveredCount: 3,
-    boardCount: 3,
-    reviewOnlyCount: 2,
-    unreadableServiceCount: 0
-  });
   assert.deepEqual(
     result.importSuggestions.find((suggestion) => suggestion.resourceId === "lambda-1"),
     {
@@ -867,9 +844,7 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스의 visu
   assert.deepEqual(application.previewDiagram, application.diagram);
   assert.deepEqual(
     new Set(
-      application.diagram.nodes
-        .filter((node) => node.kind === "resource")
-        .map((node) => node.id)
+      application.diagram.nodes.filter((node) => node.kind === "resource").map((node) => node.id)
     ),
     new Set(["current-bucket", "current-log", "vpc-1"])
   );

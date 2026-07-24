@@ -12,11 +12,15 @@ import {
 } from "@sketchcatch/types";
 import { getNodeResizeBounds } from "../diagram-editor/node-resize-bounds";
 import { convertDiagramJsonToArchitectureJson } from "../workspace/workspace-ai-diagram-adapter";
-import { compileArchitectureBoardCandidates } from "./architecture-board-compiler";
+import {
+  compileArchitectureBoardCandidates,
+  compileArchitectureBoardResponsiveVisualLayoutCandidates
+} from "./architecture-board-compiler";
 import { constrainBoardAutoOrganizeProposal } from "./board-auto-organize";
 import { createBoardAutoOrganizeExplanations } from "./board-auto-organize-explanations";
 
 const MAX_CANDIDATES = 3;
+export const RESPONSIVE_BOARD_AUTO_ORGANIZE_NODE_THRESHOLD = 120;
 const BOARD_COORDINATE_LIMIT = 1_000_000;
 const NON_FINITE_SVG_PATH_PATTERN = /(?:NaN|Infinity)/iu;
 const REGRESSION_FINDING_KEYS = [
@@ -37,20 +41,29 @@ type RankedCandidate = {
   readonly score: number;
 };
 
-/** 현재 Board를 바꾸지 않고 서로 다른 안전한 정리안을 최대 세 개 만듭니다. */
+export type BoardAutoOrganizeCandidateOptions = {
+  readonly performancePolicy?: "default" | "responsive-large-board" | undefined;
+};
+
+/** gg: 현재 Board를 바꾸지 않고 서로 다른 안전한 정리안을 최대 세 개 만듭니다. */
 export function createBoardAutoOrganizeCandidates(
   diagram: DiagramJson,
-  architectureOverride?: ArchitectureJson
+  architectureOverride?: ArchitectureJson,
+  options: BoardAutoOrganizeCandidateOptions = {}
 ): BoardAutoOrganizeCandidateSet {
   const sourceDiagram = structuredClone(diagram);
   const sourceFingerprint = createBoardAutoOrganizeSourceFingerprint(sourceDiagram);
-  const proposals = compileArchitectureBoardCandidates({
+  const compilationInput = {
     architecture: architectureOverride
       ? structuredClone(architectureOverride)
       : convertDiagramJsonToArchitectureJson(sourceDiagram),
     currentDiagram: sourceDiagram,
     trigger: "board-auto-organize"
-  });
+  } as const;
+  const proposals =
+    resolveBoardAutoOrganizeLayoutSearchMode(sourceDiagram, options) === "responsive"
+      ? compileArchitectureBoardResponsiveVisualLayoutCandidates(compilationInput)
+      : compileArchitectureBoardCandidates(compilationInput);
   const candidatesByFingerprint = new Map<string, RankedCandidate>();
 
   for (const proposal of proposals) {
@@ -110,6 +123,17 @@ export function createBoardAutoOrganizeCandidates(
     sourceFingerprint,
     candidates
   };
+}
+
+/** gg: Reverse Engineering의 큰 미리보기만 응답성을 우선하고, 일반 Board 정리 품질은 그대로 둡니다. */
+export function resolveBoardAutoOrganizeLayoutSearchMode(
+  diagram: DiagramJson,
+  options: BoardAutoOrganizeCandidateOptions = {}
+): "full" | "responsive" {
+  return options.performancePolicy === "responsive-large-board" &&
+    diagram.nodes.length >= RESPONSIVE_BOARD_AUTO_ORGANIZE_NODE_THRESHOLD
+    ? "responsive"
+    : "full";
 }
 
 /** 원본과 후보 사이에서 허용된 node·edge·프레임 화면 변경만 계산합니다. */

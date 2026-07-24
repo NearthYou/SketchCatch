@@ -5,7 +5,9 @@ import { hasSameBoardAutoOrganizeSemantics } from "@sketchcatch/types";
 
 import {
   createBoardAutoOrganizeCandidates,
-  hasValidBoardAutoOrganizeRouteGeometry
+  hasValidBoardAutoOrganizeRouteGeometry,
+  RESPONSIVE_BOARD_AUTO_ORGANIZE_NODE_THRESHOLD,
+  resolveBoardAutoOrganizeLayoutSearchMode
 } from "./board-auto-organize-candidates";
 
 test("후보 gallery는 서로 다른 visual-only Diagram을 최대 세 개 반환한다", () => {
@@ -37,6 +39,40 @@ test("같은 Board는 같은 순서와 fingerprint를 가진 후보를 만든다
     first.candidates.map(({ id, visualFingerprint }) => ({ id, visualFingerprint })),
     second.candidates.map(({ id, visualFingerprint }) => ({ id, visualFingerprint }))
   );
+});
+
+test("큰 Reverse Engineering 미리보기만 응답성 우선 정리 경로를 선택한다", () => {
+  const justBelowThreshold = largeDiagram(RESPONSIVE_BOARD_AUTO_ORGANIZE_NODE_THRESHOLD - 1);
+  const atThreshold = largeDiagram(RESPONSIVE_BOARD_AUTO_ORGANIZE_NODE_THRESHOLD);
+  const largePreview = largeDiagram(328);
+  const before = structuredClone(largePreview);
+
+  assert.equal(
+    resolveBoardAutoOrganizeLayoutSearchMode(justBelowThreshold, {
+      performancePolicy: "responsive-large-board"
+    }),
+    "full"
+  );
+  assert.equal(
+    resolveBoardAutoOrganizeLayoutSearchMode(atThreshold),
+    "full"
+  );
+  assert.equal(
+    resolveBoardAutoOrganizeLayoutSearchMode(atThreshold, {
+      performancePolicy: "responsive-large-board"
+    }),
+    "responsive"
+  );
+
+  const result = createBoardAutoOrganizeCandidates(largePreview, undefined, {
+    performancePolicy: "responsive-large-board"
+  });
+
+  assert.deepEqual(largePreview, before);
+  assert.equal(result.candidates.length, 1);
+  for (const candidate of result.candidates) {
+    assert.equal(hasSameBoardAutoOrganizeSemantics(largePreview, candidate.diagram), true);
+  }
 });
 
 test("잠긴 자동 프레임과 사용자 Design Group은 모든 후보에서 보존된다", () => {
@@ -111,6 +147,25 @@ function diagram(): DiagramJson {
       edge("alarm-lambda", "alarm", "lambda", "monitors")
     ],
     viewport: { x: 13, y: 21, zoom: 0.8 }
+  };
+}
+
+/** 응답성 경로가 실제 큰 보드에서도 원본 의미를 바꾸지 않는지 확인하는 fixture입니다. */
+function largeDiagram(resourceCount: number): DiagramJson {
+  return {
+    edges: Array.from({ length: Math.max(0, resourceCount - 1) }, (_, index) =>
+      edge(`edge-${index}`, `resource-${index}`, `resource-${index + 1}`)
+    ),
+    nodes: Array.from({ length: resourceCount }, (_, index) =>
+      resourceNode(
+        `resource-${index}`,
+        index % 2 === 0 ? "aws_ec2_instance" : "aws_s3_bucket",
+        `Resource ${index}`,
+        0,
+        0
+      )
+    ),
+    viewport: { x: 0, y: 0, zoom: 1 }
   };
 }
 

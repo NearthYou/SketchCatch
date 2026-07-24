@@ -5237,6 +5237,7 @@ export function uniqueDiscoveredRecordsByProviderId(
   return uniqueRecords;
 }
 
+/** gg: 중복을 합칠 때 canonical 상세 결과를 보드에 남기고 raw 수집 type은 서버 전용 출처 정보로 보존합니다. */
 function mergeDuplicateDiscoveredRecords(
   existingRecord: AwsDiscoveredResourceRecord,
   candidateRecord: AwsDiscoveredResourceRecord
@@ -5244,16 +5245,63 @@ function mergeDuplicateDiscoveredRecords(
   const preferCandidate = shouldPreferDedicatedRecord(existingRecord, candidateRecord);
   const preferredRecord = preferCandidate ? candidateRecord : existingRecord;
   const secondaryRecord = preferCandidate ? existingRecord : candidateRecord;
+  const serverOnly = createDuplicateDiscoveredRecordServerOnlyMetadata(
+    secondaryRecord,
+    preferredRecord
+  );
 
   return {
     ...secondaryRecord,
     ...preferredRecord,
+    ...(serverOnly ? { serverOnly } : {}),
     config: mergeDiscoveredRecordConfig(secondaryRecord.config, preferredRecord.config),
     relationships: uniqueDiscoveredRelationships([
       ...secondaryRecord.relationships,
       ...preferredRecord.relationships
     ])
   };
+}
+
+/** gg: 여러 reader가 같은 리소스를 찾은 경우 raw type은 공개 결과가 아닌 서버 전용 수집 출처로만 남깁니다. */
+function createDuplicateDiscoveredRecordServerOnlyMetadata(
+  secondaryRecord: AwsDiscoveredResourceRecord,
+  preferredRecord: AwsDiscoveredResourceRecord
+): AwsDiscoveredResourceRecord["serverOnly"] | undefined {
+  const sourceProviderResourceTypes = [
+    ...new Set([
+      ...readDiscoveredRecordSourceProviderResourceTypes(secondaryRecord),
+      secondaryRecord.providerResourceType,
+      ...readDiscoveredRecordSourceProviderResourceTypes(preferredRecord),
+      preferredRecord.providerResourceType
+    ])
+  ];
+  const serverOnly = preferredRecord.serverOnly ?? secondaryRecord.serverOnly;
+
+  if (sourceProviderResourceTypes.length < 2) {
+    return serverOnly;
+  }
+
+  return {
+    ...serverOnly,
+    config: {
+      ...(serverOnly?.config ?? {}),
+      sourceProviderResourceTypes
+    }
+  };
+}
+
+/** gg: 이미 합쳐진 리소스도 새 reader 결과와 다시 합칠 수 있게 원래 type 목록을 이어받습니다. */
+function readDiscoveredRecordSourceProviderResourceTypes(
+  record: AwsDiscoveredResourceRecord
+): string[] {
+  const sourceProviderResourceTypes = record.serverOnly?.config?.["sourceProviderResourceTypes"];
+
+  return Array.isArray(sourceProviderResourceTypes)
+    ? sourceProviderResourceTypes.filter(
+        (providerResourceType): providerResourceType is string =>
+          typeof providerResourceType === "string" && providerResourceType.trim().length > 0
+      )
+    : [];
 }
 
 /** gg: 상세 reader의 완전한 tag map은 generic inventory의 배열형 tag로 덮어쓰지 않습니다. */
@@ -5307,17 +5355,25 @@ function normalizeDiscoveredRecordTags(value: unknown): Array<{ key: string; val
     : [];
 }
 
-/** gg: opaque 상세 ID는 서버 전용 exact identity로 환원해 같은 generic ARN과만 합칩니다. */
+const AWS_ARN_TAIL_IDENTITY_PROVIDER_RESOURCE_TYPES = new Set<string>([
+  "AWS::AutoScaling::AutoScalingGroup",
+  "AWS::EC2::LaunchTemplate",
+  "AWS::EC2::NetworkAcl"
+]);
+
+/** gg: Resource Explorer의 raw type은 수집 출처로 보존하고, 중복 판정에서만 ARN 기준 AWS type으로 맞춥니다. */
 function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord): string {
-  if (record.providerResourceType === "AWS::CloudFront::OriginAccessControl") {
-    const configuredId = getNonEmptyStringValue(record.config["id"]);
+  const identityRecord = createIdentityNormalizedDiscoveredRecord(record);
+
+  if (identityRecord.providerResourceType === "AWS::CloudFront::OriginAccessControl") {
+    const configuredId = getNonEmptyStringValue(identityRecord.config["id"]);
     const privateId =
-      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ??
-      getNonEmptyStringValue(record.serverOnly?.terraformImportId);
+      getNonEmptyStringValue(identityRecord.serverOnly?.providerResourceId) ??
+      getNonEmptyStringValue(identityRecord.serverOnly?.terraformImportId);
     const arnId = /^arn:[^:]+:cloudfront::[^:]+:origin-access-control\/([^/]+)$/u.exec(
-      record.providerResourceId
+      identityRecord.providerResourceId
     )?.[1];
-    const id = privateId ?? configuredId ?? arnId ?? record.providerResourceId;
+    const id = privateId ?? configuredId ?? arnId ?? identityRecord.providerResourceId;
 
     return `AWS::CloudFront::OriginAccessControl:${id}`;
   }
@@ -5331,90 +5387,145 @@ function createDiscoveredRecordIdentityKey(record: AwsDiscoveredResourceRecord):
       "AWS::IAM::RolePolicyAttachment",
       "AWS::Lambda::Function",
       "AWS::Lambda::Permission"
-    ].includes(record.providerResourceType)
+    ].includes(identityRecord.providerResourceType)
   ) {
     const exactProviderResourceId =
-      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ?? record.providerResourceId;
+      getNonEmptyStringValue(identityRecord.serverOnly?.providerResourceId) ??
+      identityRecord.providerResourceId;
 
-    return `${record.providerResourceType}:${exactProviderResourceId}`;
+    return `${identityRecord.providerResourceType}:${exactProviderResourceId}`;
   }
 
   if (
-    record.providerResourceType === "AWS::KMS::Key" ||
-    record.providerResourceType === "AWS::KMS::Alias"
+    identityRecord.providerResourceType === "AWS::KMS::Key" ||
+    identityRecord.providerResourceType === "AWS::KMS::Alias"
   ) {
-    const kmsIdentity = createKmsDiscoveredRecordIdentity(record);
+    const kmsIdentity = createKmsDiscoveredRecordIdentity(identityRecord);
     if (kmsIdentity) {
-      return `${record.providerResourceType}:${kmsIdentity}`;
+      return `${identityRecord.providerResourceType}:${kmsIdentity}`;
     }
   }
 
-  if (record.providerResourceType === "AWS::Logs::LogGroup") {
-    return record.providerResourceId.endsWith(":*")
-      ? record.providerResourceId.slice(0, -2)
-      : record.providerResourceId;
+  if (identityRecord.providerResourceType === "AWS::Logs::LogGroup") {
+    return identityRecord.providerResourceId.endsWith(":*")
+      ? identityRecord.providerResourceId.slice(0, -2)
+      : identityRecord.providerResourceId;
   }
 
-  if (record.providerResourceType === "AWS::EC2::Image") {
-    const configImageId = getNonEmptyStringValue(record.config["imageId"]);
+  if (identityRecord.providerResourceType === "AWS::EC2::Image") {
+    const configImageId = getNonEmptyStringValue(identityRecord.config["imageId"]);
     const arnImageId = /^arn:[^:]+:ec2:[^:]+:[^:]+:image\/(ami-[a-f0-9]+)$/iu.exec(
-      record.providerResourceId
+      identityRecord.providerResourceId
     )?.[1];
-    const directImageId = /^ami-[a-f0-9]+$/iu.test(record.providerResourceId)
-      ? record.providerResourceId
+    const directImageId = /^ami-[a-f0-9]+$/iu.test(identityRecord.providerResourceId)
+      ? identityRecord.providerResourceId
       : null;
     const imageId = configImageId ?? arnImageId ?? directImageId;
 
-    return imageId ? `AWS::EC2::Image:${imageId.toLowerCase()}` : record.providerResourceId;
+    return imageId ? `AWS::EC2::Image:${imageId.toLowerCase()}` : identityRecord.providerResourceId;
   }
 
-  if (record.providerResourceType === "AWS::EC2::EIP") {
-    const allocationId = extractEc2InventoryId(record, "allocationId", "eipalloc-", [
+  if (identityRecord.providerResourceType === "AWS::EC2::EIP") {
+    const allocationId = extractEc2InventoryId(identityRecord, "allocationId", "eipalloc-", [
       "eip-allocation",
       "elastic-ip"
     ]);
 
-    return allocationId ? `AWS::EC2::EIP:${allocationId}` : record.providerResourceId;
+    return allocationId ? `AWS::EC2::EIP:${allocationId}` : identityRecord.providerResourceId;
   }
 
-  if (record.providerResourceType === "AWS::EC2::NatGateway") {
-    const natGatewayId = extractEc2InventoryId(record, "natGatewayId", "nat-", [
+  if (identityRecord.providerResourceType === "AWS::EC2::NatGateway") {
+    const natGatewayId = extractEc2InventoryId(identityRecord, "natGatewayId", "nat-", [
       "natgateway",
       "nat-gateway"
     ]);
 
-    return natGatewayId ? `AWS::EC2::NatGateway:${natGatewayId}` : record.providerResourceId;
+    return natGatewayId
+      ? `AWS::EC2::NatGateway:${natGatewayId}`
+      : identityRecord.providerResourceId;
   }
 
-  if (record.providerResourceType === "AWS::ApiGateway::RestApi") {
-    const configId = getNonEmptyStringValue(record.config["id"]);
+  if (identityRecord.providerResourceType === "AWS::ApiGateway::RestApi") {
+    const configId = getNonEmptyStringValue(identityRecord.config["id"]);
     const exactId =
-      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ??
-      getNonEmptyStringValue(record.serverOnly?.terraformImportId);
+      getNonEmptyStringValue(identityRecord.serverOnly?.providerResourceId) ??
+      getNonEmptyStringValue(identityRecord.serverOnly?.terraformImportId);
     const arnId = /^arn:[^:]+:apigateway:[^:]+::\/restapis\/([^/]+)$/u.exec(
-      record.providerResourceId
+      identityRecord.providerResourceId
     )?.[1];
-    const restApiId = exactId ?? configId ?? arnId ?? record.providerResourceId;
+    const restApiId = exactId ?? configId ?? arnId ?? identityRecord.providerResourceId;
 
     return `AWS::ApiGateway::RestApi:${restApiId}`;
   }
 
   // API Gateway V2 direct reader는 공개 ID를 opaque hash로 쓰므로, generic ARN과는
   // server-only API ID를 기준으로 합쳐야 같은 HTTP/WebSocket API가 두 번 보이지 않습니다.
-  if (record.providerResourceType === "AWS::ApiGatewayV2::Api") {
-    const configId = getNonEmptyStringValue(record.config["apiId"]);
+  if (identityRecord.providerResourceType === "AWS::ApiGatewayV2::Api") {
+    const configId = getNonEmptyStringValue(identityRecord.config["apiId"]);
     const exactId =
-      getNonEmptyStringValue(record.serverOnly?.providerResourceId) ??
-      getNonEmptyStringValue(record.serverOnly?.terraformImportId);
+      getNonEmptyStringValue(identityRecord.serverOnly?.providerResourceId) ??
+      getNonEmptyStringValue(identityRecord.serverOnly?.terraformImportId);
     const arnId = /^arn:[^:]+:apigateway:[^:]+::\/apis\/([^/]+)$/u.exec(
-      record.providerResourceId
+      identityRecord.providerResourceId
     )?.[1];
-    const apiId = exactId ?? configId ?? arnId ?? record.providerResourceId;
+    const apiId = exactId ?? configId ?? arnId ?? identityRecord.providerResourceId;
 
     return `AWS::ApiGatewayV2::Api:${apiId}`;
   }
 
-  return record.providerResourceId;
+  if (AWS_ARN_TAIL_IDENTITY_PROVIDER_RESOURCE_TYPES.has(identityRecord.providerResourceType)) {
+    return `${identityRecord.providerResourceType}:${createAwsArnTailIdentity(
+      identityRecord.providerResourceId
+    )}`;
+  }
+
+  return identityRecord.providerResourceId;
+}
+
+/** gg: 공개 결과의 원본 type을 바꾸지 않고, raw Resource Explorer type만 중복 키 생성용 AWS type으로 읽습니다. */
+function createIdentityNormalizedDiscoveredRecord(
+  record: AwsDiscoveredResourceRecord
+): AwsDiscoveredResourceRecord {
+  if (record.providerResourceType.startsWith("AWS::")) {
+    return record;
+  }
+
+  const arn = findDiscoveredRecordArn(record);
+  if (!arn) {
+    return record;
+  }
+
+  const providerResourceType = parseAwsArn(arn).providerResourceType;
+
+  return providerResourceType === record.providerResourceType
+    ? record
+    : { ...record, providerResourceType };
+}
+
+/** gg: reader별 ID 차이보다 AWS ARN을 우선해 같은 리소스의 중복 키를 안정적으로 만듭니다. */
+function findDiscoveredRecordArn(record: AwsDiscoveredResourceRecord): string | null {
+  const candidates = [
+    getNonEmptyStringValue(record.serverOnly?.providerResourceId),
+    getNonEmptyStringValue(record.serverOnly?.terraformImportId),
+    record.providerResourceId,
+    getNonEmptyStringValue(record.config["arn"])
+  ];
+
+  return (
+    candidates.find(
+      (candidate): candidate is string =>
+        typeof candidate === "string" && /^arn:[^:]+:[^:]+:/iu.test(candidate)
+    ) ?? null
+  );
+}
+
+/** gg: Cloud Control의 짧은 ID와 Resource Explorer ARN을 같은 리소스로 비교할 수 있게 마지막 식별자만 씁니다. */
+function createAwsArnTailIdentity(providerResourceId: string): string {
+  if (!providerResourceId.startsWith("arn:")) {
+    return providerResourceId;
+  }
+
+  return providerResourceId.split(":").slice(5).join(":").split(/[/:]/u).filter(Boolean).at(-1) ?? providerResourceId;
 }
 
 /** gg: KMS ARN과 상세 reader의 Key ID·Alias 이름을 같은 exact import identity로 정규화합니다. */
@@ -5496,16 +5607,27 @@ const ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES = new Set([
   "AWS::ElasticLoadBalancingV2::Listener"
 ]);
 
-// gg: generic inventory보다 같은 Resource의 전용 reader가 가진 관리 가능 설정을 우선합니다.
+// gg: raw Resource Explorer type도 같은 AWS type으로 보고, canonical 상세 reader 결과를 우선합니다.
 function shouldPreferDedicatedRecord(
   existingRecord: AwsDiscoveredResourceRecord,
   candidateRecord: AwsDiscoveredResourceRecord
 ): boolean {
-  if (existingRecord.providerResourceType !== candidateRecord.providerResourceType) {
+  const existingIdentityRecord = createIdentityNormalizedDiscoveredRecord(existingRecord);
+  const candidateIdentityRecord = createIdentityNormalizedDiscoveredRecord(candidateRecord);
+
+  if (existingIdentityRecord.providerResourceType !== candidateIdentityRecord.providerResourceType) {
     return false;
   }
 
-  if (ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES.has(existingRecord.providerResourceType)) {
+  const existingIsCanonicalAwsRecord = existingRecord.providerResourceType.startsWith("AWS::");
+  const candidateIsCanonicalAwsRecord = candidateRecord.providerResourceType.startsWith("AWS::");
+  if (existingIsCanonicalAwsRecord !== candidateIsCanonicalAwsRecord) {
+    return candidateIsCanonicalAwsRecord;
+  }
+
+  if (
+    ELASTIC_LOAD_BALANCING_PROVIDER_RESOURCE_TYPES.has(existingIdentityRecord.providerResourceType)
+  ) {
     return (
       getElasticLoadBalancingRecordPreference(candidateRecord) >
       getElasticLoadBalancingRecordPreference(existingRecord)
@@ -5513,7 +5635,7 @@ function shouldPreferDedicatedRecord(
   }
 
   const detailKey = DEDICATED_RECORD_DETAIL_KEY_BY_PROVIDER_RESOURCE_TYPE.get(
-    existingRecord.providerResourceType
+    existingIdentityRecord.providerResourceType
   );
 
   return Boolean(
