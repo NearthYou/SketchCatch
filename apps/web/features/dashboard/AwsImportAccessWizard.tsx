@@ -311,13 +311,13 @@ function getAwsStructureAnalysisPresentation(input: {
     case "cleanup_policy_required":
     case "cleanup_manager_required":
       return {
-        title: "해제 필요",
-        description: "AWS 연결을 해제하려면 구조 분석 설정을 먼저 해제해 주세요."
+        title: "구조 분석 설정 정리 필요",
+        description: "AWS 연결을 해제하려면 구조 분석에 쓴 설정을 먼저 정리해 주세요."
       };
     case "cleanup_checking":
       return {
-        title: "처리 중",
-        description: "구조 분석 설정이 해제됐는지 확인하고 있습니다."
+        title: "구조 분석 설정 확인 중",
+        description: "구조 분석에 쓴 설정이 정리됐는지 확인하고 있습니다."
       };
     case "cleanup_required":
       return state.nextAction === "prepare_manager"
@@ -326,13 +326,13 @@ function getAwsStructureAnalysisPresentation(input: {
           description: "기존 AWS 구조를 분석하려면 AWS에서 설정해 주세요."
         }
         : {
-          title: "해제 확인 필요",
-          description: "구조 분석 설정이 남아 있는지 확인해 주세요."
+          title: "구조 분석 설정 확인 필요",
+          description: "구조 분석에 쓴 설정이 남아 있는지 확인합니다. AWS 연결은 그대로 유지됩니다."
         };
     case "cleanup_complete":
       return {
-        title: "설정 해제됨",
-        description: "구조 분석 설정이 해제되었습니다."
+        title: "구조 분석 설정 정리됨",
+        description: "구조 분석에 쓴 설정을 정리했습니다. AWS 연결은 그대로 유지됩니다."
       };
   }
 }
@@ -388,8 +388,8 @@ function getAwsStructureAnalysisActionLabel(
     case "apply_policy": return hasPolicyApproval ? "설정 적용" : "설정 내용 확인";
     case "check_reads": return "상태 다시 확인";
     case "open_settings": return "AWS 연결 확인";
-    case "prepare_cleanup": return "구조 분석 설정 해제";
-    case "check_cleanup": return "해제 상태 확인";
+    case "prepare_cleanup": return "구조 분석 설정 정리";
+    case "check_cleanup": return "설정 상태 확인";
   }
 }
 
