@@ -7,15 +7,15 @@
 - Live Observation now uses the latest one-minute CloudWatch request count when Store pressure has decayed, so request rate, Task forecast, Design Simulation, and the next action appear from the same traffic evidence.
 - The traffic-surge banner, raw log groups, and chronological incident timeline are no longer rendered.
 - Up to three observed problems remain visible for the current observation session; matching evidence refreshes without reordering the cards, and a new session resets them.
-- Task forecasts render only when the provider-observed actual count differs from the request-based projection; steady and unavailable capacity do not show a misleading expected count. Scale-out and scale-in forecast cards use continuous low-amplitude `예상 중` motion.
-- Rolling active traffic uses four stable particle lanes per connector, reuses their keys at the cap, and moves them with compositor-only `translate3d` animation. Connector paint is clipped and the Task stage reserves the architecture maximum capacity, keeping horizontal scroll geometry fixed during animation.
+- Task forecasts render only for scale-out when the projected count exceeds the provider-observed actual count. Five hundred accepted audience requests trigger the next expected Task early; steady, unavailable, and scale-in states render no expected Task.
+- Rolling active traffic uses four stable compositor-only particle lanes per connector, now keeps the burst alive through the final ECS Service-to-Task connector, and reserves maximum Task geometry so animation cannot resize the horizontal scrollbar.
 - The failure fixture was browser-verified for readable layout, no console issues, and connector/node frames that continue changing across a 1.15-second sample.
-- The latest Task forecast, motion, Template, and authored Terraform regressions pass; root lint, root typecheck, and all root build tasks pass. Browser QA recorded one constant scroll width across 40 animation samples and no forecast card in the steady-capacity state.
-- Root `pnpm build` reported all five package tasks successful, but the Turbo runner did not exit after completion and was terminated.
-- `codex/live-observation-feedback` at `a173b45c9df410e4394bed9a4fa3cfe90d882433` was production-deployed by GitHub Actions run `30062741359`; Web, API, and worker release jobs completed successfully.
+- The latest early-forecast, forecast-transition, final-segment motion, Template, and authored Terraform regressions pass; root lint, root typecheck, and all package build tasks pass.
+- Root `pnpm build` completed all five package tasks and 24 Web routes successfully in 4m23s.
+- `codex/live-observation-feedback` at `ce618488ad5355527c272a2b4c54c1f6c9cd7cfe` was production-deployed by GitHub Actions run `30066876510`; all release jobs completed successfully.
 - Production `/`, `/health`, and `/health/db` return 200, while unauthenticated `/api/projects` returns the expected 401.
 - Authenticated production QA accepted four real audience check-ins, preserved the Task forecast phase before settling to actual/expected 1, kept the judgment and next action visible after stop, and observed continuous connector motion at a high accumulated request count.
-- The new Architecture/demo request-per-Task target is 5 instead of 10. Existing Deployments are unchanged until a separately approved Plan/Apply. No DB migration, dependency change, Terraform action, provider scale-out load cycle, deployment, or new infrastructure resource was performed.
+- The new Architecture/demo request-per-Task target is 5 instead of 10. Existing Deployments are unchanged until a separately approved Plan/Apply. No DB migration, dependency change, Terraform action, provider scale-out load cycle, or new infrastructure resource was performed.
 
 ## Changes This Session
 
