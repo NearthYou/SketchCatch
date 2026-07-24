@@ -35,6 +35,10 @@ type CloudControlReadEvidence = {
 
 const CLOUD_CONTROL_LIST_RESOURCES_ACTION = "cloudformation:ListResources";
 const CLOUD_CONTROL_GET_RESOURCE_ACTION = "cloudformation:GetResource";
+const CLOUD_CONTROL_LIST_CAPABILITY_ERROR_CODES = new Set([
+  "unsupportedactionexception",
+  "typenotfoundexception"
+]);
 
 /** gg: Cloud Control 지원 종류를 하나씩 격리해 한 종류가 실패해도 다른 AWS 리소스를 보존합니다. */
 export async function readAwsCloudControlReverseEngineeringResources(
@@ -72,6 +76,12 @@ export async function readAwsCloudControlReverseEngineeringResources(
         if (record) records.push(record);
       }
     } catch (error) {
+      // Cloud Control registry에 없거나 LIST handler가 없는 종류는 IAM 권한을 더해도 읽을 수 없습니다.
+      // 이 reader는 보조 inventory이므로, 아직 발견하지 못한 리소스를 "권한 부족" 또는 "재시도"로
+      // 오인하지 않고 다른 reader 결과만 계속 보존합니다.
+      if (isCloudControlListCapabilityUnavailable(error)) {
+        continue;
+      }
       scanErrors.push(
         createCloudControlScanError(
           error,
@@ -293,6 +303,23 @@ function createCloudControlScanError(
             : "일부 AWS 종류를 읽지 못했습니다.",
     retryable: reason === "throttled" || reason === "provider_error"
   };
+}
+
+/** gg: List handler 자체가 없는 registry type만 정확한 SDK code로 분리하고, 일반 provider 오류는 숨기지 않습니다. */
+function isCloudControlListCapabilityUnavailable(error: unknown): boolean {
+  const errorRecord = isRecord(error) ? error : undefined;
+  const errorCodes = [
+    errorRecord?.["name"],
+    errorRecord?.["code"],
+    errorRecord?.["Code"],
+    error instanceof Error ? error.name : undefined
+  ];
+
+  return errorCodes.some(
+    (code) =>
+      typeof code === "string" &&
+      CLOUD_CONTROL_LIST_CAPABILITY_ERROR_CODES.has(code.trim().toLowerCase())
+  );
 }
 
 /** gg: 검증된 Role의 임시 credential만 Cloud Control SDK에 전달합니다. */

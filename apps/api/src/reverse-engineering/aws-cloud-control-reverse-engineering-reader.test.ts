@@ -124,6 +124,102 @@ test("한 Resource 종류 조회 실패는 다른 종류의 결과를 지우지 
   assert.doesNotMatch(JSON.stringify(result.scanErrors), /AccessDenied/u);
 });
 
+test("Cloud Control 목록 handler가 없는 종류는 권한 또는 재시도 실패로 만들지 않는다", async () => {
+  const client: AwsCloudControlReadClient = {
+    async send(command) {
+      if (command instanceof ListResourcesCommand) {
+        if (command.input.TypeName === "AWS::CertificateManager::Certificate") {
+          throw Object.assign(new Error("unsupported handler"), {
+            name: "UnsupportedActionException"
+          });
+        }
+        if (command.input.TypeName === "AWS::CertificateManager::CertificateValidation") {
+          throw Object.assign(new Error("type missing from registry"), {
+            code: "TypeNotFoundException"
+          });
+        }
+        if (command.input.TypeName === "AWS::SQS::Queue") {
+          throw Object.assign(new Error("AccessDenied"), { name: "AccessDeniedException" });
+        }
+        return { ResourceDescriptions: [{ Identifier: "orders" }] };
+      }
+      if (command instanceof GetResourceCommand) {
+        return {
+          TypeName: command.input.TypeName,
+          ResourceDescription: {
+            Identifier: command.input.Identifier,
+            Properties: JSON.stringify({ TableName: "orders" })
+          }
+        };
+      }
+      return {};
+    }
+  };
+
+  const result = await readAwsCloudControlReverseEngineeringResources(
+    {
+      providerResourceTypes: [
+        "AWS::CertificateManager::Certificate",
+        "AWS::CertificateManager::CertificateValidation",
+        "AWS::DynamoDB::Table",
+        "AWS::SQS::Queue"
+      ],
+      region: "ap-northeast-2"
+    },
+    credentials,
+    () => client
+  );
+
+  assert.deepEqual(
+    result.records.map((record) => record.providerResourceType),
+    ["AWS::DynamoDB::Table"]
+  );
+  assert.deepEqual(result.scanErrors, [
+    {
+      id: "scan-error-service-cloud-control",
+      serviceKey: "cloud-control",
+      affectedProviderResourceTypes: ["AWS::SQS::Queue"],
+      failedAwsApiActions: ["cloudformation:ListResources"],
+      resourceType: "UNKNOWN",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "일부 AWS 종류를 읽을 권한이 부족합니다.",
+      retryable: false
+    }
+  ]);
+});
+
+test("Cloud Control 상세 조회의 handler 제한은 발견한 리소스와 함께 남긴다", async () => {
+  const client: AwsCloudControlReadClient = {
+    async send(command) {
+      if (command instanceof ListResourcesCommand) {
+        return { ResourceDescriptions: [{ Identifier: "orders" }] };
+      }
+      if (command instanceof GetResourceCommand) {
+        throw Object.assign(new Error("unsupported detail handler"), {
+          name: "UnsupportedActionException"
+        });
+      }
+      return {};
+    }
+  };
+
+  const result = await readAwsCloudControlReverseEngineeringResources(
+    {
+      providerResourceTypes: ["AWS::DynamoDB::Table"],
+      region: "ap-northeast-2"
+    },
+    credentials,
+    () => client
+  );
+
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0]?.config["cloudControlReadComplete"], false);
+  assert.equal(result.scanErrors.length, 1);
+  assert.equal(result.scanErrors[0]?.reason, "provider_error");
+  assert.deepEqual(result.scanErrors[0]?.failedAwsApiActions, ["cloudformation:GetResource"]);
+});
+
 test("Cloud Control GetResource 권한 실패도 원본 레코드와 부분 실패 범위를 함께 남긴다", async () => {
   const client: AwsCloudControlReadClient = {
     async send(command) {
