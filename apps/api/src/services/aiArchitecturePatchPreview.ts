@@ -761,7 +761,7 @@ For add_resource, preserve should include:
 
 Return unsupported if:
 - the request requires an operation outside the allowed schema
-- the request asks for direct deployment/apply/destroy
+- the request asks for managed deployment/apply/destroy
 - the request asks to mutate real cloud infrastructure
 - the requested parameter path is not allowed for the resource type
 

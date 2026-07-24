@@ -97,7 +97,7 @@ test("empty Deployment picker cannot open a blank native menu", () => {
   assert.match(deploymentPickerSource, /관측할 배포가 없어요\./);
 });
 
-test("Direct Deployment opens Live Observation without leaking the click event as a selection", () => {
+test("managed deployment opens Live Observation without leaking the click event as a selection", () => {
   assert.match(deploymentOutputLinksSource, /onClick=\{\(\) => onOpenLiveObservation\(\)\}/);
   assert.doesNotMatch(deploymentOutputLinksSource, /onClick=\{onOpenLiveObservation\}/);
 });

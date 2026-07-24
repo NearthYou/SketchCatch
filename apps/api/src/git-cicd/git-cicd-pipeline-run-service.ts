@@ -410,7 +410,7 @@ export function createGitCicdPipelineRunService(options: {
         input.projectId,
         input.sourceRepositoryId
       );
-      if (!target) throw new Error("Enabled and valid Git/CI/CD monitoring target not found");
+      if (!target) throw new Error("Enabled and valid CI/CD monitoring target not found");
       return refreshTarget(target);
     },
     async refreshPipelineRun(input: {

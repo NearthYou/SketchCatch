@@ -12,9 +12,9 @@
 ## 안전
 
 - [ ] `.env`, private key, AWS credential, DB password, real token을 읽거나 출력하거나 커밋하지 않았다.
-- [ ] 실제 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff를 사용자 승인 없이 실행하지 않았다.
+- [ ] 실제 Terraform apply/destroy, cloud mutation, CI/CD handoff를 사용자 승인 없이 실행하지 않았다.
 - [ ] UI 코드에 Terraform 실행, AWS SDK 호출, deployment mutation logic을 섞지 않았다.
-- [ ] Redis를 사용자 Practice Architecture Resource처럼 설명하지 않았다.
+- [ ] Redis를 사용자 infrastructure resource처럼 설명하지 않았다.
 - [ ] SketchCatch를 AWS-only 제품으로 설명하지 않았다.
 
 ## 검증

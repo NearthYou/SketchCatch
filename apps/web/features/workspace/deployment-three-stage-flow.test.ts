@@ -156,7 +156,7 @@ test("deployment preparation validates the exact merged Terraform artifact witho
   assert.doesNotMatch(rightPanelSource, /skipValidation:\s*true/);
 });
 
-test("Direct Deployment uses prepare, approve, and execute with three external phases", () => {
+test("managed deployment uses prepare, approve, and execute with three external phases", () => {
   assert.match(directDeploymentSource, /prepareDeployment\(\{/);
   assert.match(directDeploymentSource, /approveDeploymentPlan\(selectedDeployment\.id\)/);
   assert.match(directDeploymentSource, /executeDeployment\(selectedDeployment\.id\)/);
@@ -556,7 +556,7 @@ test("deployment action buttons fit their label without clipping", () => {
   const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
   const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
   const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
-  const actionRailStart = workspaceStyles.indexOf("/* Direct Deployment action rail */");
+  const actionRailStart = workspaceStyles.indexOf("/* managed deployment action rail */");
   const executiveConsoleStart = workspaceStyles.indexOf(
     "/* Approved blue executive deployment console */",
     actionRailStart
@@ -617,19 +617,19 @@ test("reload restores the persisted ProjectDraft revision instead of assuming ch
   assert.match(rightPanelSource, /projectDraftRevision=\{projectDraftRevision\}/);
 });
 
-test("Direct Deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
+test("managed deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
   assert.match(directDeploymentSource, /PARTIALLY_FAILED/);
   assert.match(directDeploymentSource, /같은 빌드 결과로 웹 배포 재시도/);
   assert.match(directDeploymentSource, /retryDeploymentFrontend\(selectedDeployment\.id\)/);
   assert.match(directDeploymentSource, /현재 주소와 QR, Live Observation은 계속 사용할 수 있지만/);
 });
 
-test("Direct Deployment auto-selects the verified AWS connection without rendering a selector", () => {
+test("managed deployment auto-selects the verified AWS connection without rendering a selector", () => {
   assert.doesNotMatch(directDeploymentSource, /ariaLabel="AWS 연결 선택"/);
   assert.match(directDeploymentSource, /awsConnectionId: selectedAwsConnectionId/);
 });
 
-test("Direct Deployment omits the removed deployment context and run-details sections", () => {
+test("managed deployment omits the removed deployment context and run-details sections", () => {
   assert.doesNotMatch(directDeploymentSource, /deploymentContextPanel/);
   assert.doesNotMatch(directDeploymentSource, /deployment-run-details|실행 세부정보/);
 });

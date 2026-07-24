@@ -35,23 +35,23 @@ output "ecr_repository_arn" {
 }
 
 output "ecs_task_family" {
-  value = aws_ecs_task_definition.task_fixed_template_fargate_container_app.family
+  value = aws_ecs_task_definition.task.family
 }
 
 output "ecs_task_definition_family" {
-  value = aws_ecs_task_definition.task_fixed_template_fargate_container_app.family
+  value = aws_ecs_task_definition.task.family
 }
 
 output "ecs_task_definition_arn" {
-  value = aws_ecs_task_definition.task_fixed_template_fargate_container_app.arn
+  value = aws_ecs_task_definition.task.arn
 }
 
 output "ecs_task_role_arn" {
-  value = aws_ecs_task_definition.task_fixed_template_fargate_container_app.task_role_arn
+  value = aws_ecs_task_definition.task.task_role_arn
 }
 
 output "ecs_execution_role_arn" {
-  value = aws_ecs_task_definition.task_fixed_template_fargate_container_app.execution_role_arn
+  value = aws_ecs_task_definition.task.execution_role_arn
 }
 
 output "log_group_names" {
@@ -63,35 +63,35 @@ output "api_base_url" {
 }
 
 output "api_origin_url" {
-  value = "http://${aws_lb.alb_fixed_template_ecs_fargate_container_app.dns_name}"
+  value = "http://${aws_lb.alb.dns_name}"
 }
 
 output "alb_arn" {
-  value = aws_lb.alb_fixed_template_ecs_fargate_container_app.arn
+  value = aws_lb.alb.arn
 }
 
 output "alb_dns_name" {
-  value = aws_lb.alb_fixed_template_ecs_fargate_container_app.dns_name
+  value = aws_lb.alb.dns_name
 }
 
 output "target_group_arn" {
-  value = aws_lb_target_group.tg_fixed_template_ecs_fargate_container_app.arn
+  value = aws_lb_target_group.tg.arn
 }
 
 output "alb_arn_suffix" {
-  value = aws_lb.alb_fixed_template_ecs_fargate_container_app.arn_suffix
+  value = aws_lb.alb.arn_suffix
 }
 
 output "target_group_arn_suffix" {
-  value = aws_lb_target_group.tg_fixed_template_ecs_fargate_container_app.arn_suffix
+  value = aws_lb_target_group.tg.arn_suffix
 }
 
 output "ecs_cluster_name" {
-  value = aws_ecs_cluster.ecs_cluster_fixed_template_fargate_container_app.name
+  value = aws_ecs_cluster.ecs_cluster.name
 }
 
 output "ecs_service_name" {
-  value = aws_ecs_service.ecs_service_fixed_template_fargate_container_app.name
+  value = aws_ecs_service.ecs_service.name
 }
 
 output "ecs_container_name" {
@@ -103,59 +103,59 @@ output "ecs_container_port" {
 }
 
 output "max_capacity" {
-  value = aws_appautoscaling_target.ecs_service_requests.max_capacity
+  value = 2
 }
 
-resource "aws_vpc" "vpc_fixed_template_ecs_fargate_container_app" {
+resource "aws_vpc" "vpc" {
   cidr_block           = "10.30.0.0/16"
   instance_tenancy     = "default"
   enable_dns_support   = true
   enable_dns_hostnames = true
 }
 
-resource "aws_subnet" "subnet_fixed_template_ecs_fargate_container_app_a" {
-  vpc_id                  = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+resource "aws_subnet" "subnet_a" {
+  vpc_id                  = aws_vpc.vpc.id
   cidr_block              = "10.30.1.0/24"
   availability_zone       = "ap-northeast-2a"
   map_public_ip_on_launch = true
 }
 
-resource "aws_subnet" "subnet_fixed_template_ecs_fargate_container_app_b" {
-  vpc_id                  = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+resource "aws_subnet" "subnet_b" {
+  vpc_id                  = aws_vpc.vpc.id
   cidr_block              = "10.30.2.0/24"
   availability_zone       = "ap-northeast-2b"
   map_public_ip_on_launch = true
 }
 
-resource "aws_internet_gateway" "igw_fixed_template_ecs_fargate_container_app" {
-  vpc_id = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.vpc.id
 }
 
-resource "aws_route_table" "rt_fixed_template_ecs_fargate_container_app" {
+resource "aws_route_table" "rt" {
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw_fixed_template_ecs_fargate_container_app.id
+    gateway_id = aws_internet_gateway.igw.id
   }
-  vpc_id = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id = aws_vpc.vpc.id
 }
 
-resource "aws_route_table_association" "rta_fixed_template_ecs_fargate_container_app_a" {
-  subnet_id      = aws_subnet.subnet_fixed_template_ecs_fargate_container_app_a.id
-  route_table_id = aws_route_table.rt_fixed_template_ecs_fargate_container_app.id
+resource "aws_route_table_association" "rta_a" {
+  subnet_id      = aws_subnet.subnet_a.id
+  route_table_id = aws_route_table.rt.id
 }
 
-resource "aws_route_table_association" "rta_fixed_template_ecs_fargate_container_app_b" {
-  subnet_id      = aws_subnet.subnet_fixed_template_ecs_fargate_container_app_b.id
-  route_table_id = aws_route_table.rt_fixed_template_ecs_fargate_container_app.id
+resource "aws_route_table_association" "rta_b" {
+  subnet_id      = aws_subnet.subnet_b.id
+  route_table_id = aws_route_table.rt.id
 }
 
-resource "aws_ecs_cluster" "ecs_cluster_fixed_template_fargate_container_app" {
+resource "aws_ecs_cluster" "ecs_cluster" {
   name = "audience-live-check-cluster"
 }
 
-resource "aws_security_group" "sg_fixed_template_ecs_fargate_container_app_alb" {
+resource "aws_security_group" "sg_alb" {
   name   = "audience-live-check-alb-sg"
-  vpc_id = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id = aws_vpc.vpc.id
   egress {
     to_port   = 0
     from_port = 0
@@ -175,9 +175,9 @@ resource "aws_security_group" "sg_fixed_template_ecs_fargate_container_app_alb" 
   description = "Allow CloudFront origin HTTP while CloudFront terminates public TLS"
 }
 
-resource "aws_security_group" "sg_fixed_template_ecs_fargate_container_app_task" {
+resource "aws_security_group" "sg_task" {
   name   = "audience-live-check-task-sg"
-  vpc_id = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id = aws_vpc.vpc.id
   egress {
     to_port   = 0
     from_port = 0
@@ -191,43 +191,43 @@ resource "aws_security_group" "sg_fixed_template_ecs_fargate_container_app_task"
     from_port = 8080
     protocol  = "tcp"
     security_groups = [
-      aws_security_group.sg_fixed_template_ecs_fargate_container_app_alb.id,
+      aws_security_group.sg_alb.id,
     ]
   }
   description = "Allow ALB traffic to the API on port 8080"
 }
 
-resource "aws_iam_role" "role_fixed_template_ecs_fargate_container_app_execution" {
+resource "aws_iam_role" "role_execution" {
   name               = "audience-live-check-ecs-execution"
   assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
 }
 
-resource "aws_iam_role_policy_attachment" "fixed_template_ecs_fargate_container_app_execution_policy" {
-  role       = aws_iam_role.role_fixed_template_ecs_fargate_container_app_execution.name
+resource "aws_iam_role_policy_attachment" "execution_policy" {
+  role       = aws_iam_role.role_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_iam_role" "role_fixed_template_ecs_fargate_container_app_task" {
+resource "aws_iam_role" "role_task" {
   name               = "audience-live-check-ecs-task"
   assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
 }
 
-resource "aws_lb" "alb_fixed_template_ecs_fargate_container_app" {
+resource "aws_lb" "alb" {
   name = "audience-live-check-alb"
   subnets = [
-    aws_subnet.subnet_fixed_template_ecs_fargate_container_app_a.id,
-    aws_subnet.subnet_fixed_template_ecs_fargate_container_app_b.id,
+    aws_subnet.subnet_a.id,
+    aws_subnet.subnet_b.id,
   ]
   security_groups = [
-    aws_security_group.sg_fixed_template_ecs_fargate_container_app_alb.id,
+    aws_security_group.sg_alb.id,
   ]
   load_balancer_type = "application"
 }
 
-resource "aws_lb_target_group" "tg_fixed_template_ecs_fargate_container_app" {
+resource "aws_lb_target_group" "tg" {
   name        = "audience-live-check-api"
   port        = 8080
-  vpc_id      = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id      = aws_vpc.vpc.id
   protocol    = "HTTP"
   target_type = "ip"
   health_check {
@@ -236,17 +236,17 @@ resource "aws_lb_target_group" "tg_fixed_template_ecs_fargate_container_app" {
   }
 }
 
-resource "aws_lb_listener" "listener_fixed_template_ecs_fargate_container_app" {
+resource "aws_lb_listener" "listener" {
   port     = 80
   protocol = "HTTP"
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_fixed_template_ecs_fargate_container_app.arn
+    target_group_arn = aws_lb_target_group.tg.arn
   }
-  load_balancer_arn = aws_lb.alb_fixed_template_ecs_fargate_container_app.arn
+  load_balancer_arn = aws_lb.alb.arn
 }
 
-resource "aws_ecs_task_definition" "task_fixed_template_fargate_container_app" {
+resource "aws_ecs_task_definition" "task" {
   cpu    = 256
   family = "audience-live-check-api"
   memory = 512
@@ -256,28 +256,28 @@ resource "aws_ecs_task_definition" "task_fixed_template_fargate_container_app" {
     aws_iam_role_policy.check_in_signing_read,
   ]
   network_mode          = "awsvpc"
-  task_role_arn         = aws_iam_role.role_fixed_template_ecs_fargate_container_app_task.arn
-  execution_role_arn    = aws_iam_role.role_fixed_template_ecs_fargate_container_app_execution.arn
+  task_role_arn         = aws_iam_role.role_task.arn
+  execution_role_arn    = aws_iam_role.role_execution.arn
   container_definitions = "[{\"name\":\"api\",\"image\":\"public.ecr.aws/docker/library/nginx:1.27-alpine\",\"essential\":true,\"entryPoint\":[\"/bin/sh\",\"-c\"],\"command\":[\"printf '%s\\\\n' 'server {' '  listen 8080;' '  default_type text/plain;' '  location = /health { return 200 ok; }' '  location / { return 200 SketchCatch-deployment-smoke; }' '}' > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'\"],\"portMappings\":[{\"containerPort\":8080,\"hostPort\":8080,\"protocol\":\"tcp\"}],\"environment\":[{\"name\":\"PORT\",\"value\":\"8080\"},{\"name\":\"WEB_ORIGIN\",\"value\":\"https://${aws_cloudfront_distribution.cdn_web.domain_name}\"},{\"name\":\"INSTANCE_ID\",\"value\":\"fargate\"}],\"logConfiguration\":{\"logDriver\":\"awslogs\",\"options\":{\"awslogs-group\":\"/ecs/audience-live-check-api\",\"awslogs-region\":\"ap-northeast-2\",\"awslogs-stream-prefix\":\"api\"}},\"secrets\":[{\"name\":\"CHECK_IN_SIGNING_SECRET\",\"valueFrom\":\"${aws_secretsmanager_secret.check_in_signing.arn}\"}]}]"
   requires_compatibilities = [
     "FARGATE",
   ]
 }
 
-resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app" {
+resource "aws_ecs_service" "ecs_service" {
   name    = "audience-live-check-service"
-  cluster = aws_ecs_cluster.ecs_cluster_fixed_template_fargate_container_app.id
+  cluster = aws_ecs_cluster.ecs_cluster.id
   depends_on = [
-    aws_lb_listener.listener_fixed_template_ecs_fargate_container_app,
+    aws_lb_listener.listener,
   ]
   launch_type   = "FARGATE"
   desired_count = 1
   load_balancer {
     container_name   = "api"
     container_port   = 8080
-    target_group_arn = aws_lb_target_group.tg_fixed_template_ecs_fargate_container_app.arn
+    target_group_arn = aws_lb_target_group.tg.arn
   }
-  task_definition = aws_ecs_task_definition.task_fixed_template_fargate_container_app.arn
+  task_definition = aws_ecs_task_definition.task.arn
   network_configuration {
     subnets = [
       aws_subnet.subnet_private_app_a.id,
@@ -285,7 +285,7 @@ resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app" {
     ]
     assign_public_ip = false
     security_groups = [
-      aws_security_group.sg_fixed_template_ecs_fargate_container_app_task.id,
+      aws_security_group.sg_task.id,
     ]
   }
   health_check_grace_period_seconds = 30
@@ -295,23 +295,13 @@ resource "aws_ecs_service" "ecs_service_fixed_template_fargate_container_app" {
   }
 }
 
-resource "aws_appautoscaling_target" "ecs_service_requests" {
-  min_capacity = 1
-  max_capacity = 2
-
-  resource_id = "service/${aws_ecs_cluster.ecs_cluster_fixed_template_fargate_container_app.name}/${aws_ecs_service.ecs_service_fixed_template_fargate_container_app.name}"
-
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
 resource "aws_appautoscaling_policy" "ecs_service_requests" {
   name        = "audience-live-check-request-scaling"
   policy_type = "TargetTrackingScaling"
 
-  resource_id        = aws_appautoscaling_target.ecs_service_requests.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs_service_requests.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs_service_requests.service_namespace
+  resource_id        = "service/${aws_ecs_cluster.ecs_cluster.name}/${aws_ecs_service.ecs_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
 
   target_tracking_scaling_policy_configuration {
     target_value       = 5
@@ -320,20 +310,20 @@ resource "aws_appautoscaling_policy" "ecs_service_requests" {
 
     predefined_metric_specification {
       predefined_metric_type = "ALBRequestCountPerTarget"
-      resource_label         = "${aws_lb.alb_fixed_template_ecs_fargate_container_app.arn_suffix}/${aws_lb_target_group.tg_fixed_template_ecs_fargate_container_app.arn_suffix}"
+      resource_label         = "${aws_lb.alb.arn_suffix}/${aws_lb_target_group.tg.arn_suffix}"
     }
   }
 }
 
 resource "aws_subnet" "subnet_private_app_a" {
-  vpc_id                  = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id                  = aws_vpc.vpc.id
   cidr_block              = "10.30.11.0/24"
   availability_zone       = "ap-northeast-2a"
   map_public_ip_on_launch = false
 }
 
 resource "aws_subnet" "subnet_private_app_b" {
-  vpc_id                  = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id                  = aws_vpc.vpc.id
   cidr_block              = "10.30.12.0/24"
   availability_zone       = "ap-northeast-2b"
   map_public_ip_on_launch = false
@@ -344,7 +334,7 @@ resource "aws_eip" "eip_nat" {
 }
 
 resource "aws_nat_gateway" "nat_private_egress" {
-  subnet_id     = aws_subnet.subnet_fixed_template_ecs_fargate_container_app_a.id
+  subnet_id     = aws_subnet.subnet_a.id
   allocation_id = aws_eip.eip_nat.id
 }
 
@@ -353,7 +343,7 @@ resource "aws_route_table" "rt_private_app" {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.nat_private_egress.id
   }
-  vpc_id = aws_vpc.vpc_fixed_template_ecs_fargate_container_app.id
+  vpc_id = aws_vpc.vpc.id
 }
 
 resource "aws_route_table_association" "rta_private_app_a" {
@@ -412,7 +402,7 @@ resource "aws_cloudfront_distribution" "cdn_web" {
   }
   origin {
     origin_id   = "api-alb"
-    domain_name = aws_lb.alb_fixed_template_ecs_fargate_container_app.dns_name
+    domain_name = aws_lb.alb.dns_name
     custom_origin_config {
       http_port  = 80
       https_port = 443
@@ -527,6 +517,6 @@ resource "aws_secretsmanager_secret_version" "check_in_signing" {
 
 resource "aws_iam_role_policy" "check_in_signing_read" {
   name   = "audience-live-check-check-in-signing-read"
-  role   = aws_iam_role.role_fixed_template_ecs_fargate_container_app_execution.id
+  role   = aws_iam_role.role_execution.id
   policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"ReadCheckInSigningSecret\",\"Effect\":\"Allow\",\"Action\":[\"secretsmanager:GetSecretValue\"],\"Resource\":\"${aws_secretsmanager_secret.check_in_signing.arn}\"}]}"
 }

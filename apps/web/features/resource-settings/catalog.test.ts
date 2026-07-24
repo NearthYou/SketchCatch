@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { brainboardTemplateRegistry as referenceTemplateRegistry } from "@sketchcatch/types";
 import {
   createTerraformParameterCatalogKey,
   getResourceDefinitionById,
@@ -10,14 +11,11 @@ import {
 } from "@sketchcatch/types/resource-definitions";
 import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "../parameter-input/catalog.generated";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
-import { capturedBrainboardPaletteResourceIds } from "./captured-brainboard-palette-resource-ids";
+import { referenceTemplatePaletteResourceIds } from "./reference-template-palette-resource-ids";
 import { resourceCatalog } from "./catalog";
 
 const publicDirectoryPath = fileURLToPath(new URL("../../public", import.meta.url));
-const brainboardCaptureDirectoryPath = fileURLToPath(
-  new URL("../../../../docs/gg/feat-infrastructure-template/brainboard-captures/", import.meta.url)
-);
-const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
+const REFERENCE_TEMPLATE_TERRAFORM_IDENTITY_COUNT = 87;
 
 const terraformDefinitionKeys = new Set(
   resourceDefinitions.map(
@@ -427,10 +425,10 @@ test("resourceCatalog exposes requested missing resources with public icon asset
   }
 });
 
-test("committed Brainboard captures have exactly one shared and catalog match for all 87 identities", () => {
-  const capturedIdentities = readCapturedTerraformIdentities();
+test("reference templates have exactly one shared and catalog match for all 87 identities", () => {
+  const capturedIdentities = readReferenceTemplateTerraformIdentities();
 
-  assert.equal(capturedIdentities.length, BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT);
+  assert.equal(capturedIdentities.length, REFERENCE_TEMPLATE_TERRAFORM_IDENTITY_COUNT);
 
   for (const { blockType, resourceType } of capturedIdentities) {
     const key = `${blockType}/${resourceType}`;
@@ -461,10 +459,10 @@ test("committed Brainboard captures have exactly one shared and catalog match fo
   }
 });
 
-test("captured Brainboard resources are configurable from the manual Palette", () => {
-  assert.equal(capturedBrainboardPaletteResourceIds.length, 31);
+test("reference template resources are configurable from the manual Palette", () => {
+  assert.equal(referenceTemplatePaletteResourceIds.length, 31);
 
-  for (const id of capturedBrainboardPaletteResourceIds) {
+  for (const id of referenceTemplatePaletteResourceIds) {
     const resource = resourceCatalog.find((candidate) => candidate.id === id);
     const definition = getResourceDefinitionById(id);
 
@@ -780,27 +778,21 @@ function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): s
   return `${resource.nodeDefaults.terraformBlockType ?? "resource"}/${resource.nodeDefaults.type}`;
 }
 
-function readCapturedTerraformIdentities(): Array<{
+function readReferenceTemplateTerraformIdentities(): Array<{
   readonly blockType: "data" | "resource";
   readonly resourceType: string;
 }> {
   const identityKeys = new Set<string>();
 
-  for (const fileName of readdirSync(brainboardCaptureDirectoryPath).sort()) {
-    if (!fileName.endsWith(".json")) {
+  for (const entry of referenceTemplateRegistry) {
+    if (entry.status !== "available") {
       continue;
     }
 
-    const capture = JSON.parse(
-      readFileSync(`${brainboardCaptureDirectoryPath}/${fileName}`, "utf8")
-    ) as {
-      readonly terraform?: {
-        readonly resourceAddresses?: readonly string[] | undefined;
-      } | null;
-    };
-
-    for (const address of capture.terraform?.resourceAddresses ?? []) {
-      identityKeys.add(createTerraformIdentityKeyFromAddress(address));
+    for (const node of entry.source.nodes) {
+      if (node.kind === "resource") {
+        identityKeys.add(`${node.terraformBlockType}/${node.terraformResourceType}`);
+      }
     }
   }
 
@@ -815,16 +807,4 @@ function readCapturedTerraformIdentities(): Array<{
       resourceType: key.slice(separatorIndex + 1)
     };
   });
-}
-
-function createTerraformIdentityKeyFromAddress(address: string): string {
-  const segments = address.split(".");
-
-  if (segments[0] === "data") {
-    assert.ok(segments[1], `Invalid Terraform data address: ${address}`);
-    return `data/${segments[1]}`;
-  }
-
-  assert.ok(segments[0], `Invalid Terraform resource address: ${address}`);
-  return `resource/${segments[0]}`;
 }

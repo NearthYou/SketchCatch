@@ -12,25 +12,22 @@ This folder contains product, architecture, data model, development, and deploym
 
 1. Do not create duplicate documents.
 2. Before adding a new document, check `docs/README.md` and update an existing document if possible.
-3. When adding or renaming a reference document under `docs/ck`, `docs/sw`, `docs/ys`, or `docs/adr`, update that folder's `README.md`. For `docs/gg`, update `docs/gg/006_문서구조_gg.md`.
+3. When renaming a canonical document, update `docs/README.md` and every inbound link.
 4. Keep the regular reading set small.
 5. Remove or merge stale content instead of preserving old versions.
-6. Keep `docs/sw` focused on active execution references and implementation guides; remove stale `spec*`, `plan*`, smoke, and one-off agent-rule files once the workstream is no longer active.
+6. Do not create contributor-specific folders. Put test fixtures and generated evidence beside the owning code; keep only historical session records in `agent-history`.
 7. Keep product direction aligned with the multi-cloud-ready IaC operations service positioning. MVP implementation is AWS-first and Terraform-first, but the domain model must stay provider-neutral.
-8. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to a Practice Architecture, IaC Preview, Pre-Deployment Check, and either an approved Direct Deployment Path or Git/CI/CD Deployment Path.
+8. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to an infrastructure design, IaC Preview, deployment check, and either an approved managed deployment or CI/CD delivery.
 9. Treat presentation flows as Representative Use Journeys. Do not let demo-only wording replace the service's real user journey.
-10. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved Git/CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
-11. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user Practice Architecture Resource.
+10. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
+11. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user infrastructure resource.
 
 ## Document Filename Rules
 
-1. When creating a new project document, use this filename format: `000_한글제목_대상이니셜.md`.
-2. Before choosing a name, inspect the target folder and use the next unused three-digit numeric prefix, such as `001`, `002`, or `010`.
-3. Write the title part in clear Korean so the purpose is understandable from the filename alone.
-4. If specific people must read the document, append their initials at the end, such as `001_배포점검가이드_KM.md`.
-5. If multiple people must read it, join initials with hyphens, such as `001_배포점검가이드_KM-JH.md`.
-6. If there is no specific required reader, omit the initials and the trailing underscore, such as `002_테라폼검증흐름.md`.
-7. Keep existing canonical documents listed under Update Targets at their current names unless the user explicitly asks to rename them.
+1. Update a canonical document instead of creating a second document for the same responsibility.
+2. Name shared reference files by purpose or evidence type, not by contributor initials, branch names, or temporary workstream labels.
+3. Use concise English kebab-case filenames that describe document responsibility.
+4. Keep the canonical documents listed under Update Targets at their current names unless the user explicitly asks to rename them.
 
 ## Update Targets
 
@@ -39,3 +36,4 @@ This folder contains product, architecture, data model, development, and deploym
 3. Stack, storage, execution boundaries, current API scope, and architecture decisions belong in `docs/architecture.md`.
 4. Local development, team AI collaboration, conventions, Git flow, and checks belong in `docs/development.md`.
 5. Operational deployment and user Deployment execution/cleanup belong in `docs/deployment.md`.
+6. Cross-functional service flows and implementation status belong in `docs/service-specification.md`.

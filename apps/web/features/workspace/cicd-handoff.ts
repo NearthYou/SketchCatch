@@ -270,7 +270,7 @@ export function getGitCicdHandoffReadiness(input: {
 }
 
 const readinessDescriptionByKey: Record<GitCicdReadinessItemKey, string> = {
-  approved_apply_plan: "Direct Deployment에서 승인한 Terraform Apply Plan을 사용합니다.",
+  approved_apply_plan: "managed deployment에서 승인한 Terraform Apply Plan을 사용합니다.",
   initial_application_release:
     "인프라는 준비됐지만 실제 애플리케이션 릴리즈 증거가 없습니다.",
   source_repository: "이 프로젝트에 사용할 활성 GitHub Repository를 연결합니다.",
