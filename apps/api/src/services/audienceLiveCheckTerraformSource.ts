@@ -316,7 +316,7 @@ export const AUDIENCE_LIVE_CHECK_TERRAFORM_SOURCE = [
   "  service_namespace  = aws_appautoscaling_target.ecs_service_requests.service_namespace",
   "",
   "  target_tracking_scaling_policy_configuration {",
-  "    target_value       = 10",
+  "    target_value       = 5",
   "    scale_out_cooldown = 30",
   "    scale_in_cooldown  = 300",
   "",
