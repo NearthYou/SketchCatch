@@ -825,6 +825,126 @@ test("ALL 스캔은 실제 generic EIP/NAT ARN보다 전용 Query 설정을 우�
   assert.equal(records[1]?.config["natGatewayId"], natGatewayId);
 });
 
+// gg: 실제 Resource Explorer raw type과 전용 reader type이 달라도 같은 AWS 리소스는 한 번만 보여야 합니다.
+test("Resource Explorer raw type EIP·NAT·KMS는 전용 reader 결과와 합치고 상세 설정을 우선한다", () => {
+  const allocationId = "eipalloc-0123456789abcdef0";
+  const natGatewayId = "nat-0123456789abcdef0";
+  const keyId = "11111111-2222-3333-4444-555555555555";
+  const accountId = "123456789012";
+  const region = "ap-northeast-2";
+  const records = uniqueDiscoveredRecordsByProviderId([
+    {
+      ...safeRecord(
+        "ec2:elastic-ip",
+        `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}`,
+        "Elastic IP · Resource Explorer"
+      ),
+      config: { arn: `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` }
+    },
+    {
+      ...safeRecord("AWS::EC2::EIP", allocationId, "egress-ip"),
+      config: { allocationId, domain: "vpc" }
+    },
+    {
+      ...safeRecord(
+        "ec2:natgateway",
+        `arn:aws:ec2:${region}:${accountId}:natgateway/${natGatewayId}`,
+        "NAT Gateway · Resource Explorer"
+      ),
+      config: { arn: `arn:aws:ec2:${region}:${accountId}:natgateway/${natGatewayId}` }
+    },
+    {
+      ...safeRecord("AWS::EC2::NatGateway", natGatewayId, "public-egress"),
+      config: { natGatewayId, state: "available" }
+    },
+    {
+      ...safeRecord(
+        "kms:key",
+        `arn:aws:kms:${region}:${accountId}:key/${keyId}`,
+        "KMS Key · Resource Explorer"
+      ),
+      config: { arn: `arn:aws:kms:${region}:${accountId}:key/${keyId}` }
+    },
+    {
+      ...safeRecord("AWS::KMS::Key", keyId, "application-key"),
+      config: { keyId, keyState: "Enabled" }
+    }
+  ]);
+
+  assert.equal(records.length, 3);
+  assert.deepEqual(
+    records.map((record) => [record.providerResourceType, record.providerResourceId]),
+    [
+      ["AWS::EC2::EIP", allocationId],
+      ["AWS::EC2::NatGateway", natGatewayId],
+      ["AWS::KMS::Key", keyId]
+    ]
+  );
+  assert.equal(records[0]?.config["allocationId"], allocationId);
+  assert.equal(records[1]?.config["natGatewayId"], natGatewayId);
+  assert.equal(records[2]?.config["keyId"], keyId);
+  assert.deepEqual(records[0]?.serverOnly?.config?.["sourceProviderResourceTypes"], [
+    "ec2:elastic-ip",
+    "AWS::EC2::EIP"
+  ]);
+});
+
+// gg: Cloud Control의 짧은 ID와 Resource Explorer ARN도 동일 리소스로 합치되 raw type만 단독으로 바꾸지 않습니다.
+test("Resource Explorer raw type Network ACL·Launch Template·Auto Scaling Group은 Cloud Control 결과와 한 번만 남긴다", () => {
+  const accountId = "123456789012";
+  const region = "ap-northeast-2";
+  const networkAclId = "acl-0123456789abcdef0";
+  const launchTemplateId = "lt-0123456789abcdef0";
+  const autoScalingGroupName = "orders-asg";
+  const records = uniqueDiscoveredRecordsByProviderId([
+    safeRecord(
+      "ec2:network-acl",
+      `arn:aws:ec2:${region}:${accountId}:network-acl/${networkAclId}`,
+      "Network ACL · Resource Explorer"
+    ),
+    {
+      ...safeRecord("AWS::EC2::NetworkAcl", networkAclId, "Network ACL · Cloud Control"),
+      config: { cloudControlReadComplete: true }
+    },
+    safeRecord(
+      "ec2:launch-template",
+      `arn:aws:ec2:${region}:${accountId}:launch-template/${launchTemplateId}`,
+      "Launch Template · Resource Explorer"
+    ),
+    {
+      ...safeRecord("AWS::EC2::LaunchTemplate", launchTemplateId, "Launch Template · Cloud Control"),
+      config: { cloudControlReadComplete: true }
+    },
+    safeRecord(
+      "autoscaling:autoScalingGroup",
+      `arn:aws:autoscaling:${region}:${accountId}:autoScalingGroup:autoScalingGroupName/${autoScalingGroupName}`,
+      "Auto Scaling Group · Resource Explorer"
+    ),
+    {
+      ...safeRecord(
+        "AWS::AutoScaling::AutoScalingGroup",
+        autoScalingGroupName,
+        "Auto Scaling Group · Cloud Control"
+      ),
+      config: { cloudControlReadComplete: true }
+    }
+  ]);
+
+  assert.equal(records.length, 3);
+  assert.deepEqual(
+    records.map((record) => record.providerResourceType),
+    [
+      "AWS::EC2::NetworkAcl",
+      "AWS::EC2::LaunchTemplate",
+      "AWS::AutoScaling::AutoScalingGroup"
+    ]
+  );
+  assert.deepEqual(records[0]?.serverOnly?.config?.["sourceProviderResourceTypes"], [
+    "ec2:network-acl",
+    "AWS::EC2::NetworkAcl"
+  ]);
+});
+
 test("같은 scan NAT가 allocation을 점유할 때만 EIP association을 NAT로 해석한다", () => {
   const allocationId = "eipalloc-0123456789abcdef0";
   const natGatewayId = "nat-0123456789abcdef0";
