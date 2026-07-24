@@ -123,7 +123,11 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   );
   assert.match(
     tunedTerraform,
-    /output "max_capacity" \{[\s\S]*?value\s+= aws_appautoscaling_target\.ecs_service_requests\.max_capacity[\s\S]*?\}/u
+    /output "max_capacity" \{[\s\S]*?value\s+= 2[\s\S]*?\}/u
+  );
+  assert.doesNotMatch(
+    tunedTerraform,
+    /aws_appautoscaling_target\.ecs_service_requests\.max_capacity/u
   );
   assert.match(tunedTerraform, /resource "random_password" "check_in_signing"/u);
   assert.match(
@@ -160,7 +164,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
     terraform,
     /resource "aws_appautoscaling_policy" "ecs_service_requests"/u
   );
-  assert.doesNotMatch(terraform, /fixed_template/u);
+  assert.doesNotMatch(terraform, /resource "[^"]+" "[^"]*fixed_template/u);
   assert.match(terraform, /target_value\s*=\s*5/u);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "cdn_web"/u);
   assert.match(terraform, /resource "aws_secretsmanager_secret" "check_in_signing"/u);

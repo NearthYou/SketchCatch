@@ -169,9 +169,10 @@ test("CI/CD monitoring tables expose commit-scoped run history", () => {
   assert.ok(gitCicdPipelineLogs.sequence);
 
   assert(
-    hasUniqueIndex(getTableConfig(gitCicdPipelineRuns).indexes, "git_cicd_pipeline_runs_repository_commit_unique", [
+    hasUniqueIndex(getTableConfig(gitCicdPipelineRuns).indexes, "git_cicd_pipeline_runs_github_run_unique", [
       "source_repository_id",
-      "commit_sha"
+      "github_workflow_run_id",
+      "github_workflow_run_attempt"
     ])
   );
   const pageIndex = getTableConfig(gitCicdPipelineRuns).indexes.find(
