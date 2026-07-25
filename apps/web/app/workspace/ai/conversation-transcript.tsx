@@ -7,6 +7,7 @@ import {
   ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS,
   architectureDraftGenerationSteps
 } from "../../../features/workspace/workspace-ai-chat-status";
+import type { ArchitectureDraftProgressSnapshot } from "@sketchcatch/types";
 import type { AiStartMessage } from "./ai-start-model";
 import type { SelectedAssistantOption } from "./selected-option-model";
 import {
@@ -27,6 +28,7 @@ export function ConversationTranscript({
   onOpenPreview,
   onRetry,
   onSuggestionSelect,
+  progressSnapshot,
   requestState,
   selections
 }: {
@@ -38,6 +40,7 @@ export function ConversationTranscript({
   readonly onOpenPreview: () => void;
   readonly onRetry: () => Promise<void>;
   readonly onSuggestionSelect: (message: AiStartMessage, suggestion: string) => void;
+  readonly progressSnapshot: ArchitectureDraftProgressSnapshot | null;
   readonly requestState: WorkspaceAiRequestState;
   readonly selections: readonly SelectedAssistantOption[];
 }) {
@@ -46,9 +49,11 @@ export function ConversationTranscript({
   const forcedFollowTargetMessageCountRef = useRef<number | null>(null);
   const [draftProgressStep, setDraftProgressStep] = useState(0);
   const retryRequestLabel = getRetryRequestLabel(requestState);
+  const isDraftGenerationProgressVisible =
+    requestState === "loading" && progressSnapshot !== null;
 
   useEffect(() => {
-    if (requestState !== "loading") {
+    if (!isDraftGenerationProgressVisible) {
       setDraftProgressStep(0);
       return;
     }
@@ -60,7 +65,7 @@ export function ConversationTranscript({
     }, ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS);
 
     return () => window.clearInterval(timerId);
-  }, [requestState]);
+  }, [isDraftGenerationProgressVisible]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -173,7 +178,7 @@ export function ConversationTranscript({
           );
         })}
 
-        {requestState === "loading" ? (
+        {isDraftGenerationProgressVisible ? (
           <WorkspaceAiWorkbenchDraftProgress
             currentStep={draftProgressStep}
             onCancel={onCancelRequest}

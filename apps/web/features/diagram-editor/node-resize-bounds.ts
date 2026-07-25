@@ -34,6 +34,7 @@ const areaNodeMaxResizeBounds = {
 
 const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fromEntries(
   [
+    "design-group",
     "design_region",
     "design-aws-account",
     "design_az",
@@ -80,6 +81,7 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
   }
 };
 
+/** 자동 프레임도 일반 Design Group과 같은 안전한 resize 범위를 사용합니다. */
 export function getNodeResizeBounds(
   node: Pick<DiagramNode, "iconUrl" | "kind" | "parameters" | "type">
 ): NodeResizeBounds {

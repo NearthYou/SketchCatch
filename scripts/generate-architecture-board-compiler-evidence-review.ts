@@ -13,11 +13,11 @@ const mode = parseMode(process.argv.slice(2));
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const reportPath = path.join(
   repoRoot,
-  "docs/diagram-layout-reference/compiler-evidence-report.json"
+  "apps/web/test-fixtures/architecture-board-layout/compiler-evidence-report.json"
 );
 const reviewManifestPath = path.join(
   repoRoot,
-  "docs/diagram-layout-reference/compiler-evidence-review.json"
+  "apps/web/test-fixtures/architecture-board-layout/compiler-evidence-review.json"
 );
 const report = JSON.parse(readFileSync(reportPath, "utf8")) as ArchitectureBoardCompilerEvidenceReport;
 const manifest = createArchitectureBoardCompilerEvidenceReviewManifest(report);

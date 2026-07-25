@@ -312,7 +312,7 @@ export function createPostgresGitCicdMonitoringRepository(
         })
         .returning();
       if (!config) {
-        throw new Error("Failed to persist Git/CI/CD monitoring config");
+        throw new Error("Failed to persist CI/CD monitoring config");
       }
       return config;
     }

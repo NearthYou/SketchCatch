@@ -16,7 +16,7 @@ test("global settings owns GitHub App installation without project repository be
   );
 
   assert.match(source, /GitHub App 연결/);
-  assert.match(source, /로그인 방식과 관계없이/);
+  assert.match(source, /프로젝트에서 사용할 GitHub 조직과 저장소 접근 권한을 관리합니다/);
   assert.match(source, /useGitHubInstallationsQuery/);
   assert.match(connectionQueriesSource, /export function useGitHubInstallationsQuery/);
   assert.match(connectionQueriesSource, /queryFn:\s*listGitHubAccountInstallations/);
@@ -29,11 +29,11 @@ test("global settings owns GitHub App installation without project repository be
   );
 });
 
-test("GitHub account settings renders before AWS account and CodeBuild authorization", () => {
+test("GitHub account settings renders before AWS connection and GitHub deployment connection", () => {
   const source = readWorkspaceFile("app/dashboard/settings/settings-dashboard-client.tsx");
   const githubSettingsIndex = source.indexOf('title="GitHub App 연결"');
-  const awsConnectionIndex = source.indexOf('title="AWS 계정 연결"');
-  const codeBuildAuthorizationIndex = source.indexOf('title="AWS CodeBuild용 GitHub 권한"');
+  const awsConnectionIndex = source.indexOf('title="AWS 연결"');
+  const codeBuildAuthorizationIndex = source.indexOf('title="GitHub 배포 연결"');
 
   assert.ok(githubSettingsIndex >= 0);
   assert.ok(awsConnectionIndex > githubSettingsIndex);

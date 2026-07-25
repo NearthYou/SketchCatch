@@ -235,12 +235,12 @@ const EXPECTED_ROUTING = {
 } as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, EdgeRoutingExpectation>>>;
 
 const EXPECTED_SEMANTIC_HASHES = {
-  "static-web-hosting": "eb1887762d91b666e43c572b51b1afbb399021be65a450051b7a273b7cd22cc9",
-  "minimal-serverless-api": "569e77bce78e3f930273b4298f6c530763e27cedb37f0d29993f7fd776581375",
-  "full-serverless-web-app": "ccafb8e57b7699e867144e242f0f5fc421f7e77589abc69f32d45e8b8a8b6f84",
-  "three-tier-web-app": "c3f42dd6ac1f582d57c46919c2ac01a9439b7f6f6817213dcc9872f26f4ee4ec",
-  "ecs-fargate-container-app": "12db09f2312939fcc09c0a65beb00e7ee62c978b54c9ace8bdd6a4fb9f908fce",
-  "eks-container-app": "2c579e9e5d4f8f227c40c84d9ebb725e31aa7ce49c09f4f5f8b9171b35cd69d3"
+  "static-web-hosting": "4e85bf89001a4d19444f232dca3127751cc0fd1a592a6fad82cbd30d27500987",
+  "minimal-serverless-api": "a5626d6cb29ea6cd50d66fb1b0955e079b5218178f686cb07c04ba2cbd801cf7",
+  "full-serverless-web-app": "cd37d8e9a1d43cd37b518d943f7e1cbac9807d81bc524029e0b45668787b6d67",
+  "three-tier-web-app": "52ff655776bd42cd77d1227dfde7a28475e458c530f6d90f8be5b89e1fd5f27d",
+  "ecs-fargate-container-app": "d71315484fc0d86b5ecec6bc7dd7f790a46d5b6f3d0202c62c954a7acf63d9cd",
+  "eks-container-app": "660d3cb3429ec63f39c6fe5287cbf87e5c8d300f250011c292ba02b19fb24321"
 } as const satisfies Record<RepositoryTemplateId, string>;
 
 test("six deployable templates keep their semantic graph while adopting the PNG layout contract", () => {
@@ -366,8 +366,14 @@ test("ECS Fargate support groups contain their grid-laid resources without overl
   });
   const nodeByLabel = new Map(diagram.nodes.map((node) => [node.label, node]));
   const pairs = [
-    ["Definition / Ops", ["ECR Repository", "ECS Task Definition", "Fargate Log Group"]],
-    ["Global IAM", ["ECS Execution Role", "ECS Execution Policy", "ECS Task Role"]]
+    [
+      "Definition / Ops",
+      ["ECR Repository", "ECS Task Definition", "ECS Task Log Group"]
+    ],
+    [
+      "Global IAM",
+      ["ECS Task Execution IAM Role", "ECS Task Execution Policy Attachment", "ECS Task IAM Role"]
+    ]
   ] as const;
 
   for (const [parentLabel, childLabels] of pairs) {

@@ -5,14 +5,14 @@ export type SettingsAwsConnectionAction = {
   readonly label: string;
 };
 
-// 실패한 연결은 저장된 Role을 다시 검증해 verified 상태로 되돌리고, Role이 없을 때만 설정을 이어갑니다.
+// gg: 연결 상태에 따라 사용자가 다음에 해야 할 AWS 연결 행동 하나만 고릅니다.
 export function getSettingsAwsConnectionAction(
   connection: AwsConnection
 ): SettingsAwsConnectionAction {
   if (connection.status === "verified") {
     return {
       kind: "test",
-      label: "연결 테스트"
+      label: "AWS 연결 확인"
     };
   }
 

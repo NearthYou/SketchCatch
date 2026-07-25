@@ -207,7 +207,7 @@ test("createProjectDeletePreview treats destroyed deployments as deployment hist
   assert.deepEqual(preview.availableActions, ["delete_project"]);
 });
 
-test("deleteProjectRecords removes Git/CI/CD handoffs before deleting referenced assets and architectures", async () => {
+test("deleteProjectRecords removes CI/CD handoffs before deleting referenced assets and architectures", async () => {
   const fakeDb = new FakeProjectDeletionDb({
     deployments: [
       {
@@ -340,7 +340,7 @@ test("deleteProjectRecords completes database deletion when artifact prefix clea
   assert.equal(fakeDb.operations.includes("delete:projects"), true);
   assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), false);
 });
-test("deleteProjectRecords cleans the project CodeBuild environment before deleting database records", async () => {
+test("strict project deletion cleans the project CodeBuild environment before deleting database records", async () => {
   const fakeDb = new FakeProjectDeletionDb({
     awsConnections: [
       {
@@ -362,7 +362,7 @@ test("deleteProjectRecords cleans the project CodeBuild environment before delet
   });
 
   await deleteProjectRecords({
-    action: "delete_project",
+    action: "delete_project_with_managed_cleanup",
     db: fakeDb.db,
     deletionGuard: fakeDb.deletionGuard,
     projectId,
@@ -383,6 +383,47 @@ test("deleteProjectRecords cleans the project CodeBuild environment before delet
       fakeDb.operations.indexOf("cleanup:managed-build-environment") <
         fakeDb.operations.indexOf("delete:projects")
   );
+});
+
+test("strict project deletion keeps records when managed AWS cleanup fails", async () => {
+  const fakeDb = new FakeProjectDeletionDb({
+    awsConnections: [
+      {
+        id: "connection-1",
+        userId,
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+        externalId: "external-id",
+        region: "ap-northeast-2"
+      }
+    ],
+    projectBuildEnvironments: [
+      {
+        projectId,
+        awsConnectionId: "connection-1",
+        codeBuildProjectName: "sketchcatch-project-build",
+        codeBuildServiceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
+      }
+    ]
+  });
+
+  await assert.rejects(
+    () =>
+      deleteProjectRecords({
+        action: "delete_project_with_managed_cleanup",
+        db: fakeDb.db,
+        deletionGuard: fakeDb.deletionGuard,
+        projectId,
+        storage: { async deleteObject() {} },
+        userId,
+        async cleanupManagedResources() {
+          throw new Error("AccessDenied");
+        }
+      }),
+    /AWS 도구/u
+  );
+
+  assert.equal(fakeDb.operations.includes("delete:projects"), false);
+  assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), true);
 });
 
 test("deleteProjectRecords deletes project records when managed AWS cleanup fails", async () => {

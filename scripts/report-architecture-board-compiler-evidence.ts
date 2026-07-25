@@ -16,11 +16,11 @@ const mode = parseMode(process.argv.slice(2));
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const reportPath = path.join(
   repoRoot,
-  "docs/diagram-layout-reference/compiler-evidence-report.json"
+  "apps/web/test-fixtures/architecture-board-layout/compiler-evidence-report.json"
 );
 const baselinePath = path.join(
   repoRoot,
-  "docs/diagram-layout-reference/compiler-evidence-baseline.json"
+  "apps/web/test-fixtures/architecture-board-layout/compiler-evidence-baseline.json"
 );
 const baseline = parseArchitectureBoardCompilerEvidenceBaseline(
   JSON.parse(readFileSync(baselinePath, "utf8")) as unknown

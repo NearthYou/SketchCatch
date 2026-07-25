@@ -18,10 +18,11 @@ type RepositoryAccessVerificationResult = {
 export type DeploymentPlanBuildEnvironmentOptions = {
   prepareProjectBuildEnvironment?: (input: {
     architectureId: string;
+    awsConnectionId?: string;
     db: DatabaseClient["db"];
     projectId: string;
     userId: string;
-  }) => Promise<void>;
+  }) => Promise<void | RepositoryAccessVerificationResult>;
   verifyProjectRepositoryAccess?: (input: {
     db: DatabaseClient["db"];
     projectId: string;
@@ -48,26 +49,36 @@ export async function prepareEcsBuildEnvironmentForPlan(
     options.prepareProjectBuildEnvironment ??
     (async (preparation: {
       architectureId: string;
+      awsConnectionId?: string;
       db: DatabaseClient["db"];
       projectId: string;
       userId: string;
-    }) => {
-      await prepareProjectBuildEnvironmentService(
+    }) =>
+      prepareProjectBuildEnvironmentService(
         {
           architectureId: preparation.architectureId,
+          ...(preparation.awsConnectionId
+            ? { awsConnectionId: preparation.awsConnectionId }
+            : {}),
           projectId: preparation.projectId,
           userId: preparation.userId
         },
         createPostgresProjectBuildEnvironmentRepository(preparation.db),
         createAwsProjectBuildEnvironmentGateway()
-      );
-    });
-  await prepareProjectBuildEnvironment({
+      ));
+  const preparation = await prepareProjectBuildEnvironment({
     architectureId: input.deployment.architectureId,
+    ...(input.deployment.awsConnectionId
+      ? { awsConnectionId: input.deployment.awsConnectionId }
+      : {}),
     db: input.db,
     projectId: input.deployment.projectId,
     userId: input.userId
   });
+
+  if (preparation?.buildEnvironment?.repositoryVerificationStatus === "verified") {
+    return;
+  }
 
   const verifyProjectRepositoryAccess =
     options.verifyProjectRepositoryAccess ??

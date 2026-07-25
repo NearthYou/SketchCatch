@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DiagramJson, DiagramNode, LiveObservationV2Snapshot } from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 
-import { createLiveObservationDiagramModel } from "./live-observation-diagram.js";
 import { presentLiveObservationDiagramResourceLabels } from "./live-observation-resource-presentation.js";
 
 type LiveObservationRole = NonNullable<DiagramNode["metadata"]>["liveObservationRole"];
@@ -25,18 +24,13 @@ test("internal Terraform labels become stable Korean role names before UI render
     viewport: { x: 0, y: 0, zoom: 1 }
   };
 
-  const model = createLiveObservationDiagramModel(diagram, snapshot());
-
-  assert.equal(model.status, "ready");
-  if (model.status !== "ready") return;
-  assert.deepEqual(
-    model.stages.map((stage) => stage.node.label),
-    ["웹 배포", "로드 밸런서", "앱 트래픽 대상", "앱 서버"]
+  const labels = presentLiveObservationDiagramResourceLabels(diagram).nodes.map(
+    (resource) => resource.label
   );
-  assert.equal(model.capacityUnits[0]?.node.label, "실행 서버");
+
+  assert.deepEqual(labels, ["웹 배포", "로드 밸런서", "앱 트래픽 대상", "앱 서버", "실행 서버"]);
   assert.equal(
-    [...model.stages.map((stage) => stage.node.label), ...model.capacityUnits.map((unit) => unit.node.label)]
-      .some((label) => label.includes("fixed_template") || label.includes("_")),
+    labels.some((label) => label.includes("fixed_template") || label.includes("_")),
     false
   );
 });
@@ -93,35 +87,5 @@ function edge(sourceNodeId: string, targetNodeId: string) {
     id: `${sourceNodeId}-${targetNodeId}`,
     sourceNodeId,
     targetNodeId
-  };
-}
-
-function snapshot(): LiveObservationV2Snapshot {
-  const observedAt = "2026-07-21T01:02:00.000Z";
-  return {
-    latestObservation: {
-      observedAt,
-      payload: {
-        availability: 100,
-        capacity: { desired: 1, healthy: 1, max: 2, running: 1 },
-        errorRate: 0,
-        logs: [],
-        observedAt,
-        p95LatencyMs: 100,
-        requests: 2,
-        state: "available"
-      }
-    },
-    live: {
-      acceptedEventCount: 2,
-      observedAt,
-      pressureLevel: "normal",
-      pressurePercent: 10,
-      projectedRequestsPerMinute: 2,
-      rollingRequestsPerSecond: 0.1
-    },
-    observationId: "observation-1",
-    status: "active",
-    terminalAt: null
   };
 }

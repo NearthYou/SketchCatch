@@ -22,8 +22,8 @@ export function LiveObservationSignalCards({
     >
       <div className={styles.sectionHeader}>
         <div>
-          <p className={styles.eyebrow}>지금 확인할 내용</p>
-          <h2 id="live-observation-signals-heading">중요 신호</h2>
+          <h2 id="live-observation-signals-heading">관측 기록</h2>
+          <p className={styles.sectionDescription}>이 세션에서 확인한 문제를 계속 표시합니다.</p>
         </div>
         <span className={styles.signalCount}>{signals.length}개</span>
       </div>
@@ -41,27 +41,21 @@ export function LiveObservationSignalCards({
               type="button"
             >
               <span className={styles.signalCardTopline}>
-                <span className={styles.signalStatus}>
+                <span aria-hidden="true" className={styles.signalStatus}>
                   {signal.status === "critical" ? (
-                    <CircleAlert aria-hidden="true" size={15} />
+                    <CircleAlert size={15} />
                   ) : (
-                    <AlertTriangle aria-hidden="true" size={15} />
+                    <AlertTriangle size={15} />
                   )}
-                  {getSignalStatusLabel(signal.status)}
                 </span>
                 {signal.currentValue ? <strong>{signal.currentValue}</strong> : null}
               </span>
               <span className={styles.signalTitle}>{signal.title}</span>
-              <span className={styles.signalImportance}>{signal.importance}</span>
+              <span className={styles.signalImportance}>{signal.userImpact}</span>
             </button>
           );
         })}
       </div>
     </section>
   );
-}
-
-/** Uses text beside an icon so warning and problem cards remain distinguishable without color. */
-function getSignalStatusLabel(status: LiveObservationSignal["status"]): string {
-  return status === "critical" ? "문제 발생" : "주의";
 }

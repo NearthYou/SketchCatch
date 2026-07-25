@@ -14,8 +14,10 @@ import {
 
 const REFRESH_TOKEN_COOKIE_NAME = "sketchcatch_refresh_token";
 const CSRF_TOKEN_COOKIE_NAME = "sketchcatch_csrf_token";
+const PROFILE_UPDATE_TOKEN_COOKIE_NAME = "sketchcatch_profile_update_token";
 const CSRF_TOKEN_HEADER_NAME = "x-csrf-token";
 const REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
+const PROFILE_UPDATE_TOKEN_COOKIE_PATH = "/api/auth/me";
 const CSRF_TOKEN_COOKIE_PATH = "/";
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
 const SESSION_REFRESH_TOKEN_PREFIX = "session.";
@@ -69,6 +71,25 @@ export function toPublicUser(user: PublicUserRow): User {
 
 export function getRefreshTokenCookie(request: FastifyRequest): string | null {
   return getCookie(request, REFRESH_TOKEN_COOKIE_NAME);
+}
+
+export function getProfileUpdateTokenCookie(request: FastifyRequest): string | null {
+  return getCookie(request, PROFILE_UPDATE_TOKEN_COOKIE_NAME);
+}
+
+export function setProfileUpdateTokenCookie(
+  reply: FastifyReply,
+  token: string,
+  maxAge: number
+): void {
+  reply.header(
+    "set-cookie",
+    serializeAuthCookie(PROFILE_UPDATE_TOKEN_COOKIE_NAME, encodeURIComponent(token), {
+      httpOnly: true,
+      maxAge,
+      path: PROFILE_UPDATE_TOKEN_COOKIE_PATH
+    })
+  );
 }
 
 export function hasValidCsrfToken(request: FastifyRequest): boolean {

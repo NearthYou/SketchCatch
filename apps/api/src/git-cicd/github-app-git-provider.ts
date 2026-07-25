@@ -146,7 +146,7 @@ async function downloadTerraformArtifactText(
   }
 
   if (!file.artifactObjectKey) {
-    throw new Error(`Git/CI/CD handoff file ${file.path} has no content source`);
+    throw new Error(`CI/CD handoff file ${file.path} has no content source`);
   }
 
   const content =

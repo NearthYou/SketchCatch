@@ -5,7 +5,8 @@ import type {
   TerraformOutput
 } from "@sketchcatch/types";
 
-const MAX_VISIBLE_REQUEST_PARTICLES = 5;
+const MAX_VISIBLE_REQUEST_PARTICLES = 24;
+export const MAX_ANIMATED_REQUEST_PARTICLES = 4;
 
 export type LiveObservationDeploymentCandidate = {
   readonly id: string;
@@ -36,6 +37,34 @@ export type LiveObservationRequestBurst = {
   readonly overflowCount: number;
   readonly visibleParticleCount: number;
 };
+
+export function getLiveObservationAnimatedParticleCount(requestCount: number): number {
+  return Math.min(MAX_ANIMATED_REQUEST_PARTICLES, Math.max(0, Math.floor(requestCount)));
+}
+
+export function hasLiveObservationActiveTraffic(
+  snapshot: LiveObservationV2Snapshot | null
+): boolean {
+  return snapshot?.status === "active" && snapshot.live.rollingRequestsPerSecond > 0;
+}
+
+export function appendLiveObservationParticleIds(
+  currentIds: readonly number[],
+  incomingRequestCount: number,
+  visibleParticleCount: number,
+  nextId: () => number
+): readonly number[] {
+  const particleLimit = Math.max(0, visibleParticleCount);
+  if (particleLimit === 0) return [];
+
+  const incomingVisibleCount = Math.min(Math.max(0, incomingRequestCount), particleLimit);
+  if (currentIds.length === particleLimit) return currentIds;
+  if (currentIds.length > particleLimit) return currentIds.slice(-particleLimit);
+
+  const incomingIds = Array.from({ length: incomingVisibleCount }, nextId);
+
+  return [...currentIds, ...incomingIds].slice(-particleLimit);
+}
 
 export type LiveObservationTrafficCursor = {
   readonly acceptedEventCount: number;
@@ -190,6 +219,37 @@ export function getLiveObservationRequestBurst(
     overflowCount: Math.max(0, delta - MAX_VISIBLE_REQUEST_PARTICLES),
     visibleParticleCount: Math.min(delta, MAX_VISIBLE_REQUEST_PARTICLES)
   };
+}
+
+export function mergeLiveObservationRequestBursts(
+  current: LiveObservationRequestBurst | null,
+  next: LiveObservationRequestBurst
+): LiveObservationRequestBurst {
+  const totalRequestCount =
+    (current?.visibleParticleCount ?? 0) +
+    (current?.overflowCount ?? 0) +
+    next.visibleParticleCount +
+    next.overflowCount;
+
+  return {
+    overflowCount: Math.max(0, totalRequestCount - MAX_VISIBLE_REQUEST_PARTICLES),
+    visibleParticleCount: Math.min(totalRequestCount, MAX_VISIBLE_REQUEST_PARTICLES)
+  };
+}
+
+export function getLiveObservationTrafficIntensity(
+  burstRequestCount: number,
+  pressureLevel: LiveObservationV2Snapshot["live"]["pressureLevel"]
+): "idle" | "flow" | "busy" | "surge" {
+  if (pressureLevel === "critical" || burstRequestCount >= 100) {
+    return "surge";
+  }
+
+  if (pressureLevel === "warning" || pressureLevel === "high" || burstRequestCount >= 20) {
+    return "busy";
+  }
+
+  return burstRequestCount > 0 ? "flow" : "idle";
 }
 
 export function getLiveObservationTrafficCursor(

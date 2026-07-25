@@ -1260,7 +1260,9 @@ function normalizeGeneratedParameterValue(
       : blocks;
   }
 
-  return normalizeGeneratedNestedBlock(value, definition.children);
+  const block = Array.isArray(value) && value.length === 1 ? value[0] : value;
+
+  return normalizeGeneratedNestedBlock(block, definition.children);
 }
 
 function normalizeGeneratedNestedBlock(
@@ -2973,13 +2975,15 @@ function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): Dia
       continue;
     }
 
-    resourceNameByNodeId.set(
-      node.id,
-      createConventionResourceName(parameters.resourceType, parameters.resourceName, [
-        node.label,
-        node.id
-      ])
-    );
+    const templateResourceId = parameters.values["templateResourceId"];
+    const resourceName =
+      typeof templateResourceId === "string" && templateResourceId.trim().length > 0
+        ? toTerraformName(templateResourceId)
+        : createConventionResourceName(parameters.resourceType, parameters.resourceName, [
+            node.label,
+            node.id
+          ]);
+    resourceNameByNodeId.set(node.id, resourceName);
   }
 
   const referenceRewrites = createTerraformReferenceRewrites(nodes, resourceNameByNodeId);

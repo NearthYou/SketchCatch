@@ -39,7 +39,7 @@ test("GitHub Actions handoff does not imply an AWS-native CI/CD pipeline", () =>
 
 test("createArchitectureDraft completes an explicitly requested Subnet with its required VPC parameters", () => {
   const result = createArchitectureDraft({
-    prompt: "Create a Practice Architecture that explicitly includes one AWS Subnet."
+    prompt: "Create an infrastructure design that explicitly includes one AWS Subnet."
   });
   const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
   const subnet = result.architectureJson.nodes.find((node) => node.type === "SUBNET");
@@ -54,7 +54,7 @@ test("createArchitectureDraft completes an explicitly requested Subnet with its 
 
 test("createArchitectureDraft fills required parameters for an explicitly requested Security Group rule", () => {
   const result = createArchitectureDraft({
-    prompt: "Create a Practice Architecture with an AWS Security Group and Security Group rule."
+    prompt: "Create an infrastructure design with an AWS Security Group and Security Group rule."
   });
   const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
   const securityGroup = result.architectureJson.nodes.find(
@@ -76,7 +76,7 @@ test("createArchitectureDraft fills required parameters for an explicitly reques
 
 test("createArchitectureDraft completes an explicitly requested Internet Gateway with its VPC reference", () => {
   const result = createArchitectureDraft({
-    prompt: "Create a Practice Architecture that explicitly includes one AWS Internet Gateway."
+    prompt: "Create an infrastructure design that explicitly includes one AWS Internet Gateway."
   });
   const vpc = result.architectureJson.nodes.find((node) => node.type === "VPC");
   const internetGateway = result.architectureJson.nodes.find(
@@ -89,7 +89,7 @@ test("createArchitectureDraft completes an explicitly requested Internet Gateway
 
 test("createArchitectureDraft adds the Elastic IP referenced by an explicit NAT Gateway", () => {
   const result = createArchitectureDraft({
-    prompt: "Create a Practice Architecture that explicitly includes one AWS NAT Gateway."
+    prompt: "Create an infrastructure design that explicitly includes one AWS NAT Gateway."
   });
   const elasticIp = result.architectureJson.nodes.find(
     (node) => node.config.terraformResourceType === "aws_eip"
@@ -105,7 +105,7 @@ test("createArchitectureDraft adds the Elastic IP referenced by an explicit NAT 
 
 test("createArchitectureDraft preserves an explicitly requested Elastic IP for a NAT Gateway", () => {
   const result = createArchitectureDraft({
-    prompt: "Create a Practice Architecture that explicitly includes one AWS NAT Gateway and one Elastic IP."
+    prompt: "Create an infrastructure design that explicitly includes one AWS NAT Gateway and one Elastic IP."
   });
   const elasticIps = result.architectureJson.nodes.filter(
     (node) => node.config.terraformResourceType === "aws_eip"
@@ -117,7 +117,7 @@ test("createArchitectureDraft preserves an explicitly requested Elastic IP for a
 
 test("createArchitectureDraft keeps the required SSM Parameter data-source name", () => {
   const result = createArchitectureDraft({
-    prompt: "Create a Practice Architecture that explicitly includes an AWS SSM Parameter data source."
+    prompt: "Create an infrastructure design that explicitly includes an AWS SSM Parameter data source."
   });
   const parameter = result.architectureJson.nodes.find(
     (node) => node.config.terraformResourceType === "aws_ssm_parameter"
@@ -130,7 +130,7 @@ test("createArchitectureDraft keeps the required SSM Parameter data-source name"
 test("createArchitectureDraft changes Subnet parameters when the selected region changes", () => {
   const getAvailabilityZone = (region: string): unknown =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with one AWS Subnet in ${region}.`
+      prompt: `Create an infrastructure design with one AWS Subnet in ${region}.`
     }).architectureJson.nodes.find((node) => node.type === "SUBNET")?.config.availabilityZone;
 
   const seoulAvailabilityZone = getAvailabilityZone("Seoul ap-northeast-2");
@@ -145,7 +145,7 @@ test("createArchitectureDraft changes compute and database sizing when the selec
   const createSizedDraft = (traffic: string) =>
     createArchitectureDraft({
       prompt: [
-        "Create a Practice Architecture with AWS EC2 and RDS.",
+        "Create an infrastructure design with AWS EC2 and RDS.",
         `Expected traffic: ${traffic}.`,
         "Monthly budget: 50-200 manwon (high performance)."
       ].join("\n")
@@ -171,7 +171,7 @@ test("createArchitectureDraft changes cost-sensitive parameters when the selecte
   const createBudgetDraft = (budget: string) =>
     createArchitectureDraft({
       prompt: [
-        "Create a Practice Architecture with AWS EC2 and CloudFront.",
+        "Create an infrastructure design with AWS EC2 and CloudFront.",
         "Expected traffic: small traffic.",
         `Monthly budget: ${budget}.`
       ].join("\n")
@@ -252,7 +252,7 @@ test("createAmazonQArchitectureDraftResponse overrides invariant provider sizing
 test("createArchitectureDraft changes RDS parameters when the selected database size changes", () => {
   const createDatabaseDraft = (database: string) =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with AWS RDS. Database size: ${database}.`
+      prompt: `Create an infrastructure design with AWS RDS. Database size: ${database}.`
     });
   const smallRds = createDatabaseDraft("simple data under 10GB").architectureJson.nodes.find((node) => node.type === "RDS");
   const largeRds = createDatabaseDraft("large database over 100GB with complex queries").architectureJson.nodes.find(
@@ -268,7 +268,7 @@ test("createArchitectureDraft changes RDS parameters when the selected database 
 test("createArchitectureDraft changes resilience parameters when the selected availability changes", () => {
   const createAvailabilityDraft = (availability: string) =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with AWS RDS. Availability target: ${availability}.`
+      prompt: `Create an infrastructure design with AWS RDS. Availability target: ${availability}.`
     });
   const standardRds = createAvailabilityDraft("99%").architectureJson.nodes.find((node) => node.type === "RDS");
   const highlyAvailableRds = createAvailabilityDraft("99.99%").architectureJson.nodes.find((node) => node.type === "RDS");
@@ -282,7 +282,7 @@ test("createArchitectureDraft changes resilience parameters when the selected av
 test("createArchitectureDraft changes maintenance parameters when the selected management mode changes", () => {
   const createManagementDraft = (management: string) =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with AWS RDS. Management mode: ${management}.`
+      prompt: `Create an infrastructure design with AWS RDS. Management mode: ${management}.`
     });
   const selfManagedRds = createManagementDraft("self-managed / direct management").architectureJson.nodes.find(
     (node) => node.type === "RDS"
@@ -298,7 +298,7 @@ test("createArchitectureDraft changes maintenance parameters when the selected m
 test("createArchitectureDraft changes S3 parameters when the selected upload type changes", () => {
   const createUploadDraft = (upload: string) =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with AWS S3. File upload type: ${upload}.`
+      prompt: `Create an infrastructure design with AWS S3. File upload type: ${upload}.`
     });
   const imageBucket = createUploadDraft("profile image upload").architectureJson.nodes.find((node) => node.type === "S3");
   const largeFileBucket = createUploadDraft("large file upload over 100MB").architectureJson.nodes.find(
@@ -312,7 +312,7 @@ test("createArchitectureDraft changes S3 parameters when the selected upload typ
 test("createArchitectureDraft changes Lambda parameters when the selected realtime mode changes", () => {
   const createRealtimeDraft = (realtime: string) =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with AWS Lambda. Realtime requirement: ${realtime}.`
+      prompt: `Create an infrastructure design with AWS Lambda. Realtime requirement: ${realtime}.`
     });
   const notificationLambda = createRealtimeDraft("realtime notification").architectureJson.nodes.find(
     (node) => node.type === "LAMBDA"
@@ -330,7 +330,7 @@ test("createArchitectureDraft changes Lambda parameters when the selected realti
 test("createArchitectureDraft changes public access protection when the selected security priority changes", () => {
   const createSecurityDraft = (security: string) =>
     createArchitectureDraft({
-      prompt: `Create a Practice Architecture with an AWS Security Group. Security requirement: ${security}.`
+      prompt: `Create an infrastructure design with an AWS Security Group. Security requirement: ${security}.`
     });
   const basicSecurityGroup = createSecurityDraft("basic public content only").architectureJson.nodes.find(
     (node) => node.type === "SECURITY_GROUP"
@@ -419,12 +419,12 @@ test("fixed Template keeps CI/CD resource parameters aligned with merged Terrafo
   const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
   const response = await createAmazonQArchitectureDraftResponse({
     prompt: [
-      "Generate a production-quality Practice Architecture for a source repository.",
+      "Generate a production-quality infrastructure design for a source repository.",
       "The selected Template is the highest-priority constraint.",
       "Selected Template: ecs-fargate-container-app.",
       "Required Components: preserve the selected ECS Fargate Template and add only compatible supporting resources.",
       "Include a managed relational database such as RDS.",
-      "Include a Git/CI/CD handoff with CodeStar Connection, CodePipeline, CodeBuild, and an S3 artifact bucket.",
+      "Include a CI/CD handoff with CodeStar Connection, CodePipeline, CodeBuild, and an S3 artifact bucket.",
       "Include the API backend scope and omit a public web frontend.",
       "File upload: not required. Realtime transport: not required."
     ].join("\n"),
@@ -593,8 +593,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("UNKNOWN"), 4);
   assert.equal(countNodes("NAT_GATEWAY"), 1);
   assert.equal(countNodes("ELASTIC_IP"), 1);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 1);
-  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 1);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
   assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
   assert.equal(countNodes("CODEPIPELINE"), 0);
   assert.equal(countNodes("CODEBUILD_PROJECT"), 0);
@@ -718,8 +718,14 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
   assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
   assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
-  assert.ok(edgeLabels.has("scales"));
-  assert.ok(edgeLabels.has("tracks requests"));
+  assert.equal(edgeLabels.has("scales"), false);
+  assert.equal(edgeLabels.has("tracks requests"), false);
+  const nodeIds = new Set(response.architectureJson.nodes.map((node) => node.id));
+  assert.ok(
+    response.architectureJson.edges.every(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  );
   assert.equal(
     response.architectureJson.edges.filter(
       (edge) =>
@@ -788,12 +794,23 @@ test("strict repository evidence maps a generated signing secret and 1-to-3 scal
   }>;
 
   assert.equal(service?.config.desiredCount, 1);
-  assert.equal(scalingTarget?.config.minCapacity, 1);
-  assert.equal(scalingTarget?.config.maxCapacity, 3);
+  assert.equal(scalingTarget, undefined);
+  assert.equal(
+    scalingPolicy?.config.resourceId,
+    "aws_appautoscaling_target.ecs_service_requests.resource_id"
+  );
+  assert.equal(
+    scalingPolicy?.config.scalableDimension,
+    "aws_appautoscaling_target.ecs_service_requests.scalable_dimension"
+  );
+  assert.equal(
+    scalingPolicy?.config.serviceNamespace,
+    "aws_appautoscaling_target.ecs_service_requests.service_namespace"
+  );
   assert.equal(
     (scalingPolicy?.config.targetTrackingScalingPolicyConfiguration as { targetValue?: number })
       .targetValue,
-    10
+    5
   );
   assert.ok(nodeByTerraformType("random_password"));
   assert.ok(nodeByTerraformType("aws_secretsmanager_secret"));
@@ -904,7 +921,7 @@ test("selected Repository Template and follow-up answers reach Amazon Q without 
   const response = await createAmazonQArchitectureDraftResponse(
     {
       prompt: [
-        "Generate a production-quality Practice Architecture for a source repository.",
+        "Generate a production-quality infrastructure design for a source repository.",
         "The selected Template is the highest-priority constraint.",
         "Selected Template: ecs-fargate-container-app.",
         "Required Components: preserve the selected ECS Fargate Template and add only compatible supporting resources.",
@@ -4809,7 +4826,7 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
 
     return JSON.stringify({
       status: "preview",
-      title: "Dynamic Global Website Practice Architecture",
+      title: "Dynamic Global Website infrastructure design",
       architectureJson: {
         nodes: [
           {
@@ -5026,7 +5043,7 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
   assert.match(requestedPrompts[1] ?? "", /image upload/);
   assert.match(requestedPrompts[1] ?? "", /real-time notification/);
   assert.match(requestedPrompts[1] ?? "", /cost warning/);
-  assert.equal(response.title, "Dynamic Global Website Practice Architecture");
+  assert.equal(response.title, "Dynamic Global Website infrastructure design");
 });
 
 test("createAmazonQArchitectureDraftResponse respects gated choices for korea-only no-upload no-realtime answers", async () => {
@@ -5036,7 +5053,7 @@ test("createAmazonQArchitectureDraftResponse respects gated choices for korea-on
 
     return JSON.stringify({
       status: "preview",
-      title: "Korea Simple API Practice Architecture",
+      title: "Korea Simple API infrastructure design",
       architectureJson: {
         nodes: [
           {
@@ -5180,7 +5197,7 @@ test("createAmazonQArchitectureDraftResponse respects gated choices for korea-on
   assert.match(requestedPrompts[0] ?? "", /File upload not required/);
   assert.match(requestedPrompts[0] ?? "", /Realtime not required/);
   assert.match(requestedPrompts[0] ?? "", /Region scope is Korea only/);
-  assert.equal(response.title, "Korea Simple API Practice Architecture");
+  assert.equal(response.title, "Korea Simple API infrastructure design");
 });
 
 test("createAmazonQArchitectureDraftResponse regenerates previews that violate no-upload and no-realtime choices", async () => {

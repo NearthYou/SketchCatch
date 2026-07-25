@@ -11,12 +11,12 @@ export type TemplateThumbnailAsset = {
 const TEMPLATE_THUMBNAIL_VERSION = `v${BOARD_THUMBNAIL_CAPTURE_CONTRACT.version}`;
 
 const TEMPLATE_DIAGRAM_HASHES: Record<TemplateId, string> = {
-  "ecs-fargate-container-app": "be434089f0bc1eed48019b7d920c15195cdcad2a69e1a151c82c6464abc4a2fc",
-  "eks-container-app": "1c22d2b239590a79735f7069abb70c6cdaf51bdfb95eb05cbe12736058713812",
-  "full-serverless-web-app": "6c1984128c9552c9a211653614df31829bc0bcecfb5223daea6148f858e9a80d",
-  "minimal-serverless-api": "b1f8986e65b14f5bbba9dd5eaf41541c7163ddc2a7fde4c4981593731b9bfafa",
-  "static-web-hosting": "aa58cb0f15d92fb54c7da132a9492886aa06add1dda75f4370bb679e9182b9cf",
-  "three-tier-web-app": "84371049077bf2836fd3ce4cefa42cee3b5fb36b683815bc354b854185ce3248"
+  "ecs-fargate-container-app": "731a069fbfd249cc04dfa6e91585a8e840f86359c7a0a37fa3fe7d7fe46c2a0f",
+  "eks-container-app": "d04690eb466087086f8a7e9baae4088ec19ea30102ebb565027ecafdfbf4be83",
+  "full-serverless-web-app": "3a33bad19bf27db482ffb17fc741a2559032c3471d42e30671bfa54649e0305f",
+  "minimal-serverless-api": "a5bc66889b17d169d90162243de999edbc896bd2e24e61b89e415357a52ddced",
+  "static-web-hosting": "f425261d25bef0be7adda988ac07a000b2daa3088d0d6bf672c938bf09433558",
+  "three-tier-web-app": "c0a5dbe295105c5bc5962ecc2b40c2369dc32c63276d647cd06d66516e1981eb"
 };
 
 // 실제 DiagramEditor에서 캡처해 검토한 asset만 Template 카드에 연결합니다.

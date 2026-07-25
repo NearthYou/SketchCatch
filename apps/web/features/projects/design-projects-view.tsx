@@ -102,14 +102,7 @@ export function DesignProjectsView() {
         ) : null}
 
         {loadState === "ready" && projects.length === 0 ? (
-          <ProjectListStatus
-            action={
-              <Link className="designDashboardPrimaryAction" href="/workspace/new">
-                새 설계 시작
-              </Link>
-            }
-            message="아직 생성한 프로젝트가 없습니다."
-          />
+          <ProjectListStatus message="아직 생성한 프로젝트가 없습니다." />
         ) : null}
 
         {loadState === "ready" && projects.length > 0 && visibleProjects.length === 0 ? (

@@ -34,6 +34,10 @@ const areaResourceParameterDefaults: Readonly<
     values: {
       awsRegion: "ap-northeast-2"
     }
+  },
+  aws_appautoscaling_target: {
+    resourceName: "ecs_service_requests",
+    values: {}
   }
 };
 
@@ -599,7 +603,7 @@ function createDefaultNodeParameters(
     fileName: "main",
     values: {
       ...(areaDefaults?.values ?? {}),
-      ...getDefaultParameterValues(item.id)
+      ...getDefaultParameterValues(item.id, currentNodes)
     }
   };
 }

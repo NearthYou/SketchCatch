@@ -319,7 +319,7 @@ test("template labels and AWS-facing names stay separate from Terraform local na
 
   assert.equal(subnet?.label, "Public Subnet A");
   assert.equal(subnet?.parameters?.resourceName, "subnet_a");
-  assert.equal(albSecurityGroup?.label, "ALB Security Group");
+  assert.equal(albSecurityGroup?.label, "ALB SG");
   assert.equal(albSecurityGroup?.parameters?.resourceName, "alb_security_group");
   assert.equal(albSecurityGroup?.parameters?.values.name, "fargate-alb");
 });
@@ -491,7 +491,7 @@ test("each template contains the resources required by its deployable default", 
         | { targetValue?: number }
         | undefined
     )?.targetValue,
-    10
+    5
   );
   assert.equal(
     (

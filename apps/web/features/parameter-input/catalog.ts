@@ -859,7 +859,10 @@ const terraformValidateRequiredAdditions = {
                 "predefinedMetricType",
                 "predefined_metric_type",
                 "Metric type",
-                ["ECSServiceAverageCPUUtilization"],
+                [
+                  "ECSServiceAverageCPUUtilization",
+                  "ALBRequestCountPerTarget"
+                ],
                 true
               )
             ]

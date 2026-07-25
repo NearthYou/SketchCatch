@@ -27,10 +27,10 @@ export function deriveAwsCodeConnectionConnectedState(
   if (status !== "AVAILABLE") return null;
   return {
     actionHref: "https://github.com/settings/installations",
-    actionLabel: "AWS Connector 권한 관리",
-    description: "Repository 접근은 프로젝트 저장·검증에서 확인합니다",
+    actionLabel: "GitHub App 권한 관리",
+    description: "저장소 접근 권한은 프로젝트 저장 시 검증됩니다.",
     status: "connected",
-    title: "AWS OAuth 연결됨"
+    title: "AWS CodeConnections 연결 활성"
   };
 }
 

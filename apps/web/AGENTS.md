@@ -4,7 +4,7 @@ This folder contains the Next.js frontend application.
 
 ## Product Role
 
-The web app provides the visual workspace for Terraform-first, multi-cloud-ready IaC operations. It may show Requirement Input, Architecture Board, IaC Preview, AI recommendations, safety warnings, Git/CI/CD handoff state, Deployment records, Reverse Engineering results, and learning guidance, but it must not execute infrastructure changes directly.
+The web app provides the visual workspace for Terraform-first, multi-cloud-ready IaC operations. It may show Requirement Input, Architecture Board, IaC Preview, AI recommendations, safety warnings, CI/CD handoff state, Deployment records, Reverse Engineering results, and learning guidance, but it must not execute infrastructure changes directly.
 
 ## Boundaries
 
@@ -24,7 +24,7 @@ The web app provides the visual workspace for Terraform-first, multi-cloud-ready
 2. Move growing behavior into hooks, helpers, or feature modules.
 3. Prefer explicit state names such as `selectedNodeId`, `architectureJson`, and `activeResourceId`.
 4. Keep diagram-to-code synchronization logic isolated from presentational components.
-5. When React Flow is introduced, use it for architecture board behavior instead of hand-rolling graph interactions.
+5. Use `@xyflow/react` for Architecture Board graph behavior; extend the existing graph layer instead of hand-rolling parallel graph interactions.
 6. When Monaco Editor is introduced, use it only for real IaC editing workflows; do not add it for placeholder screens.
 
 ## UX Rules

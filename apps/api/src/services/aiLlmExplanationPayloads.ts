@@ -143,7 +143,7 @@ function createDesignSimulationSummaryPayload(result: DesignSimulationResult): D
   };
 }
 
-// Pre-Deployment Check는 finding, checklist, suggestion 제목만 OpenAI 설명 근거로 넘깁니다.
+// deployment check는 finding, checklist, suggestion 제목만 OpenAI 설명 근거로 넘깁니다.
 function createPreDeploymentCheckSummaryPayload(result: AiPreDeploymentAnalysisResult): PreDeploymentCheckSummaryPayload {
   return {
     target: "pre_deployment_check",

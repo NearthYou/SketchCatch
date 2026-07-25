@@ -9,6 +9,7 @@ import type {
 import {
   type ArchitectureDiagnostic,
   type CheckFinding,
+  type DiagramJson,
   type LiveObservationV2Session,
   type LiveObservationV2Snapshot,
   type TerraformDiagnostic,
@@ -44,7 +45,7 @@ import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
 import {
-  incrementLiveObservationEcsMaxCapacity,
+  incrementLiveObservationEcsScalingSettings,
   type LiveObservationTerraformUpdateResult
 } from "./live-observation-terraform-update";
 import type { LiveObservationSelection } from "./live-observation";
@@ -76,6 +77,7 @@ import {
   WorkspaceTerraformPreparationError,
   type PreparedTerraformArtifactSource
 } from "./workspace-terraform-preparation";
+import { syncTerraformToDiagram } from "./api";
 import { requireSavedProjectDraftRevision } from "./project-deployment-preparation";
 import { DeploymentPreparationError } from "./deployment-preparation-error";
 import {
@@ -84,7 +86,10 @@ import {
   type TerraformLeaveSaveFeedback,
   type TerraformLeaveSaveState
 } from "./terraform-leave-save-state";
-import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
+import {
+  combineTerraformFiles,
+  toDeploymentBaselineFingerprint
+} from "./terraform-panel-utils";
 import {
   markTerraformIssuesStale,
   mergeTerraformValidationDiagnostics,
@@ -106,6 +111,7 @@ import {
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { DeploymentAvailability } from "./deployment-availability";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
+import type { WorkspaceReverseEngineeringEntryResult } from "./workspace-reverse-engineering-entry";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
@@ -122,7 +128,13 @@ export type WorkspaceRightPanelProps = {
   readonly onDeploymentConsoleOpenChange?: ((isOpen: boolean) => void) | undefined;
   readonly onPanelOpenRequest: () => void;
   readonly onLiveObservationTerraformFilesApply?:
-    | ((files: readonly TerraformSyncFileInput[]) => void)
+    | ((input: {
+        readonly diagramJson: DiagramJson;
+        readonly files: readonly TerraformSyncFileInput[];
+      }) => void)
+    | undefined;
+  readonly onReverseEngineeringOpenRequest?:
+    | (() => Promise<WorkspaceReverseEngineeringEntryResult>)
     | undefined;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
@@ -153,7 +165,7 @@ const MIN_TERRAFORM_CODE_PANE_RATIO = 32;
 const MAX_TERRAFORM_CODE_PANE_RATIO = 78;
 const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
 
-// 오른쪽 패널은 작업 중 필요한 모드만 노출하고, Reverse는 새 프로젝트 시작 흐름에서만 진입하게 둡니다.
+// 오른쪽 패널은 리소스 설정, Terraform, 배포와 관측 작업만 전환합니다.
 export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
@@ -550,6 +562,7 @@ export function WorkspaceRightPanel({
     [hasUnsavedTerraformChanges]
   );
 
+  /** Terraform 저장 확인 뒤 사용자가 고른 원래 작업을 한 번만 이어갑니다. */
   const runPendingTerraformLeaveAction = useCallback((): void => {
     const pendingAction = pendingTerraformLeaveActionRef.current;
     pendingTerraformLeaveActionRef.current = null;
@@ -587,6 +600,7 @@ export function WorkspaceRightPanel({
     }
   }, [context, onPanelOpenRequest, onTerraformAiInteraction]);
 
+  /** 오른쪽 작업을 바꿀 때 Terraform의 미저장 변경만 먼저 확인합니다. */
   const requestView = useCallback(
     (nextView: WorkspaceRightPanelView): void => {
       if (nextView === activeView) {
@@ -610,7 +624,12 @@ export function WorkspaceRightPanel({
       setActiveView(nextView);
       onTerraformAiInteraction("draft");
     },
-    [activeView, onPanelOpenRequest, onTerraformAiInteraction, requestTerraformLeave]
+    [
+      activeView,
+      onPanelOpenRequest,
+      onTerraformAiInteraction,
+      requestTerraformLeave
+    ]
   );
 
   const startTerraformSplitResize = useCallback(
@@ -698,6 +717,7 @@ export function WorkspaceRightPanel({
     (selection?: LiveObservationSelection): void => {
       onPanelOpenRequest();
       setLiveObservationSelection(selection ?? null);
+      setIsDeploymentConsoleOpen(false);
       setIsLiveObservationOpen(true);
     },
     [onPanelOpenRequest]
@@ -705,19 +725,46 @@ export function WorkspaceRightPanel({
 
   const applyLiveObservationTerraformUpdate =
     useCallback(async (): Promise<LiveObservationTerraformUpdateResult> => {
-      const result = incrementLiveObservationEcsMaxCapacity(terraformAiCodeContext.files);
+      const originalDiagram = context.diagram;
+      const originalFiles = terraformAiCodeContext.files.map((file) => ({ ...file }));
+      const result = incrementLiveObservationEcsScalingSettings(terraformAiCodeContext.files);
+      const syncResult = await syncTerraformToDiagram({
+        diagramJson: originalDiagram,
+        terraformCode: combineTerraformFiles(
+          result.files.map(({ fileName, terraformCode }) => ({ code: terraformCode, fileName }))
+        ),
+        terraformFiles: [...result.files]
+      });
 
-      if (onLiveObservationTerraformFilesApply) {
-        onLiveObservationTerraformFilesApply(result.files);
-      } else {
-        onTerraformFilesChange?.(result.files);
+      try {
+        context.applyDiagramJson(syncResult.diagramJson);
+
+        if (onLiveObservationTerraformFilesApply) {
+          onLiveObservationTerraformFilesApply({
+            diagramJson: syncResult.diagramJson,
+            files: result.files
+          });
+        } else {
+          onTerraformFilesChange?.(result.files);
+        }
+
+        const saveResult = await context.saveDiagramNow?.();
+        requireSavedProjectDraftRevision(saveResult);
+        setHasUnsavedTerraformChanges(false);
+        setIsDeploymentBaselineDirty(false);
+        return result;
+      } catch (error) {
+        context.applyDiagramJson(originalDiagram);
+        if (onLiveObservationTerraformFilesApply) {
+          onLiveObservationTerraformFilesApply({
+            diagramJson: originalDiagram,
+            files: originalFiles
+          });
+        } else {
+          onTerraformFilesChange?.(originalFiles);
+        }
+        throw error;
       }
-
-      const saveResult = await context.saveDiagramNow?.();
-      requireSavedProjectDraftRevision(saveResult);
-      setHasUnsavedTerraformChanges(false);
-      setIsDeploymentBaselineDirty(false);
-      return result;
     }, [
       context,
       onLiveObservationTerraformFilesApply,
@@ -728,10 +775,26 @@ export function WorkspaceRightPanel({
   const openLiveObservationTerraformEditor = useCallback((): void => {
     setIsLiveObservationOpen(false);
     setLiveObservationSelection(null);
-    context.setRightPanelOpen(true);
-    setActiveView("terraform");
+    setIsDeploymentConsoleOpen(false);
+
+    if (liveObservationAppliedTerraformUpdate) {
+      openTerraformIssueSourceLocation({
+        fileName: liveObservationAppliedTerraformUpdate.fileName,
+        line: liveObservationAppliedTerraformUpdate.line,
+        resourceAddress: liveObservationAppliedTerraformUpdate.address
+      });
+    } else {
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+    }
+
     onTerraformAiInteraction("preview");
-  }, [context, onTerraformAiInteraction]);
+  }, [
+    context,
+    liveObservationAppliedTerraformUpdate,
+    onTerraformAiInteraction,
+    openTerraformIssueSourceLocation
+  ]);
 
   const updateLiveObservationDeployment = useCallback(
     (deploymentId: string): void => {
@@ -864,6 +927,7 @@ export function WorkspaceRightPanel({
     onTerraformAiInteraction("draft");
   }
 
+  /** 오른쪽 패널을 닫기 전에 Terraform의 미저장 변경을 확인합니다. */
   function requestRightPanelClose(): void {
     if (!requestTerraformLeave({ kind: "right-panel-close" })) {
       return;
@@ -1163,6 +1227,7 @@ export function WorkspaceRightPanel({
             externalTerraformFilesReplacement={terraformFilesReplacement}
             externalDiscardRequestId={terraformDiscardRequestId}
             externalSaveRequestId={terraformSaveRequestId}
+            isMutationLocked={context.isMutationLocked}
             isVisible={false}
             onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
             onDiagnosticsChange={handleTerraformDiagnosticsChange}
@@ -1202,7 +1267,9 @@ export function WorkspaceRightPanel({
             <button
               aria-pressed={activeView === "resource"}
               className={
-                activeView === "resource" ? styles.panelModeButtonActive : styles.panelModeButton
+                activeView === "resource"
+                  ? styles.panelModeButtonActive
+                  : styles.panelModeButton
               }
               onClick={() => requestView("resource")}
               title="Resources"
@@ -1213,7 +1280,9 @@ export function WorkspaceRightPanel({
             <button
               aria-pressed={activeView === "terraform"}
               className={
-                activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton
+                activeView === "terraform"
+                  ? styles.panelModeButtonActive
+                  : styles.panelModeButton
               }
               data-terraform-editor-navigation
               onClick={() => requestView("terraform")}
@@ -1265,6 +1334,7 @@ export function WorkspaceRightPanel({
                 externalTerraformFilesReplacement={terraformFilesReplacement}
                 externalDiscardRequestId={terraformDiscardRequestId}
                 externalSaveRequestId={terraformSaveRequestId}
+                isMutationLocked={context.isMutationLocked}
                 isVisible={activeView === "terraform"}
                 onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}
