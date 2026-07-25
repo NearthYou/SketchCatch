@@ -105,6 +105,22 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
     presentationArea: z.boolean().optional(),
     presentationCatalogItemId: z.string().min(1).optional(),
     moduleSource: diagramNodeModuleSourceSchema.optional(),
+    reverseEngineeringInfrastructureFrame: z
+      .object({
+        source: z.literal("aws_scan"),
+        groupBy: z.enum([
+          "project",
+          "service",
+          "environment",
+          "vpc",
+          "relationship",
+          "common"
+        ]),
+        groupKey: z.string(),
+        memberNodeIds: z.array(z.string().min(1))
+      })
+      .strict()
+      .optional(),
     reverseEngineering: z
       .object({
         source: z.literal("aws_scan"),
