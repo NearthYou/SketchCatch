@@ -217,6 +217,68 @@ test("POST /api/projects/reverse-engineering atomically creates Project, Draft, 
   await app.close();
 });
 
+test("POST /api/projects/reverse-engineering saves imported infrastructure frames", async () => {
+  const basePayload = createReverseEngineeringProjectPayload();
+  const payload = {
+    ...basePayload,
+    diagramJson: {
+      ...basePayload.diagramJson,
+      nodes: [
+        ...basePayload.diagramJson.nodes,
+        {
+          id: "reverse-infra-frame:vpc:imported-vpc",
+          type: "design_group",
+          kind: "design" as const,
+          position: { x: -40, y: -40 },
+          size: { width: 320, height: 240 },
+          label: "가져온 VPC",
+          locked: false,
+          zIndex: 0,
+          metadata: {
+            presentationCatalogItemId: "design-group",
+            reverseEngineeringInfrastructureFrame: {
+              source: "aws_scan" as const,
+              groupBy: "vpc" as const,
+              groupKey: "imported-vpc",
+              memberNodeIds: ["imported-vpc"]
+            }
+          }
+        }
+      ]
+    }
+  };
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    reverseEngineeringScanPreviews: [makeReverseEngineeringPreview()],
+    users: [makeUser({ id: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/projects/reverse-engineering",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  assert.deepEqual(
+    fakeDb.projectDraftRows[0]?.diagramJson.nodes.find(
+      (node) => node.id === "reverse-infra-frame:vpc:imported-vpc"
+    )?.metadata?.reverseEngineeringInfrastructureFrame,
+    {
+      source: "aws_scan",
+      groupBy: "vpc",
+      groupKey: "imported-vpc",
+      memberNodeIds: ["imported-vpc"]
+    }
+  );
+
+  await app.close();
+});
+
 test("POST /api/projects/reverse-engineering rolls back every row and retries without duplicates", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,

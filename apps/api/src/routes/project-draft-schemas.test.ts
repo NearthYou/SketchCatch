@@ -504,6 +504,38 @@ test("save project draft body preserves Template presentation metadata", () => {
   });
 });
 
+test("save project draft body preserves Reverse Engineering infrastructure frame metadata", () => {
+  const infrastructureFrame = {
+    source: "aws_scan" as const,
+    groupBy: "vpc" as const,
+    groupKey: "vpc-0123456789abcdef0",
+    memberNodeIds: ["node-1"]
+  };
+  const parsed = saveProjectDraftBodySchema.parse({
+    expectedRevision: 1,
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          kind: "design",
+          type: "design_group",
+          parameters: undefined,
+          metadata: {
+            presentationCatalogItemId: "design-group",
+            reverseEngineeringInfrastructureFrame: infrastructureFrame
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(
+    parsed.diagramJson.nodes[0]?.metadata?.reverseEngineeringInfrastructureFrame,
+    infrastructureFrame
+  );
+});
+
 test("save project draft body accepts reverse engineering node metadata", () => {
   const parsed = saveProjectDraftBodySchema.parse({
     expectedRevision: 1,

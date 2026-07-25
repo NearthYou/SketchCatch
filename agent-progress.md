@@ -142,3 +142,9 @@ Short English-only working log for the current agent context. Older records are 
 - Canonical ECS Terraform policies now qualify for the existing Project Draft scaling action when their identity fields reference the single `aws_appautoscaling_target` instead of repeating literals.
 - Verification passed: the focused regression test (9/9), root lint, root typecheck, all five production builds, and `git diff --check`.
 - No dependency, migration, cloud mutation, Terraform execution, Deployment change, or automatic Project Draft save was performed.
+
+### 2026-07-25 - Persist Reverse Engineering infrastructure frames on Board apply
+
+- Reproduced the production Board-apply failure from its exact Zod error: the Web preview sends `reverseEngineeringInfrastructureFrame`, but the API Diagram schema rejected that valid shared metadata.
+- Added the strict API schema branch and regression coverage for both Project Draft validation and the new-project Reverse Engineering apply route.
+- Verification passed: focused API schema and route tests, focused Web apply-flow tests, API lint/typecheck, harness, and `git diff --check`.
