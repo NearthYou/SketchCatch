@@ -76,9 +76,18 @@ export function incrementLiveObservationEcsScalingSettings(
 
   const targetResourceId = readSingleEcsServiceResourceId(target.code);
   const policyResourceId = readSingleEcsServiceResourceId(policy.code);
+  const targetAddressPattern = escapeRegExp(target.address);
+  const policyUsesTargetResourceIdReference = hasSingleTerraformAssignment(
+    policy.code,
+    /^\s*resource_id\s*=/gm,
+    new RegExp(
+      `^\\s*resource_id\\s*=\\s*${targetAddressPattern}\\.resource_id\\s*(?:#.*)?\\r?$`,
+      "m"
+    )
+  );
   const hasVerifiedEcsIdentity =
     targetResourceId !== null &&
-    targetResourceId === policyResourceId &&
+    (targetResourceId === policyResourceId || policyUsesTargetResourceIdReference) &&
     hasSingleTerraformAssignment(
       target.code,
       /^\s*service_namespace\s*=/gm,
@@ -102,17 +111,26 @@ export function incrementLiveObservationEcsScalingSettings(
     hasSingleTerraformAssignment(
       policy.code,
       /^\s*service_namespace\s*=/gm,
-      /^\s*service_namespace\s*=\s*"ecs"\s*(?:#.*)?\r?$/m
+      new RegExp(
+        `^\\s*service_namespace\\s*=\\s*(?:"ecs"|${targetAddressPattern}\\.service_namespace)\\s*(?:#.*)?\\r?$`,
+        "m"
+      )
     ) &&
     hasSingleTerraformAssignment(
       policy.code,
       /^\s*scalable_dimension\s*=/gm,
-      /^\s*scalable_dimension\s*=\s*"ecs:service:DesiredCount"\s*(?:#.*)?\r?$/m
+      new RegExp(
+        `^\\s*scalable_dimension\\s*=\\s*(?:"ecs:service:DesiredCount"|${targetAddressPattern}\\.scalable_dimension)\\s*(?:#.*)?\\r?$`,
+        "m"
+      )
     ) &&
     hasSingleTerraformAssignment(
       policy.code,
       /^\s*resource_id\s*=/gm,
-      /^\s*resource_id\s*=\s*"service\/[^"\r\n]+"\s*(?:#.*)?\r?$/m
+      new RegExp(
+        `^\\s*resource_id\\s*=\\s*(?:"service/[^"\\r\\n]+"|${targetAddressPattern}\\.resource_id)\\s*(?:#.*)?\\r?$`,
+        "m"
+      )
     ) &&
     hasSingleTerraformAssignment(
       policy.code,
@@ -225,6 +243,10 @@ export function incrementLiveObservationEcsScalingSettings(
     previousMaxCapacity,
     previousTargetValue
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function readSingleEcsServiceResourceId(code: string): string | null {

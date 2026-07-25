@@ -54,6 +54,41 @@ test("increments the single ECS Application Auto Scaling max_capacity by one", (
   assert.equal(result.files[1]?.terraformCode, 'output "max_capacity" { value = 2 }');
 });
 
+test("accepts canonical policy references to the single ECS scaling target", () => {
+  const result = incrementLiveObservationEcsScalingSettings([
+    {
+      fileName: "main.tf",
+      terraformCode: [
+        'resource "aws_appautoscaling_target" "audience" {',
+        "  min_capacity = 1",
+        "  max_capacity = 2",
+        '  service_namespace = "ecs"',
+        '  scalable_dimension = "ecs:service:DesiredCount"',
+        '  resource_id = "service/${aws_ecs_cluster.audience.name}/${aws_ecs_service.audience.name}"',
+        "}",
+        "",
+        'resource "aws_appautoscaling_policy" "audience_requests" {',
+        '  policy_type = "TargetTrackingScaling"',
+        "  service_namespace = aws_appautoscaling_target.audience.service_namespace",
+        "  scalable_dimension = aws_appautoscaling_target.audience.scalable_dimension",
+        "  resource_id = aws_appautoscaling_target.audience.resource_id",
+        "  target_tracking_scaling_policy_configuration {",
+        "    target_value = 60",
+        "    predefined_metric_specification {",
+        '      predefined_metric_type = "ALBRequestCountPerTarget"',
+        "    }",
+        "  }",
+        "}"
+      ].join("\n")
+    }
+  ]);
+
+  assert.equal(result.nextMaxCapacity, 3);
+  assert.equal(result.nextTargetValue, 61);
+  assert.match(result.files[0]?.terraformCode ?? "", /max_capacity = 3/);
+  assert.match(result.files[0]?.terraformCode ?? "", /target_value = 61/);
+});
+
 test("requires exactly one aws_appautoscaling_target", () => {
   assert.throws(
     () =>

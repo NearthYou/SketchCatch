@@ -136,3 +136,9 @@ Short English-only working log for the current agent context. Older records are 
 - Reproduced the PR CI failure locally: `agent-progress.md` exceeded the harness 24,000-byte limit.
 - Moved nine completed historical records to `docs/agent-history/2026-07.md`, keeping the active record below the limit without changing product code.
 - Verification passed: `pnpm harness:check` and `git diff --check`.
+
+### 2026-07-25 - Restore Live Observation scaling actions
+
+- Canonical ECS Terraform policies now qualify for the existing Project Draft scaling action when their identity fields reference the single `aws_appautoscaling_target` instead of repeating literals.
+- Verification passed: the focused regression test (9/9), root lint, root typecheck, all five production builds, and `git diff --check`.
+- No dependency, migration, cloud mutation, Terraform execution, Deployment change, or automatic Project Draft save was performed.
