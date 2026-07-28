@@ -8,8 +8,6 @@ import {
   LogOut,
   Menu,
   Settings,
-  Shapes,
-  WalletCards,
   X
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -21,11 +19,16 @@ import { ProductState } from "../ui/ProductState";
 const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "작업 현황" },
   { href: "/dashboard/projects", icon: FolderKanban, label: "내 프로젝트" },
-  { href: "/dashboard/templates", icon: Shapes, label: "템플릿" },
-  { href: "/dashboard/costs", icon: WalletCards, label: "비용 관리" },
   { href: "/dashboard/settings", icon: Settings, label: "설정" }
 ] as const;
 const PROFILE_PATH = "/dashboard/settings/profile";
+
+export function getDashboardNavigationItems(): readonly {
+  readonly href: string;
+  readonly label: string;
+}[] {
+  return DASHBOARD_NAV_ITEMS.map(({ href, label }) => ({ href, label }));
+}
 
 // 인증된 Dashboard 화면의 공통 탐색 영역과 세션 상태를 책임집니다.
 export function DashboardShell({ children }: { readonly children: ReactNode }) {
