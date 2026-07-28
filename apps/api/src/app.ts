@@ -5,7 +5,6 @@ import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
 import { registerAiRoutes, type AiRouteOptions } from "./routes/ai.js";
 import type { CostPricingRateProvider } from "./services/cost-analysis.js";
-import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes, type HealthRouteOptions } from "./routes/health.js";
@@ -13,10 +12,6 @@ import { maskDeploymentMessage } from "./deployments/log-masking.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectRouteOptions } from "./routes/projects.js";
-import {
-  registerProjectReleaseLedgerRoutes,
-  type ProjectReleaseLedgerRouteOptions
-} from "./routes/project-release-ledger.js";
 import type { ProjectAssetStorage } from "./projects/project-asset-storage.js";
 import {
   registerSourceRepositoryRoutes,
@@ -26,28 +21,8 @@ import {
   registerRepositoryAnalysisRecordRoutes,
   type RepositoryAnalysisRecordRouteOptions
 } from "./routes/repository-analysis-records.js";
-import {
-  registerProjectDeliveryProfileRoutes,
-  type ProjectDeliveryProfileRouteOptions
-} from "./routes/project-delivery-profile.js";
-import { registerDeploymentRoutes } from "./routes/deployments.js";
-import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
-import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import { registerGitCicdReadinessRoutes } from "./routes/git-cicd-readiness.js";
-import {
-  registerGitHubReleaseRunRoutes,
-  type GitHubReleaseRunRouteOptions
-} from "./routes/git-cicd-release-runs.js";
-import {
-  registerGitHubInfrastructureRunRoutes,
-  type GitHubInfrastructureRunRouteOptions
-} from "./routes/git-cicd-infrastructure-runs.js";
-import { registerCostRoutes } from "./routes/costs.js";
-import {
-  registerNotificationRoutes,
-  type NotificationRouteOptions
-} from "./routes/notifications.js";
 import {
   createDelegatingGitCicdHandoffProvider,
   createGitHubGitCicdHandoffProvider
@@ -57,22 +32,12 @@ import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-act
 import { createGitHubActionsRunProvider } from "./git-cicd/github-actions-run-provider.js";
 import {
   getRuntimeEnv,
-  isLiveObservationEnabled,
   requireGitHubAppConfig,
-  requireLiveObservationCapabilityKeyring,
   type RuntimeEnv
 } from "./config/env.js";
 import { createGitHubAppClient } from "./source-repositories/github-app-client.js";
 import { registerTerraformRoutes, type TerraformRouteOptions } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
-import {
-  registerAwsImportAccessRoutes,
-  type AwsImportAccessRouteOptions
-} from "./routes/aws-import-access.js";
-import {
-  registerProjectBuildEnvironmentRoutes,
-  type ProjectBuildEnvironmentRouteOptions
-} from "./routes/project-build-environments.js";
 import {
   registerReverseEngineeringRoutes,
   type ReverseEngineeringRouteOptions
@@ -83,12 +48,6 @@ import {
   type RateLimiter
 } from "./rate-limit/in-memory-rate-limiter.js";
 import { createRuntimeCacheFromEnv, type RuntimeCache } from "./runtime-cache/index.js";
-import {
-  createLiveObservationV2Runtime,
-  type LiveObservationV2Runtime
-} from "./live-observations/live-observation-v2-runtime.js";
-import { createDeploymentNotificationRuntime } from "./notifications/notification-runtime.js";
-import { startNotificationOutboxJob } from "./notifications/notification-outbox-job.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
@@ -139,7 +98,6 @@ export type BuildAppOptions = {
   createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   safetyExplanationTimeoutMs?: AiRouteOptions["safetyExplanationTimeoutMs"];
   pricingRateProvider?: CostPricingRateProvider;
-  costUsageProvider?: CostUsageAnalysisProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
@@ -147,24 +105,6 @@ export type BuildAppOptions = {
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
   projectRoutes?: Pick<ProjectRouteOptions, "applyExistingReverseEngineeringDraft">;
-  projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
-  projectBuildEnvironmentRoutes?: Pick<
-    ProjectBuildEnvironmentRouteOptions,
-    "createRepository" | "gateway" | "generateId" | "now"
-  >;
-  gitHubReleaseRunRoutes?: Pick<
-    GitHubReleaseRunRouteOptions,
-    "repository" | "executor" | "verifyIdentity" | "now" | "generateId"
-  >;
-  gitHubInfrastructureRunRoutes?: Pick<
-    GitHubInfrastructureRunRouteOptions,
-    | "repository"
-    | "executionLeaseRepository"
-    | "githubActionsClient"
-    | "verifyIdentity"
-    | "now"
-    | "generateId"
-  >;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
     | "createSourceRepositoryRepository"
@@ -175,27 +115,16 @@ export type BuildAppOptions = {
     | "sourceRepositoryAnalysisRateLimiter"
   >;
   repositoryAnalysisRecordRoutes?: Pick<RepositoryAnalysisRecordRouteOptions, "createService">;
-  projectDeliveryProfileRoutes?: Pick<ProjectDeliveryProfileRouteOptions, "getProfile">;
   runtimeCache?: RuntimeCache;
   runtimeEnv?: RuntimeEnv;
-  liveObservationV2Runtime?: LiveObservationV2Runtime;
-  notificationRoutes?: Pick<
-    NotificationRouteOptions,
-    "createService" | "pushConfig" | "requireUserId"
-  >;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
-  awsImportAccessRoutes?: Pick<AwsImportAccessRouteOptions, "createService">;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const getAppDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
   const runtimeEnv = options.runtimeEnv ?? getRuntimeEnv();
-  const liveObservationEnabled = isLiveObservationEnabled(runtimeEnv);
-  const liveObservationKeyring = liveObservationEnabled
-    ? requireLiveObservationCapabilityKeyring(runtimeEnv)
-    : undefined;
   const oauthStartRateLimiter =
     options.oauthStartRateLimiter ??
     createInMemoryRateLimiter({
@@ -232,21 +161,6 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
       }
     });
-  const liveObservationV2Runtime = liveObservationEnabled
-    ? (options.liveObservationV2Runtime ??
-      createLiveObservationV2Runtime({
-        getDatabaseClient: getAppDatabaseClient,
-        keyring: liveObservationKeyring!,
-        runtimeEnv
-      }))
-    : undefined;
-  const notificationRuntime = createDeploymentNotificationRuntime({
-    getDatabaseClient: getAppDatabaseClient,
-    runtimeEnv,
-    onDispatchError: ({ outboxId, code }) => {
-      app.log.warn({ outboxId, code }, "Web Push delivery will be retried");
-    }
-  });
   const githubAppClient = createLazyGitHubAppClient();
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
@@ -256,18 +170,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             app.log.error({ error }, "Failed to clean stale refresh tokens");
           }
         });
-  const stopNotificationOutboxJob =
-    process.env.NODE_ENV === "test" || !notificationRuntime.pushEnabled
-      ? undefined
-      : startNotificationOutboxJob(notificationRuntime.createService, {
-          onError: (error) => {
-            app.log.error({ error }, "Notification outbox dispatch failed");
-          }
-        });
-
   app.addHook("onClose", async () => {
     stopRefreshTokenCleanupJob?.();
-    stopNotificationOutboxJob?.();
   });
 
   app.setErrorHandler((error, request, reply) => {
@@ -345,20 +249,6 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectDeletionStorage: options.projectDeletionStorage,
     ...options.projectRoutes
   });
-  app.register(registerProjectReleaseLedgerRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    ...options.projectReleaseLedgerRoutes
-  });
-  app.register(registerNotificationRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    createService: options.notificationRoutes?.createService ?? notificationRuntime.createService,
-    pushConfig: options.notificationRoutes?.pushConfig ?? notificationRuntime.pushConfig,
-    ...(options.notificationRoutes?.requireUserId
-      ? { requireUserId: options.notificationRoutes.requireUserId }
-      : {})
-  });
   app.register(registerSourceRepositoryRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -369,40 +259,6 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     getDatabaseClient: getAppDatabaseClient,
     ...options.repositoryAnalysisRecordRoutes
   });
-  app.register(registerProjectDeliveryProfileRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    ...options.projectDeliveryProfileRoutes
-  });
-  app.register(registerDeploymentRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    projectAssetStorage: options.projectAssetStorage,
-    runtimeCache
-  });
-  app.register(
-    registerLiveObservationV2Routes,
-    liveObservationV2Runtime
-      ? {
-          prefix: "/api",
-          enabled: true,
-          liveObservationService: liveObservationV2Runtime.liveObservationService,
-          prepareDeploymentManifest: liveObservationV2Runtime.prepareDeploymentManifest,
-          requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess,
-          refreshObservation: liveObservationV2Runtime.refreshObservation
-        }
-      : {
-          prefix: "/api",
-          enabled: false
-        }
-  );
-  if (liveObservationV2Runtime) {
-    app.register(registerLiveObservationPublicCollectorRoutes, {
-      prefix: "/api",
-      collector: liveObservationV2Runtime.collector,
-      enabled: true
-    });
-  }
   app.register(registerGitCicdReadinessRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
@@ -419,33 +275,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     gitCicdRunProvider: createGitHubActionsRunProvider(githubAppClient),
     runtimeCache
   });
-  app.register(registerGitHubReleaseRunRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    ...options.gitHubReleaseRunRoutes
-  });
-  app.register(registerGitHubInfrastructureRunRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    githubActionsClient: githubAppClient,
-    ...options.gitHubInfrastructureRunRoutes
-  });
-  app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(registerTerraformRoutes, createTerraformRouteOptions(options, getAppDatabaseClient));
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
-  });
-  // gg: AWS import-access command는 기존 connection route와 분리된 인증 plugin으로 등록합니다.
-  app.register(registerAwsImportAccessRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    ...options.awsImportAccessRoutes
-  });
-  app.register(registerProjectBuildEnvironmentRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    ...options.projectBuildEnvironmentRoutes
   });
   app.register(registerReverseEngineeringRoutes, {
     prefix: "/api",
@@ -508,27 +341,6 @@ function createAiRouteOptions(
     ...(options.pricingRateProvider === undefined
       ? {}
       : { pricingRateProvider: options.pricingRateProvider })
-  };
-}
-
-function createCostRouteOptions(
-  options: BuildAppOptions,
-  getDatabaseClient: () => DatabaseClient
-): {
-  readonly prefix: "/api";
-  readonly getDatabaseClient: () => DatabaseClient;
-  readonly pricingRateProvider?: CostPricingRateProvider;
-  readonly costUsageProvider?: CostUsageAnalysisProvider;
-} {
-  return {
-    prefix: "/api",
-    getDatabaseClient,
-    ...(options.pricingRateProvider === undefined
-      ? {}
-      : { pricingRateProvider: options.pricingRateProvider }),
-    ...(options.costUsageProvider === undefined
-      ? {}
-      : { costUsageProvider: options.costUsageProvider })
   };
 }
 
