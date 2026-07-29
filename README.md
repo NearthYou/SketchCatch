@@ -1,72 +1,74 @@
 # SketchCatch
 
-> 자연어 요구사항을 검토 가능한 클라우드 아키텍처와 Terraform 실행 계획으로 바꾸는 IaC 운영 서비스
+기존 코드와 AWS 자산을 Architecture Board로 가져와 Terraform 변경을 검토하고 배포하는 IaC 운영 서비스
 
-인프라 요청은 보통 말이나 문서로 시작합니다. 실제 배포까지 가려면 리소스 관계를 정리하고 IaC를 작성한 뒤 비용과 보안 설정을 확인해야 합니다. SketchCatch는 이 과정을 하나의 승인 흐름으로 연결합니다.
+![SketchCatch Architecture Board](https://velog.velcdn.com/images/nearthyou/post/b1c9881e-7581-46d7-b080-71c143d80053/image.png)
 
-MVP는 AWS와 Terraform을 먼저 지원합니다. 도메인 모델은 특정 클라우드에 묶이지 않도록 provider-neutral 구조로 설계했습니다.
+SketchCatch는 AWS와 Terraform을 사용하는 개발자와 운영 팀을 위해 만들었습니다. 저장소 구조와 기존 클라우드 자산을 다시 입력하는 일을 줄이고, 자동화가 제안한 근거와 실제 변경 범위를 사용자가 확인할 수 있게 합니다.
 
-## 해결 흐름
+사용자는 AI, GitHub 저장소, 기존 AWS 자산, 템플릿 중 하나에서 시작할 수 있습니다. 결과는 Architecture Board와 Terraform에서 함께 수정하며, Plan을 검토하고 승인한 뒤에만 AWS에 반영합니다.
 
-```text
-텍스트·음성 요구사항
-→ AI 아키텍처 초안
-→ Architecture Board 검토·수정
-→ Terraform Preview
-→ Pre-Deployment Check
-→ 사용자 승인
-→ 직접 배포 또는 Git/CI/CD 전달
-→ 배포 이력 확인·정리
-```
+현재 실제 연동과 배포를 검증한 범위는 AWS와 Terraform입니다. Azure와 GCP 연동은 구현 범위에 포함하지 않았습니다.
 
-## AI와 배포 권한을 나눈 기준
+## 작업 흐름
 
-| 구분 | 맡긴 일 |
-| --- | --- |
-| AI | 요구사항 해석, 아키텍처 초안, IaC 설명, 위험 후보 제안 |
-| 검증 로직 | graph 유효성 검사, 지원 리소스 확인, Terraform 검증, 배포 전 규칙 점검 |
-| 사용자 | 아키텍처 확정, 배포 승인, `apply`·`destroy` 실행 결정 |
-
-AI의 답변이 바로 배포 명령이 되지는 않습니다. 구조화된 결과와 재현 가능한 검증을 통과한 뒤 사용자가 승인해야 실제 변경이 일어납니다.
-
-## AI와 결정론적 검증의 경계
-
-AI는 요구사항 해석, 추천, 설명, 검토를 보조합니다. 배포 가능한 구조와 실행 판단은 재현 가능한 project data, graph validation, Terraform generator, rule engine, 사용자 승인 기록을 기준으로 합니다.
-
-| 경계 | 현재 상태 | 근거 |
+| 단계 | 사용자가 하는 일 | SketchCatch가 하는 일 |
 | --- | --- | --- |
-| Infrastructure Graph validation | Implemented | deterministic graph validator와 테스트 |
-| Terraform High finding 탐지 | Implemented | public S3/SSH/RDS, IAM wildcard scanner tests |
-| High finding의 Plan 기록·표시 | Implemented | Deployment Safety Gate summary |
-| High severity만으로 Plan 승인 자동 차단 | Planned | 현재 summary는 `blocked: false`; 사용자가 finding을 검토한 뒤 승인 가능 |
-| 승인 없는 Terraform apply 차단 | Implemented | approval/apply service boundary |
+| 1. 시작 | AI, 저장소, AWS 자산, 템플릿 중 하나를 선택 | 기존 맥락을 읽고 아키텍처 후보와 근거를 제시 |
+| 2. 설계 | Board와 Terraform을 검토하고 수정 | 두 형식의 리소스와 참조 관계를 동기화 |
+| 3. 검증 | 비용, 보안, 설정과 Plan의 변경 범위를 확인 | 결정론적 검사와 Terraform Plan 실행 |
+| 4. 배포 | Apply 또는 Git과 CI/CD 전달을 승인 | Terraform Worker 실행, 상태와 artifact 기록 |
+| 5. 운영 | 배포 이력과 Live Observation 확인 | 실행 상태, 로그와 운영 지표 수집 |
 
-현재 정책의 상세 기준은 [`docs/deployment.md`](docs/deployment.md)와 [ADR 0001](docs/adr/0001-ai-assists-deterministic-architecture-flow.md)을 따릅니다.
+## 네 가지 시작 방식
 
-## 핵심 기능
+| 시작 방식 | 입력 | 결과 |
+| --- | --- | --- |
+| AI | 사용자 수, 공개 접근, 데이터 저장, 예산과 운영 방식 | 검토 가능한 아키텍처 초안 |
+| GitHub Repository | 고정된 commit SHA의 제한된 파일 | 파일별 근거가 있는 배포 구성 추천 |
+| Reverse Engineering | 검증된 AWS 연결, Region과 리소스 종류 | 새 자산, 변경 자산과 중복 가능성을 구분한 Board 후보 |
+| Template | 검토된 반복 구조와 기본값 | 이름과 참조를 다시 매핑한 재사용 구성 |
 
-- 자연어 요구사항을 리소스와 관계가 있는 Architecture Draft로 변환
-- Architecture Board에서 초안을 직접 검토하고 수정
-- Diagram JSON을 Terraform Preview로 변환
-- 배포 전 비용·보안·설정 위험 확인
-- 승인 후 Terraform `plan`, `apply`, `destroy` 실행
-- 로그와 Terraform output, 배포 리소스 이력 관리
-- Direct Deployment와 Git/CI/CD Handoff 지원
+저장소 분석은 대상 코드를 실행하지 않습니다. `package.json`, Dockerfile과 배포 설정을 정적으로 읽고, 근거가 부족하거나 후보가 여러 개면 사용자 선택을 기다립니다.
 
-## 기술 구성
+Reverse Engineering도 발견한 AWS 자산을 바로 적용하지 않습니다. Board에 추가하기 전에 변경 내용과 수동 확인 항목을 보여줍니다.
 
-| 영역 | 기술 |
+## 핵심 설계
+
+| 문제 | 설계 선택 | 지키려는 기준 |
+| --- | --- | --- |
+| Board와 Terraform을 모두 수정할 수 있음 | 두 형식 사이에 `InfrastructureGraph`를 두고 양방향 변환 | 화면과 실제 배포 값의 일치 |
+| Terraform 실행 중 API가 재시작될 수 있음 | ECS RunTask 기반 일회성 Terraform Worker와 RDS lease 사용 | 실행 상태 복구와 중복 Apply 방지 |
+| 사용자 AWS 계정에 연결해야 함 | CloudFormation Quick Create, External ID, STS AssumeRole 사용 | 장기 Access Key를 저장하지 않는 연결 |
+| AI 결과가 운영 변경으로 이어짐 | AI 제안, 결정론적 검사, 사용자 승인을 분리 | 근거와 변경 범위를 확인한 뒤 실행 |
+
+지원하지 않는 HCL은 추측해서 Board에 반영하지 않습니다. 기존 값과 원문을 보존하고 진단을 반환합니다.
+
+API가 Terraform Worker의 Task ARN을 저장하기 전에 종료돼도 Job ID가 담긴 `startedBy`로 기존 ECS Task를 다시 찾습니다. 승인한 artifact, tfplan hash, AWS account와 Region이 현재 실행 대상과 다르면 Apply를 막습니다.
+
+## 검증한 결과
+
+| 검증 대상 | 결과 | 측정 범위 |
+| --- | --- | --- |
+| Board와 Terraform 동기화 | 관련 테스트 111개 통과 | 그래프 생성, HCL 렌더링, 역동기화와 실패 처리 |
+| Terraform Worker 복구 | 관련 시나리오 25개 통과 | dispatch 실패, API 재시작, ECS 조회 지연, 취소와 중복 실행 |
+| 운영 배포 시간 | 7분 51초에서 6분 9초 | 최근 성공 4회 중앙값과 같은 commit의 warm cache 조건 비교, 21.7% 감소 |
+| Live Observation 503 | Redis ingress 2개로 복구 | 무관한 `5 add, 7 change, 2 destroy` 제외, 예상한 404와 후속 Plan `No changes` 확인 |
+
+## 실행 구조
+
+| 영역 | 기술과 역할 |
 | --- | --- |
-| Web | Next.js, React, TypeScript |
-| API | Fastify, TypeScript |
-| Data | PostgreSQL, Drizzle |
-| IaC / Cloud | Terraform, AWS |
-| AI | OpenAI API, AWS Bedrock, Amazon Q 연동 구조 |
-| Operations | Docker, Nginx, GitHub Actions, S3, SSM |
+| Web | Next.js, React, TypeScript, ECS/Fargate |
+| API | Fastify, TypeScript, ECS/Fargate |
+| Terraform Worker | ECS RunTask 기반 일회성 Task |
+| Data | PostgreSQL/RDS, S3 artifact, Redis/ElastiCache runtime cache |
+| Edge | ALB, Route 53, ACM |
+| CI/CD | Docker, ECR, GitHub Actions OIDC/STS |
 
-`apps/web`과 `apps/api`는 `packages/types`의 도메인 계약을 공유합니다. Terraform 실행은 UI에서 분리해 API의 배포 계층 뒤에 두었습니다.
+초기 EC2, SSM, Nginx 배포 경로는 종료했습니다. 현재 ALB가 Web과 API의 ECS 서비스를 직접 라우팅합니다.
 
-## 로컬 실행
+## 로컬에서 실행하기
 
 Docker와 pnpm이 필요합니다.
 
@@ -77,9 +79,9 @@ docker compose -f infra/local/docker-compose.yml up -d
 pnpm dev
 ```
 
-기본 주소는 Web `http://localhost:3000`, API `http://localhost:4000`입니다. 환경 변수와 비밀정보 관리 기준은 [`.env.example`](./.env.example)에서 확인할 수 있습니다.
+Web은 `http://localhost:3000`, API는 `http://localhost:4000`에서 실행됩니다. 필요한 환경 변수는 [`.env.example`](./.env.example)에서 확인할 수 있습니다.
 
-## 검증
+## 검증 명령
 
 ```bash
 pnpm harness:check
@@ -89,10 +91,18 @@ pnpm build
 pnpm test
 ```
 
-## 문서
+## 현재 범위와 남은 과제
 
+- High severity finding은 Plan에 기록하고 표시하지만 현재 자동 승인 차단 조건은 아닙니다.
+- MVP 연결 Role은 VPC, EC2, S3 데모를 위해 넓은 권한을 사용합니다. 조회 권한과 Apply 및 Destroy 권한 분리는 후속 과제입니다.
+- 실제 사용자 반복 사용 지표는 아직 측정하지 않았습니다.
+
+## 더 알아보기
+
+- [6분 47초 최종 발표 영상](https://www.youtube.com/watch?v=a18RZGg8PyM)
 - [제품 방향](./docs/product.md)
 - [아키텍처](./docs/architecture.md)
 - [데이터 모델](./docs/data-models.md)
 - [개발 가이드](./docs/development.md)
 - [배포 운영](./docs/deployment.md)
+- [Terraform 운영 구조](./infra/aws/terraform/README.md)
