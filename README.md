@@ -8,7 +8,7 @@ SketchCatch는 AWS와 Terraform을 사용하는 개발자와 운영 팀을 위�
 
 사용자는 AI, GitHub 저장소, 기존 AWS 자산, 템플릿 중 하나에서 시작할 수 있습니다. 결과는 Architecture Board와 Terraform에서 함께 수정하며, Plan을 검토하고 승인한 뒤에만 AWS에 반영합니다.
 
-현재 실제 연동과 배포를 검증한 범위는 AWS와 Terraform입니다. Azure와 GCP 연동은 구현 범위에 포함하지 않았습니다.
+현재 실제 연동과 배포를 검증한 범위는 AWS와 Terraform입니다. Azure와 GCP 연동은 아직 구현 범위에 포함하지 않았고 지원 확장 계획이 있습니다.
 
 ## 작업 흐름
 
@@ -18,7 +18,7 @@ SketchCatch는 AWS와 Terraform을 사용하는 개발자와 운영 팀을 위�
 | 2. 설계 | Board와 Terraform을 검토하고 수정 | 두 형식의 리소스와 참조 관계를 동기화 |
 | 3. 검증 | 비용, 보안, 설정과 Plan의 변경 범위를 확인 | 결정론적 검사와 Terraform Plan 실행 |
 | 4. 배포 | Apply 또는 Git과 CI/CD 전달을 승인 | Terraform Worker 실행, 상태와 artifact 기록 |
-| 5. 운영 | 배포 이력과 Live Observation 확인 | 실행 상태, 로그와 운영 지표 수집 |
+| 5. 운영 | 배포 이력과 실시간 트래픽 관측 확인 | 실행 상태, 로그와 운영 지표 수집 |
 
 ## 네 가지 시작 방식
 
