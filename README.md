@@ -10,6 +10,28 @@ SketchCatch는 AWS와 Terraform을 사용하는 개발자와 운영 팀을 위�
 
 현재 실제 연동과 배포를 검증한 범위는 AWS와 Terraform입니다. Azure와 GCP 연동은 아직 구현 범위에 포함하지 않았고 지원 확장 계획이 있습니다.
 
+## 프로젝트 정보와 개인 역할
+
+| 항목 | 내용 |
+| --- | --- |
+| 개발 기간 | 2026.06.18 - 2026.07.25 |
+| 팀 구성 | 5인 팀, 팀장 |
+| 개인 담당 | Board와 Terraform 양방향 동기화, Terraform Worker와 실행 복구, Production AWS 운영, CI/CD |
+| 주요 기술 | TypeScript, Fastify, PostgreSQL, Terraform, AWS ECS/Fargate |
+
+초기 화면을 실제 배포 흐름으로 연결하면서 두 문제가 드러났습니다. 사용자가 Board와 Terraform을 번갈아 고치면 한쪽의 수정이 다른 쪽에서 사라졌고, 수 분 걸리는 Terraform 작업을 API가 직접 실행하면 재배포나 프로세스 종료 때 작업 상태를 잃었습니다. 기능을 더 붙이기 전에 편집 결과의 일치와 실행 복구를 각각 독립된 문제로 나눴습니다.
+
+## 개인 기여
+
+| 문제 | 선택 | 확인한 결과 |
+| --- | --- | --- |
+| Board와 Terraform의 변경이 서로 덮어씀 | 공통 `InfrastructureGraph`와 리소스 ID를 사이에 두고 양방향 변환 | 지원 HCL은 동기화하고 해석할 수 없는 block은 원문을 보존한 채 diagnostic으로 반환 |
+| API가 장기 Terraform 작업을 붙잡음 | API는 작업과 lease만 기록하고 실행은 one-off ECS Worker로 분리 | dispatch 실패와 API 재시작을 포함한 25개 복구 시나리오 통과 |
+| Production API가 Runtime Cache에 연결되지 않음 | 전체 Plan을 적용하지 않고 API와 Worker security group ingress 2개만 변경 | 503이 예상한 404로 바뀌고 후속 Plan에서 `No changes` 확인 |
+| 배포 시간이 길어 피드백이 늦음 | Web과 API image 병렬 build, ECR cache 사용 | 같은 commit의 warm cache 조건에서 최근 성공 4회 중앙값 7분 51초에서 6분 9초로 감소 |
+
+![사용자 변경을 안전한 AWS 배포로 연결한 흐름](docs/images/user-to-recovery.png)
+
 ## 작업 흐름
 
 | 단계 | 사용자가 하는 일 | SketchCatch가 하는 일 |
