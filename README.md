@@ -1,20 +1,18 @@
 # SketchCatch
 
-기존 코드와 AWS 자산을 Architecture Board로 가져와 Terraform 변경을 검토하고 배포하는 IaC 운영 서비스
+자연어 요구사항으로 클라우드 아키텍처를 만들거나 기존 코드와 AWS 리소스를 불러와, 다이어그램과 Terraform으로 편집하고 검토한 뒤 AWS에 배포하는 IaC 운영 서비스입니다.
 
 ![SketchCatch Architecture Board](https://velog.velcdn.com/images/nearthyou/post/b1c9881e-7581-46d7-b080-71c143d80053/image.png)
 
-SketchCatch는 AWS와 Terraform을 사용하는 개발자와 운영 팀을 위해 만들었습니다. 저장소 구조와 기존 클라우드 자산을 다시 입력하는 일을 줄이고, 자동화가 제안한 근거와 실제 변경 범위를 사용자가 확인할 수 있게 합니다.
+사용자는 자연어로 요구사항을 입력하거나 GitHub 저장소, 기존 AWS 자산, 템플릿을 불러와 설계를 시작합니다. 생성하거나 불러온 클라우드 구조는 다이어그램과 Terraform 코드에서 함께 수정할 수 있으며, Terraform Plan으로 변경 내용을 확인하고 승인한 항목만 Apply해 AWS에 배포합니다.
 
-사용자는 AI, GitHub 저장소, 기존 AWS 자산, 템플릿 중 하나에서 시작할 수 있습니다. 결과는 Architecture Board와 Terraform에서 함께 수정하며, Plan을 검토하고 승인한 뒤에만 AWS에 반영합니다.
-
-현재 실제 연동과 배포를 검증한 범위는 AWS와 Terraform입니다. Azure와 GCP 연동은 아직 구현 범위에 포함하지 않았고 지원 확장 계획이 있습니다.
+현재 실제 연동과 배포를 검증한 범위는 AWS입니다. Azure와 GCP 연동은 아직 구현 범위에 포함하지 않았고 지원 확장 계획이 있습니다.
 
 ## 작업 흐름
 
 | 단계 | 사용자가 하는 일 | SketchCatch가 하는 일 |
 | --- | --- | --- |
-| 1. 시작 | AI, 저장소, AWS 자산, 템플릿 중 하나를 선택 | 기존 맥락을 읽고 아키텍처 후보와 근거를 제시 |
+| 1. 시작 | AI, 저장소, ReverseEngineering, 템플릿 중 하나를 선택 | 기존 맥락을 읽고 아키텍처 후보와 근거를 제시 |
 | 2. 설계 | Board와 Terraform을 검토하고 수정 | 두 형식의 리소스와 참조 관계를 동기화 |
 | 3. 검증 | 비용, 보안, 설정과 Plan의 변경 범위를 확인 | 결정론적 검사와 Terraform Plan 실행 |
 | 4. 배포 | Apply 또는 Git과 CI/CD 전달을 승인 | Terraform Worker 실행, 상태와 artifact 기록 |
@@ -24,14 +22,14 @@ SketchCatch는 AWS와 Terraform을 사용하는 개발자와 운영 팀을 위�
 
 | 시작 방식 | 입력 | 결과 |
 | --- | --- | --- |
-| AI | 사용자 수, 공개 접근, 데이터 저장, 예산과 운영 방식 | 검토 가능한 아키텍처 초안 |
+| AI | 사용자 수, 공개 접근, 데이터 저장, 예산과 운영 방식 등 AI와 대화를 통해 요구사항 구체화 | 아키텍처 초안 생성 |
 | GitHub Repository | 고정된 commit SHA의 제한된 파일 | 파일별 근거가 있는 배포 구성 추천 |
 | Reverse Engineering | 검증된 AWS 연결, Region과 리소스 종류 | 새 자산, 변경 자산과 중복 가능성을 구분한 Board 후보 |
 | Template | 검토된 반복 구조와 기본값 | 이름과 참조를 다시 매핑한 재사용 구성 |
 
-저장소 분석은 대상 코드를 실행하지 않습니다. `package.json`, Dockerfile과 배포 설정을 정적으로 읽고, 근거가 부족하거나 후보가 여러 개면 사용자 선택을 기다립니다.
+저장소 분석은 `package.json`, Dockerfile과 배포 설정 등을 정적으로 읽고, 근거가 부족하거나 후보가 여러 개면 사용자 선택을 기다립니다.
 
-Reverse Engineering도 발견한 AWS 자산을 바로 적용하지 않습니다. Board에 추가하기 전에 변경 내용과 수동 확인 항목을 보여줍니다.
+Reverse Engineering도 발견한 AWS 리소스를 바로 불러오지 않습니다. Board에 직접 추가하기 전에 변경 내용과 수동 확인 항목을 보여줍니다. (기존 리소스들을 IaC 환경으로 변경)
 
 ## 핵심 설계
 
@@ -42,7 +40,7 @@ Reverse Engineering도 발견한 AWS 자산을 바로 적용하지 않습니다.
 | 사용자 AWS 계정에 연결해야 함 | CloudFormation Quick Create, External ID, STS AssumeRole 사용 | 장기 Access Key를 저장하지 않는 연결 |
 | AI 결과가 운영 변경으로 이어짐 | AI 제안, 결정론적 검사, 사용자 승인을 분리 | 근거와 변경 범위를 확인한 뒤 실행 |
 
-지원하지 않는 HCL은 추측해서 Board에 반영하지 않습니다. 기존 값과 원문을 보존하고 진단을 반환합니다.
+저희 서비스에서 지원하지 않는 리소스는 Board에 반영하지 않습니다. 기존 값과 원문을 보존하고 진단 내역을 사용자에게 반환합니다.
 
 API가 Terraform Worker의 Task ARN을 저장하기 전에 종료돼도 Job ID가 담긴 `startedBy`로 기존 ECS Task를 다시 찾습니다. 승인한 artifact, tfplan hash, AWS account와 Region이 현재 실행 대상과 다르면 Apply를 막습니다.
 
@@ -90,12 +88,6 @@ pnpm typecheck
 pnpm build
 pnpm test
 ```
-
-## 현재 범위와 남은 과제
-
-- High severity finding은 Plan에 기록하고 표시하지만 현재 자동 승인 차단 조건은 아닙니다.
-- MVP 연결 Role은 VPC, EC2, S3 데모를 위해 넓은 권한을 사용합니다. 조회 권한과 Apply 및 Destroy 권한 분리는 후속 과제입니다.
-- 실제 사용자 반복 사용 지표는 아직 측정하지 않았습니다.
 
 ## 더 알아보기
 
