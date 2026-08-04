@@ -26,6 +26,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-08-04 - Add the verified production architecture to the root README
+
+- Compared the supplied diagram with the production ECS Terraform, Runtime Cache CloudFormation template, deployment workflows, and cross-account STS implementation.
+- Added the repository-owned architecture image and clarified ALB routing, public Fargate tasks, the one-off Terraform Worker, private RDS/Redis, artifact storage, and the user-account execution role.
+- The baseline harness check passes. No application code, dependency, infrastructure, secret, cloud resource, deployment, or database migration changed.
+
 ### 2026-07-22 - Unblock the dev-to-main release migration history check
 
 - Confirmed release PR #534 failed only because main legitimately lacks the historically skipped `0044_github_codebuild_release_plane` entry while already containing `0045` and `0046`.

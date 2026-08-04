@@ -53,6 +53,18 @@ API가 Terraform Worker의 Task ARN을 저장하기 전에 종료돼도 Job ID�
 | 운영 배포 시간 | 7분 51초에서 6분 9초 | 최근 성공 4회 중앙값과 같은 commit의 warm cache 조건 비교, 21.7% 감소 |
 | Live Observation 503 | Redis ingress 2개로 복구 | 무관한 `5 add, 7 change, 2 destroy` 제외, 예상한 404와 후속 Plan `No changes` 확인 |
 
+## 운영 아키텍처
+
+![SketchCatch 운영 아키텍처](./assets/sketchcatch-production-architecture.png)
+
+현재 production steady state를 기준으로 저장소의 Terraform, GitHub Actions workflow와 API의 STS 연결 구현을 대조한 구성입니다.
+
+- Route 53과 ACM이 도메인과 TLS를 담당하고, public ALB가 기본 요청은 Web으로, `/api`, `/health` 요청은 API로 직접 라우팅합니다.
+- Web과 API는 ECS/Fargate 서비스로 실행됩니다. Terraform Worker는 상시 서비스가 아니라 API가 필요할 때 ECS RunTask로 실행하는 일회성 Task입니다.
+- 현재 NAT Gateway를 사용하지 않는 구성이라 Web, API와 Worker Task는 public subnet과 public IP를 사용합니다. 외부 요청은 ALB를 통해서만 서비스로 전달되고 Worker에는 inbound rule이 없습니다.
+- RDS PostgreSQL과 ElastiCache Redis는 private subnet의 데이터 계층입니다. S3는 Terraform, export와 배포 artifact를 저장하고 ECR은 API와 Web container image를 저장합니다.
+- GitHub Actions는 OIDC와 STS로 배포 역할을 위임받아 image와 ECS revision을 배포합니다. API와 Worker는 External ID를 포함한 STS AssumeRole로 사용자 AWS 계정의 SketchCatch Execution Role에 접근합니다.
+
 ## 실행 구조
 
 | 영역 | 기술과 역할 |
