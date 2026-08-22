@@ -1,13 +1,10 @@
 # Template Board captures
 
-이 폴더에는 카드용으로 다시 그린 축약도나 합성 SVG를 두지 않는다. 모든 파일은 로그인된
-`DiagramEditor`가 실제 Template `DiagramJson`을 ReactFlow에 렌더링한 화면에서 만든 Board
-캡처다.
+이 폴더에는 카드용으로 다시 그린 축약도나 합성 SVG를 두지 않는다. 모든 파일은 로그인된 `DiagramEditor`가 실제 Template `DiagramJson`을 ReactFlow에 렌더링한 화면에서 만든 Board 캡처다.
 
 ## 갱신 절차
 
-개발 서버를 실행한 뒤 `pnpm template-thumbnails:generate`를 실행하면 아래 계약으로 사용 가능한
-Template 29개를 모두 staging에 캡처하고, 전체 성공 후 기존 asset을 한 번에 교체한다.
+개발 서버를 실행한 뒤 `pnpm template-thumbnails:generate`를 실행하면 아래 계약으로 사용 가능한 Template 29개를 모두 staging에 캡처하고, 전체 성공 후 기존 asset을 한 번에 교체한다.
 
 1. `/workspace/new?mode=template&templateId={templateId}`에서 Template을 실제 Board로 연다.
 2. Board viewport를 `1280 × 720`, device scale factor를 `1`로 고정한다. 좌우 panel을 접고
@@ -20,5 +17,4 @@ Template 29개를 모두 staging에 캡처하고, 전체 성공 후 기존 asset
 6. 카드와 큰 미리보기에서 29장을 확인한 다음 manifest의 해당 `diagramHash`를 현재
    materialized `DiagramJson` SHA-256으로 갱신한다.
 
-Template 전용 자동 회귀 테스트는 유지하지 않는다. 갱신 시 위 계약을 수동으로 확인하고
-`pnpm build`로 정적 asset 참조와 빌드 유효성을 확인한다.
+Template 전용 자동 회귀 테스트는 유지하지 않는다. 갱신 시 위 계약을 수동으로 확인하고 `pnpm build`로 정적 asset 참조와 빌드 유효성을 확인한다.

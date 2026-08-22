@@ -11,7 +11,9 @@
 | `data` | `infra/aws/production/data` | `production/data/terraform.tfstate` | S3 artifact bucket, RDS, Redis/ElastiCache | 빈 import gate, persistent resource 보호 |
 | `legacy-rollback` | `infra/aws/production/legacy-rollback` | `production/legacy-rollback/terraform.tfstate` | encrypted AMI 기반 임시 EC2/ALB cold restore | 기본 disabled, incident 승인 때만 생성 |
 
-`runtime` root를 이동하거나 backend key를 바꾸지 않습니다. 기존 state가 있는 상태에서 directory/key를 함께 바꾸면 state migration과 resource address 변경이 섞이므로 Phase 9 범위 밖입니다. 현재 `aws_route53_record.ecs_alias`가 runtime root에 정의되어 있다면 edge state에 중복 import하지 않고, 별도 승인된 state move 또는 ownership handoff를 먼저 설계합니다.
+`runtime` root를 이동하거나 backend key를 바꾸지 않습니다. 기존 state가 있는 상태에서 directory/key를 함께 바꾸면 state migration과 resource address 변경이 섞이므로 Phase 9 범위 밖입니다.
+
+현재 `aws_route53_record.ecs_alias`가 runtime root에 정의되어 있다면 edge state에 중복 import하지 않고, 별도 승인된 state move 또는 ownership handoff를 먼저 설계합니다.
 
 ## backend와 locking
 
@@ -26,23 +28,29 @@
 
 backend bucket은 자신이 저장하는 state에서 관리하지 않습니다. bucket Versioning, encryption, public access block, bucket policy가 준비됐다는 별도 evidence가 있어야 remote plan을 허용합니다. backend 예시는 `infra/aws/production/backend/*.s3.tfbackend.example`에 있습니다.
 
-plan role의 backend 권한은 선택한 key와 `<key>.tflock`에만 제한합니다. bucket에는 해당 prefix의 `s3:ListBucket`, state object에는 `s3:GetObject`와 `s3:PutObject`, lock file에는 `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`가 필요합니다. state file의 `s3:DeleteObject` 권한은 주지 않습니다. 이 role은 AWS resource API에는 read-only이지만 backend state/lock에는 위 exact-object write 예외를 가집니다.
+plan role의 backend 권한은 선택한 key와 `<key>.tflock`에만 제한합니다. bucket에는 해당 prefix의 `s3:ListBucket`, state object에는 `s3:GetObject`와 `s3:PutObject`, lock file에는 `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`가 필요합니다.
+
+state file의 `s3:DeleteObject` 권한은 주지 않습니다. 이 role은 AWS resource API에는 read-only이지만 backend state/lock에는 위 exact-object write 예외를 가집니다.
 
 ## import 순서
 
 실제 resource 목록과 group은 `import-manifest.json`이 machine-readable 기준입니다.
 
-1. **runtime state audit**: backend key, `terraform state list`, 실제 resource ID와 현재 HCL address를 대조합니다. 이미 state에 있는 remote object는 다시 import하지 않습니다.
-2. **runtime 보완**: state에 없는 ECS/ALB/ECR/IAM/CloudWatch resource만 한 종류씩 resource/import block PR로 준비합니다.
-3. **edge 격리**: Route53 TTL, 현재 alias target, ACM renewal/validation owner, DNS rollback owner를 기록합니다. runtime의 Route53 state를 edge로 옮길 때는 중복 import가 아니라 별도 state move 계획을 사용합니다.
-4. **data 격리**: S3 backup/versioning, RDS snapshot/deletion protection, Redis snapshot/maintenance 설정을 먼저 확보합니다. S3, RDS, Redis는 같은 import/apply에서 함께 다루지 않습니다.
-5. **cold rollback 격리**: warm EC2/ALB와 legacy ECS service는 제거된 상태를 유지합니다. `legacy-rollback` root는 `enable_cold_rollback=false`가 기본이며 incident 승인 때만 별도 state에 임시 복구 자원을 만듭니다.
+1. runtime state audit: backend key, `terraform state list`, 실제 resource ID와 현재 HCL address를 대조합니다. 이미 state에 있는 remote object는 다시 import하지 않습니다.
+2. runtime 보완: state에 없는 ECS/ALB/ECR/IAM/CloudWatch resource만 한 종류씩 resource/import block PR로 준비합니다.
+3. edge 격리: Route53 TTL, 현재 alias target, ACM renewal/validation owner, DNS rollback owner를 기록합니다. runtime의 Route53 state를 edge로 옮길 때는 중복 import가 아니라 별도 state move 계획을 사용합니다.
+4. data 격리: S3 backup/versioning, RDS snapshot/deletion protection, Redis snapshot/maintenance 설정을 먼저 확보합니다. S3, RDS, Redis는 같은 import/apply에서 함께 다루지 않습니다.
+5. cold rollback 격리: warm EC2/ALB와 legacy ECS service는 제거된 상태를 유지합니다. `legacy-rollback` root는 `enable_cold_rollback=false`가 기본이며 incident 승인 때만 별도 state에 임시 복구 자원을 만듭니다.
 
-각 import PR은 discovery evidence, destination address, import ID 형식, backup, rollback owner, 예상 plan을 포함해야 합니다. 생성된 HCL은 초안으로만 사용하고, import를 수행하기 전 `0 add / 0 change / 0 destroy`에 수렴하도록 검토합니다. import block의 실제 반영도 `terraform apply`이므로 live approval 없이는 실행하지 않습니다.
+각 import PR은 discovery evidence, destination address, import ID 형식, backup, rollback owner, 예상 plan을 포함해야 합니다. 생성된 HCL은 초안으로만 사용하고, import를 수행하기 전 `0 add / 0 change / 0 destroy`에 수렴하도록 검토합니다.
+
+import block의 실제 반영도 `terraform apply`이므로 live approval 없이는 실행하지 않습니다.
 
 ## review and approved apply workflow
 
-`.github/workflows/production-infra-plan.yml`은 `workflow_dispatch` 전용입니다. 일반 검토는 선택한 group과 정확히 일치하는 `<group>-review-only` 확인 문자열과 GitHub Environment `production-infra-plan` reviewer 승인이 필요합니다. Runtime Cache 장애 복구 apply는 성공한 review-only run ID, 현재 40자리 head SHA, `runtime-cache-ingress-apply-<run-id>` 확인 문자열을 모두 요구하며 `production` Environment의 배포 역할로 넘어갑니다.
+`.github/workflows/production-infra-plan.yml`은 `workflow_dispatch` 전용입니다. 일반 검토는 선택한 group과 정확히 일치하는 `<group>-review-only` 확인 문자열과 GitHub Environment `production-infra-plan` reviewer 승인이 필요합니다.
+
+Runtime Cache 장애 복구 apply는 성공한 review-only run ID, 현재 40자리 head SHA, `runtime-cache-ingress-apply-<run-id>` 확인 문자열을 모두 요구하며 `production` Environment의 배포 역할로 넘어갑니다.
 
 필수 GitHub Environment 설정:
 
@@ -53,9 +61,17 @@ vars.PRODUCTION_INFRA_STATE_BUCKET=sketchcatch-terraform-state-555980271919-ap-n
 secrets.PRODUCTION_INFRA_RUNTIME_TFVARS_JSON=<complete runtime tfvars JSON>
 ```
 
-runtime plan은 production 값을 누락해 secret ARN이나 runtime 설정을 제거하는 잘못된 diff를 만들지 않도록 전체 tfvars JSON이 없으면 실패합니다. tfvars JSON에는 secret 원문을 넣지 않고 ECS task가 참조할 Secrets Manager/SSM ARN만 넣습니다. review-only 경로는 binary plan artifact를 저장하지 않습니다. 승인된 Runtime Cache apply 경로만 새 plan의 변경 주소, `create` 동작, Redis TCP 6379, 공통 cache 보안 그룹과 서로 다른 API/worker source를 검증한 뒤 binary plan을 1일 retention artifact로 전달하고, `production` Environment에서 그 파일만 apply한 다음 즉시 삭제합니다. `destroy`, `import`, `-auto-approve`는 포함하지 않습니다.
+runtime plan은 production 값을 누락해 secret ARN이나 runtime 설정을 제거하는 잘못된 diff를 만들지 않도록 전체 tfvars JSON이 없으면 실패합니다. tfvars JSON에는 secret 원문을 넣지 않고 ECS task가 참조할 Secrets Manager/SSM ARN만 넣습니다. review-only 경로는 binary plan artifact를 저장하지 않습니다.
 
-Runtime Cache apply 전에 `production` Environment의 `GitHubActionsDeployRole`에 `infra/aws/iam/github-actions-deploy-policy.json`의 최신 정책이 연결되어 있어야 합니다. 정책은 runtime state 객체와 `.tflock` 객체, 현재 Runtime Cache 보안 그룹 `sg-09d8b7030cba492b4`의 ingress 생성, 생성 결과 조회만 추가로 허용합니다. AWS가 ingress 생성 시 함께 평가하는 신규 `security-group-rule/*` ARN도 허용하지만 exact Cache 보안 그룹 ARN 승인을 동시에 요구하므로 다른 보안 그룹에는 적용할 수 없습니다. provider 기본 태그는 `ec2:CreateAction=AuthorizeSecurityGroupIngress` 조건에서 생성 시점에만 허용합니다. Runtime Cache stack을 교체해 보안 그룹 ID가 바뀌면 정책 템플릿과 정적 검증을 함께 갱신하고 별도 IAM 변경 승인을 받아야 합니다. workflow는 IAM 정책을 자동으로 변경하지 않습니다.
+승인된 Runtime Cache apply 경로만 새 plan의 변경 주소, `create` 동작, Redis TCP 6379, 공통 cache 보안 그룹과 서로 다른 API/worker source를 검증한 뒤 binary plan을 1일 retention artifact로 전달하고, `production` Environment에서 그 파일만 apply한 다음 즉시 삭제합니다.
+
+`destroy`, `import`, `-auto-approve`는 포함하지 않습니다.
+
+Runtime Cache apply 전에 `production` Environment의 `GitHubActionsDeployRole`에 `infra/aws/iam/github-actions-deploy-policy.json`의 최신 정책이 연결되어 있어야 합니다.
+
+정책은 runtime state 객체와 `.tflock` 객체, 현재 Runtime Cache 보안 그룹 `sg-09d8b7030cba492b4`의 ingress 생성, 생성 결과 조회만 추가로 허용합니다. AWS가 ingress 생성 시 함께 평가하는 신규 `security-group-rule/*` ARN도 허용하지만 exact Cache 보안 그룹 ARN 승인을 동시에 요구하므로 다른 보안 그룹에는 적용할 수 없습니다.
+
+provider 기본 태그는 `ec2:CreateAction=AuthorizeSecurityGroupIngress` 조건에서 생성 시점에만 허용합니다. Runtime Cache stack을 교체해 보안 그룹 ID가 바뀌면 정책 템플릿과 정적 검증을 함께 갱신하고 별도 IAM 변경 승인을 받아야 합니다. workflow는 IAM 정책을 자동으로 변경하지 않습니다.
 
 plan role에는 다음 두 경계만 허용합니다.
 

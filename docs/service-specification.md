@@ -4,9 +4,11 @@
 
 ## 1. 서비스 정의
 
-SketchCatch는 자연어/음성 요구사항, Source Repository, 기존 cloud state를 입력으로 받아 provider-neutral ?명봽???ㅺ퀎를 만들고, 이를 Architecture Board, IaC Preview, deployment check, managed deployment, CI/CD delivery, Reverse Engineering, Deployment History, Auto Cleanup까지 연결하는 multi-cloud-ready IaC 운영 서비스다.
+SketchCatch는 자연어/음성 요구사항, Source Repository, 기존 cloud state를 입력으로 받아 provider-neutral 인프라 설계를 만들고, 이를 Architecture Board, IaC Preview, deployment check, managed deployment, CI/CD delivery, Reverse Engineering, Deployment History,
 
-MVP 구현은 AWS-first, Terraform-first로 간다. 그러나 제품 설명과 도메인 모델은 AWS-only가 아니다. AWS는 첫 번째 Provider Adapter이며, Azure/GCP 같은 다른 provider는 같은 `Resource`, `?명봽???ㅺ퀎`, `InfrastructureGraph`, `Provider Adapter` 경계를 확장해 붙인다.
+Auto Cleanup까지 연결하는 multi-cloud-ready IaC 운영 서비스다.
+
+MVP 구현은 AWS-first, Terraform-first로 간다. 그러나 제품 설명과 도메인 모델은 AWS-only가 아니다. AWS는 첫 번째 Provider Adapter이며, Azure/GCP 같은 다른 provider는 같은 `Resource`, `인프라 설계`, `InfrastructureGraph`, `Provider Adapter` 경계를 확장해 붙인다.
 
 ## 2. 문제 정의
 
@@ -18,7 +20,7 @@ SketchCatch가 해결하려는 문제는 "클라우드 다이어그램을 예쁘
 | 다이어그램과 Terraform이 따로 논다 | 화면에서 본 구조와 실제 배포 코드가 다를 수 있다 | Architecture Board, Infrastructure Graph, IaC Preview가 같은 Resource identity를 공유한다 |
 | AI 자동화는 편하지만 위험하다 | 잘못된 설계가 조용히 반영되거나 바로 배포될 수 있다 | AI/Bedrock/Amazon Q는 제안과 설명만 하고, 상태 변경은 User-Accepted Change로 제한한다 |
 | 실제 배포는 실패와 비용 사고가 무섭다 | Terraform apply 실패, public 접근, 남은 리소스 비용이 걱정된다 | deployment check, Deployment Safety Gate, 승인된 Plan, Deployment History, Auto Cleanup을 제공한다 |
-| 기존 cloud state를 이해하기 어렵다 | 이미 만들어진 AWS 리소스가 어떤 서비스 구조인지 파악하기 어렵다 | Provider Adapter 기반 Reverse Engineering으로 ?명봽???ㅺ퀎와 import suggestion을 만든다 |
+| 기존 cloud state를 이해하기 어렵다 | 이미 만들어진 AWS 리소스가 어떤 서비스 구조인지 파악하기 어렵다 | Provider Adapter 기반 Reverse Engineering으로 인프라 설계와 import suggestion을 만든다 |
 | 팀 운영 흐름과 개인 실습 흐름이 다르다 | 빠른 검증은 직접 해보고 싶고, 운영 배포는 PR/CI/CD로 관리해야 한다 | managed deployment와 CI/CD delivery를 둘 다 제공한다 |
 
 ## 3. 대상 사용자
@@ -46,7 +48,7 @@ SketchCatch가 해결하려는 문제는 "클라우드 다이어그램을 예쁘
 | managed deployment | Deployment 생성, init, plan, approval, apply, destroy plan, destroy, cancel, logs, log stream, outputs, deployed resources, retention 기반이 있다 | High Security Risk gate와 Cost Risk gate를 Deployment 승인 화면에 더 강하게 연결한다 |
 | deployment check | AI/rule 기반 비용, 보안, 설정 finding과 checklist 기반이 있다 | High는 차단, Medium/Low는 경고/명시 승인으로 정책을 고정한다 |
 | CI/CD delivery | 제품 방향과 데이터 모델이 확정되어 있다 | Source Repository 연결, Terraform PR 생성, pipeline template/status tracking, handoff record를 구현한다 |
-| Reverse Engineering | Provider Adapter 기반 방향과 데이터 모델이 확정되어 있다 | AWS adapter부터 기존 Resource scan, ?명봽???ㅺ퀎 복원, import suggestion을 구현한다 |
+| Reverse Engineering | Provider Adapter 기반 방향과 데이터 모델이 확정되어 있다 | AWS adapter부터 기존 Resource scan, 인프라 설계 복원, import suggestion을 구현한다 |
 | Voice Requirement Input | 제품 결정이 확정되어 있다 | Amazon Transcribe로 전사하고, 사용자 확인 후 Requirement Prompt로 확정하는 UI/API를 구현한다 |
 | Bedrock/Amazon Q | 제품 결정이 확정되어 있다 | Bedrock은 추천/검토/Guardrails/추론 계층, Amazon Q는 AWS 특화 설명/검토 보조로 연결한다 |
 | Redis Runtime Cache | 내부 인프라 역할이 확정되어 있다 | Deployment, Reverse Engineering, CI/CD 상태 추적과 로그 streaming 보조에 사용한다 |
@@ -73,7 +75,7 @@ flowchart LR
   Confirm --> Prompt
   Repo["Source Repository"] --> Evidence["Repository Evidence"]
   Existing["Existing Cloud State"] --> Reverse["Reverse Engineering"]
-  Reverse --> Imported["Imported ?명봽???ㅺ퀎 Draft"]
+  Reverse --> Imported["Imported 인프라 설계 Draft"]
   Prompt --> AI["AI Architecture Recommendation"]
   Evidence --> AI
   AI --> Draft["Architecture Draft"]
@@ -177,12 +179,12 @@ CI/CD delivery는 운영 배포와 팀 리뷰를 위한 경로다. SketchCatch�
 
 ### 7.9 Reverse Engineering
 
-Reverse Engineering은 기존 cloud state를 읽어 ?명봽???ㅺ퀎로 복원하고 IaC 전환 경로를 제안하는 기능이다.
+Reverse Engineering은 기존 cloud state를 읽어 인프라 설계로 복원하고 IaC 전환 경로를 제안하는 기능이다.
 
 | 기능 | 기획 의도 | 개발 기준 | 완료 기준 |
 | --- | --- | --- | --- |
 | Provider Adapter scan | 어떤 provider든 같은 제품 모델로 복원할 수 있게 한다 | MVP는 AWS adapter부터 구현하고 provider별 API 차이는 adapter에 둔다 | scan 결과는 `ReverseEngineeringScan` status로 추적된다 |
-| ?명봽???ㅺ퀎 복원 | resource list가 아니라 서비스 구조를 만든다 | resource identity, relationship, region, dependency를 그래프로 변환한다 | 사용자는 복원된 Architecture Draft를 확인한 뒤 보드에 반영한다 |
+| 인프라 설계 복원 | resource list가 아니라 서비스 구조를 만든다 | resource identity, relationship, region, dependency를 그래프로 변환한다 | 사용자는 복원된 Architecture Draft를 확인한 뒤 보드에 반영한다 |
 | Import suggestion | 기존 리소스를 Terraform 관리 대상으로 전환하는 길을 보여준다 | Terraform import 후보와 위험을 제안한다 | import suggestion은 사용자 확인 전 기존 프로젝트 상태를 덮어쓰지 않는다 |
 | Multi-cloud readiness | AWS 이후 Azure/GCP를 확장할 수 있어야 한다 | 공통 모델은 provider-neutral, provider 특화 값은 adapter-local로 둔다 | 새 provider 추가 시 shared type/API/UI 확장 지점을 문서화한다 |
 
@@ -192,7 +194,7 @@ Cost Analysis는 단순 가격표가 아니라 Cost Risk 관리 기능이다.
 
 | 시점 | 보여줄 것 |
 | --- | --- |
-| ?명봽???ㅺ퀎 | 선택한 Resource 조합의 월 비용 추정, 비용 drivers, 과한 Resource 경고 |
+| 인프라 설계 | 선택한 Resource 조합의 월 비용 추정, 비용 drivers, 과한 Resource 경고 |
 | IaC Preview | Terraform resource 변경으로 인한 비용 변화 가능성 |
 | Deployment Plan | 생성/변경/삭제 대상 기준 비용 위험 |
 | Deployment History | 실제 생성된 리소스와 cleanup 상태 기반 잔여 비용 위험 |
@@ -214,7 +216,7 @@ Runtime Cache 데이터는 짧은 TTL을 가진 보조 상태다. 최종 기록�
 
 | 화면/패널 | 사용자 목적 | 핵심 상태 |
 | --- | --- | --- |
-| Project 목록/상세 | 작업할 ?명봽???ㅺ퀎를 찾고 생성한다 | 프로젝트, 최신 draft, 최근 Deployment 상태 |
+| Project 목록/상세 | 작업할 인프라 설계를 찾고 생성한다 | 프로젝트, 최신 draft, 최근 Deployment 상태 |
 | Workspace Start | 텍스트/음성/Source Repository/Reverse Engineering 중 시작 방식을 고른다 | 입력 방식, 확인 상태 |
 | Architecture Board | Resource와 관계를 보고 수정한다 | `DiagramJson`, selection, parameters, save status |
 | AI Panel | Architecture Draft, Suggestion, 설명을 검토한다 | draft result, LLM explanation, stale state |
@@ -231,7 +233,7 @@ Runtime Cache 데이터는 짧은 TTL을 가진 보조 상태다. 최종 기록�
 | 계약 | 책임 |
 | --- | --- |
 | `RequirementInput` | 텍스트/음성 입력과 사용자 확인 여부 |
-| `ArchitectureJson` | 저장된 ?명봽???ㅺ퀎의 도메인 그래프 |
+| `ArchitectureJson` | 저장된 인프라 설계의 도메인 그래프 |
 | `DiagramJson` | Architecture Board 편집 상태와 Terraform 변환 입력 |
 | `InfrastructureGraph` | Board와 Terraform 사이의 정규화된 중간 그래프 |
 | `AiArchitectureDraftResult` | AI가 제안한 미확정 Architecture Draft |
@@ -280,7 +282,7 @@ Runtime Cache 데이터는 짧은 TTL을 가진 보조 상태다. 최종 기록�
 13. SketchCatch가 승인된 `tfplan`만 Apply하고 로그, outputs, 생성 리소스를 Deployment History에 남긴다.
 14. 실습이 끝나면 Destroy Plan을 만들고 사용자가 승인한 뒤 Auto Cleanup을 실행한다.
 15. 운영 경로가 필요한 경우 CI/CD delivery로 Terraform PR과 pipeline handoff를 만든다.
-16. 기존 cloud state에서 시작하는 경우 Reverse Engineering scan으로 ?명봽???ㅺ퀎와 import suggestion을 만든다.
+16. 기존 cloud state에서 시작하는 경우 Reverse Engineering scan으로 인프라 설계와 import suggestion을 만든다.
 
 ## 12. 보안/운영 정책
 
@@ -315,7 +317,7 @@ MVP에서 하지 않는다.
 
 | 기준 | 성공 신호 |
 | --- | --- |
-| 서비스 흐름 | Requirement Input, Source Repository, Reverse Engineering 중 하나에서 시작해 ?명봽???ㅺ퀎, IaC Preview, deployment check, 실행/hand off까지 이어진다 |
+| 서비스 흐름 | Requirement Input, Source Repository, Reverse Engineering 중 하나에서 시작해 인프라 설계, IaC Preview, deployment check, 실행/hand off까지 이어진다 |
 | 안전성 | High Security Risk가 실제 Deployment 전에 차단된다 |
 | 신뢰성 | 승인한 Plan과 Apply 대상이 hash/account/region 기준으로 일치한다 |
 | 운영성 | Deployment History에서 로그, outputs, 생성 리소스, cleanup 상태를 확인할 수 있다 |

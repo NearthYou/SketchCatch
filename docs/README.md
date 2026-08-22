@@ -9,7 +9,7 @@
 | [Product](./product.md) | 제품 정의, MVP 범위, 핵심 여정, 우선순위 | 무엇을 만들지 판단할 때 |
 | [Service Specification](./service-specification.md) | 서비스 흐름, 기능 요구사항, 현재 구현 상태 | 제품 방향을 구현 단위로 풀어볼 때 |
 | [Data Models](./data-models.md) | DB, API, Web, AI, Terraform 공통 계약 | DTO, schema, state를 변경할 때 |
-| [Architecture](./architecture.md) | stack, 저장·실행 경계, 기술 결정 | 시스템 구조나 실행 책임을 변경할 때 |
+| [Architecture](./architecture.md) | stack, 저장, 실행 경계, 기술 결정 | 시스템 구조나 실행 책임을 변경할 때 |
 | [Development](./development.md) | 로컬 실행, Git flow, 협업 규칙, 검증 | 구현 전후 작업 절차를 확인할 때 |
 | [Deployment](./deployment.md) | 운영 배포, 사용자 Deployment, cleanup | Terraform 또는 배포 작업을 다룰 때 |
 
@@ -26,7 +26,7 @@
 | 경로 | 용도 |
 | --- | --- |
 | [`docs/assets`](./assets/) | README와 canonical 문서에서 사용하는 정적 자산 |
-| [`docs/agent-history`](./agent-history/) | 오래된 작업·검증 기록 |
+| [`docs/agent-history`](./agent-history/) | 오래된 작업, 검증 기록 |
 | [`agent-progress.md`](../agent-progress.md) | 현재 작업 상태와 최근 검증 결과 |
 | [`feature_list.json`](../feature_list.json) | machine-readable 기능 및 검증 tracker |
 

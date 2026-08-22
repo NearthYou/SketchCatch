@@ -67,7 +67,9 @@ PROJECT_ASSET_STORAGE_BACKEND=
 PROJECT_ASSET_STORAGE_ROOT=.local-data/project-assets
 ```
 
-`PROJECT_ASSET_STORAGE_BACKEND`를 비워 두면 `development`와 `test`는 `filesystem`, `production`은 `s3`를 선택한다. `PROJECT_ASSET_STORAGE_ROOT`가 상대 경로이면 API process의 `process.cwd()` 기준으로 해석하고, 절대 경로도 허용한다. 기본 root는 `<process.cwd()>/.local-data/project-assets`이며 Git에서 제외된다.
+`PROJECT_ASSET_STORAGE_BACKEND`를 비워 두면 `development`와 `test`는 `filesystem`, `production`은 `s3`를 선택한다. `PROJECT_ASSET_STORAGE_ROOT`가 상대 경로이면 API process의 `process.cwd()` 기준으로 해석하고, 절대 경로도 허용한다.
+
+기본 root는 `<process.cwd()>/.local-data/project-assets`이며 Git에서 제외된다.
 
 로컬에서 S3 동작을 명시적으로 확인할 때만 `PROJECT_ASSET_STORAGE_BACKEND=s3`와 `S3_BUCKET_NAME`을 함께 설정한다. `NODE_ENV=production`은 filesystem 설정을 거부하고 `S3_BUCKET_NAME`이 없는 경우 startup을 실패시킨다.
 
@@ -133,7 +135,7 @@ Codex 작업자는 아래 행동을 하지 않는다.
 - 공통 API 응답 형식이 정해졌다고 가정하지 않는다. 코드에 없으면 팀장에게 확인한다.
 - 다른 팀원이 맡은 실제 AWS apply, Terraform 실행, 인증/권한 저장을 자신의 구현에서 열지 않는다.
 - "나중에 맞추면 됨"으로 shared type과 Zod schema 불일치를 방치하지 않는다.
-- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 확인 없이 ?명봽???ㅺ퀎, IaC Preview, Git 변경, Deployment 실행에 반영하지 않는다.
+- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 확인 없이 인프라 설계, IaC Preview, Git 변경, Deployment 실행에 반영하지 않는다.
 - Representative Use Journey를 위해 실제 서비스 흐름과 다른 데모 전용 상태나 우회 API를 만들지 않는다.
 
 ## 역할별 SSOT 체크

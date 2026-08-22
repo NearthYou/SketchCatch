@@ -12,10 +12,13 @@
 ## 프로젝트 원칙
 
 1. 이 저장소는 SketchCatch입니다.
-2. SketchCatch는 AWS 초보자가 안전하게 AWS 실습 아키텍처를 학습하도록 돕는 서비스입니다.
-3. 현재 단계는 사전 개발 환경 구축 단계입니다.
-4. 명시적으로 요청받기 전까지 실제 AWS 배포, Terraform 실행, AWS SDK 연동, AI SDK 연동, 인증, ORM, 데이터베이스 마이그레이션을 구현하지 않습니다.
-5. Secret, 실제 클라우드 자격 증명, `.env` 파일을 커밋하지 않습니다.
+2. SketchCatch는 multi-cloud-ready IaC operations service입니다.
+3. Terraform은 MVP의 primary IaC이며 AWS는 첫 Provider Adapter입니다. Domain model을 AWS 전용으로 만들지 않습니다.
+4. 제품 흐름은 Requirement Input, Source Repository 또는 Reverse Engineering에서 Architecture Board, IaC Preview, deployment check와 승인된 실행으로 이어집니다.
+5. managed deployment와 CI/CD delivery를 모두 지원합니다.
+6. AI와 자동화는 제안, 설명과 검토를 담당합니다. Board 저장, Terraform handoff, Git 변경과 cloud mutation은 User-Accepted Change를 요구합니다.
+7. Redis는 내부 Runtime Cache이며 사용자 infrastructure resource로 설명하지 않습니다.
+8. Secret, 실제 cloud credential과 `.env` 파일을 commit하지 않습니다.
 
 ## 코드 위치 규칙
 

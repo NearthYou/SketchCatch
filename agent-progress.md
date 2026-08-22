@@ -30,6 +30,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-08-23 - Refresh team documentation and visual evidence
+
+- Continued documentation work under the user-approved override recorded in Issue 582 while leaving the active Architecture Board Compiler workstream untouched.
+- Rewrote the team-first README, design guide, architecture guide, and supporting project documents around the current multi-cloud-ready product direction. Added a current local landing-page capture, three browser-flow captures, and an animated walkthrough.
+- Removed 27 completed planning, evidence, and working-note files after checking that retained documents no longer link to them. No application source, schema, migration, dependency, Terraform resource, cloud state, or deployment behavior changed.
+- Verification passed for the repository harness, lint, typecheck, all five production builds, ten Mermaid diagrams, Markdown links, code fences, and diff whitespace. The unchanged broad baseline remains red: Web passes 1,378 of 1,394 tests, API passes 2,186 of 2,227 with one skipped test, and the types package passes 77 of 78 template checks.
+
 ## Known Risk
 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
