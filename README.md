@@ -77,6 +77,30 @@ Compiler는 Resource, 관계, 설정, 소속과 시각 배치를 제안하지만
 
 관련 source는 `apps/web/features/architecture-board-compiler`와 `apps/web/app/workspace/ai`에 있습니다. 세부 contract는 [data-models.md](./docs/data-models.md#architecture-board-compilation-제안-계약)에 있습니다.
 
+## 문제 해결 과정
+
+### 흩어진 설계 표현을 하나의 변경으로 검토하기
+
+Diagram은 설계 검토를, Terraform은 실행 계획을, cloud state는 실제 결과를 나타냅니다. 세 표현이 따로 바뀌면 적용 전에 무엇을 검토했고 무엇이 달라졌는지 추적하기 어렵습니다.
+
+그래서 Architecture Board를 Resource, 관계, 설정, 소속과 시각 표현을 함께 다루는 기준 모델로 뒀습니다. Compiler는 현재 Board를 바꾸지 않는 proposal과 전체 diff, diagnostics를 만들고 Preview가 변경 범주와 남은 확인 항목을 보여 줍니다.
+
+사용자가 Preview에서 수락한 뒤에만 semantic과 presentation operation을 반영합니다. fingerprint와 expected revision을 다시 확인한 Project Draft 저장이 성공해야 적용 완료로 표시하므로 저장 충돌이나 실패를 성공으로 바꾸지 않습니다.
+
+이 과정이 실제 cloud state와의 일치를 자동으로 보장하는 것은 아닙니다. 실제 cloud mutation은 승인된 Deployment 또는 CI/CD handoff의 별도 safety gate에서만 실행하며, Preview는 그 이전의 검토 경계입니다.
+
+### 재시작될 수 있는 API에서 Terraform 실행 분리하기
+
+Terraform Plan, Apply, Destroy처럼 오래 걸리는 작업을 API process에서 직접 실행하면 재시작이 실행을 끊을 수 있고, 같은 project의 managed deployment와 GitOps 실행이 서로 경쟁할 수 있습니다.
+
+API는 `deployment_jobs`에 durable 상태를 기록하고 project execution lease와 fencing version으로 실행권을 확인합니다. active lease는 즉시 막고, 만료되거나 중단된 실행은 terminal 상태를 확인한 뒤에만 recovery가 새 실행권을 가질 수 있습니다.
+
+production에서는 API가 ECS `RunTask`로 one-off worker를 dispatch합니다. worker는 job ID와 DB access context를 기준으로 `RUNNING` job만 실행하고 결과를 `SUCCEEDED`, `FAILED`, `CANCELLED`로 기록합니다.
+
+중단 신호는 worker의 `AbortSignal`로 전달하고, 취소는 ECS task가 `STOPPED`인지 확인한 뒤에만 완료로 처리합니다. 이 경계는 API가 Terraform child 종료, partial state checkpoint와 fenced terminal 저장을 기다릴 수 있게 합니다.
+
+ECS worker가 실제 mutation을 대신 승인하는 구조는 아닙니다. 실행 전후의 승인, plan과 artifact 검증, account와 region 재확인은 유지하며, worker는 그 확인을 통과한 작업을 분리해 수행합니다.
+
 ## 핵심 선택
 
 | 선택 | 이유와 경계 |
@@ -108,7 +132,7 @@ SketchCatch는 기획, Web, API, database, infrastructure와 CI/CD를 여러 사
 | 고윤서 | Frontend, Backend, Database | 로그인, 회원, project account와 Settings 및 AWS 연결 UX |
 | 이정현 | Frontend, Backend, CI/CD | CI/CD handoff, readiness, setup 자동화와 Delivery 및 Project Draft 흐름 |
 
-제품 전체, 전시와 배포 결과를 특정 개인의 단독 성과로 표시하지 않습니다. 팀원별 세부 범위는 PR과 Git history에서 다시 확인할 수 있습니다.
+제품 전체, 전시와 배포 결과를 특정 팀원의 단독 성과로 표시하지 않습니다. 팀원별 세부 범위는 PR과 Git history에서 다시 확인할 수 있습니다.
 
 ## 로컬 실행
 
