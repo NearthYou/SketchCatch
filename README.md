@@ -79,6 +79,8 @@ Compiler는 Resource, 관계, 설정, 소속과 시각 배치를 제안하지만
 
 ## 문제 해결 과정
 
+각 사례는 문제와 원인, 선택과 구현, 검증과 한계 순서로 정리했습니다.
+
 ### 흩어진 설계 표현을 하나의 변경으로 검토하기
 
 Diagram은 설계 검토를, Terraform은 실행 계획을, cloud state는 실제 결과를 나타냅니다. 세 표현이 따로 바뀌면 적용 전에 무엇을 검토했고 무엇이 달라졌는지 추적하기 어렵습니다.
@@ -153,7 +155,7 @@ pnpm dev
 
 ## 검증
 
-### 2026-08-23 fresh checks
+### 2026-08-23 검증 결과
 
 ```bash
 pnpm harness:check
@@ -162,13 +164,13 @@ pnpm typecheck
 pnpm build
 ```
 
-위 check와 아래 focused test는 이 README 수정에서 새로 실행했다.
+위 check와 아래 focused test는 이 README 수정에서 새로 실행했습니다.
 
-- Board: `architecture-board-compiler.test.ts`, `architecture-board-compilation-preview.test.ts`, `architecture-board-semantic-operations.test.ts`, `project-draft-sync.test.ts`는 56/56 통과했다.
-- Worker: `deployment-worker-service.test.ts`, `deployment-worker-dispatcher.test.ts`, `project-execution-lease-service.test.ts`는 20/20 통과했다.
-- Apply: partial-state failure를 고른 `deployment-apply-service.test.ts` 2개 test는 2/2 통과했다.
+- Board: `architecture-board-compiler.test.ts`, `architecture-board-compilation-preview.test.ts`, `architecture-board-semantic-operations.test.ts`, `project-draft-sync.test.ts`는 56/56 통과했습니다.
+- Worker: `deployment-worker-service.test.ts`, `deployment-worker-dispatcher.test.ts`, `project-execution-lease-service.test.ts`는 20/20 통과했습니다.
+- Apply: partial-state failure를 고른 `deployment-apply-service.test.ts` 2개 test는 2/2 통과했습니다.
 
-root `pnpm test`는 이 README 수정에서 다시 실행하지 않았다. live ECS, cloud mutation, ECS worker smoke도 실행하지 않았다.
+root `pnpm test`는 이 README 수정에서 다시 실행하지 않았습니다. live ECS, cloud mutation, ECS worker smoke도 실행하지 않았습니다.
 
 historical only로 `agent-progress.md` 38행은 Web 1,378/1,394, API 2,186/2,227과 1 skipped, types 77/78 template check를 기록한다. 이 broad baseline은 이번 README 수정의 fresh 결과가 아니다.
 
