@@ -508,4 +508,4 @@ worker task가 중단되면 API는 ECS task의 terminal 상태를 확인한 뒤 
 | AI provider | AWS credit 모드에서는 Amazon Q, Bedrock, deterministic fallback 순서로 설명 provider를 선택하며 실제 적용 계약은 provider와 분리한다. |
 | Live Observation | provider-neutral snapshot으로 최대 세 개의 근거 기반 신호를 보여준다. 추측을 사실로 바꾸거나 자동으로 Deployment, AWS Resource를 수정하지 않는다. |
 
-새로운 장기 결정은 별도 문서를 만들기보다 이 섹션과 관련 canonical 문서를 함께 갱신한다. 과거 결정의 상세 배경은 Git history에서 확인한다.
+새로운 장기 결정은 이 섹션과 관련 architecture 문서를 함께 갱신합니다.

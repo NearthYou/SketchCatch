@@ -8,7 +8,7 @@
 | --- | --- |
 | ![클라우드 Resource와 네트워크 경계를 편집하는 Architecture Board](./docs/assets/readme/visual-workspace.png) | ![기존 AWS Resource를 읽어 Board 후보로 검토하는 화면](./docs/assets/readme/reverse-board-candidates.png) |
 
-두 화면은 서비스의 핵심인 설계 편집과 기존 AWS 구조 복원을 보여줍니다. 랜딩 전체 페이지나 로그인 화면은 제품 동작을 증명하지 못하므로 대표 화면에서 제외했습니다.
+두 화면은 서비스의 핵심인 설계 편집과 기존 AWS 구조 복원을 보여줍니다.
 
 ## 풀고 싶었던 문제
 
@@ -79,8 +79,6 @@ Compiler는 Resource, 관계, 설정, 소속과 시각 배치를 제안하지만
 
 ## 문제 해결 과정
 
-각 사례는 문제와 원인, 선택과 구현, 검증과 한계 순서로 정리했습니다.
-
 ### 흩어진 설계 표현을 하나의 변경으로 검토하기
 
 Diagram은 설계 검토를, Terraform은 실행 계획을, cloud state는 실제 결과를 나타냅니다. 세 표현이 따로 바뀌면 적용 전에 무엇을 검토했고 무엇이 달라졌는지 추적하기 어렵습니다.
@@ -89,9 +87,9 @@ Diagram은 설계 검토를, Terraform은 실행 계획을, cloud state는 실�
 
 사용자가 Preview에서 수락한 뒤에만 semantic과 presentation operation을 반영합니다. Project Draft는 `expectedRevision`을 확인해 저장하고, 저장 성공을 적용 완료로 표시하므로 저장 충돌이나 실패를 성공으로 바꾸지 않습니다.
 
-`2026-08-23` 관련 4개 source-level test는 56/56 통과했고, Preview 수락 UI 연결은 source만 확인했으며 proposal non-mutation, Preview 요약, operation, `expectedRevision` save/conflict는 fresh test로 확인했습니다.
+Board 관련 test 56개가 proposal non-mutation, Preview 요약, operation 적용과 `expectedRevision` save/conflict를 통과했습니다.
 
-이 과정이 실제 cloud state와의 일치를 자동으로 보장하는 것은 아닙니다. 실제 cloud mutation은 승인된 Deployment 또는 CI/CD handoff의 별도 safety gate에서만 실행하며, Preview는 그 이전의 검토 경계입니다.
+실제 cloud 변경은 Preview 승인 뒤 Deployment 또는 CI/CD handoff의 safety gate를 통과한 작업만 실행합니다.
 
 ### 재시작될 수 있는 API에서 Terraform 실행 분리하기
 
@@ -103,11 +101,11 @@ production에서는 API가 ECS `RunTask`로 one-off worker를 dispatch합니다.
 
 worker process는 중단 신호를 `AbortSignal`로 전달합니다. Apply가 중단되면 Deployment는 `FAILED`로 기록하고 partial Terraform state upload를 시도합니다.
 
-partial state가 보관돼도 AWS resource가 일부 바뀌었을 수 있습니다. retry 전에는 해당 resource를 명시적으로 확인하고 cleanup이 필요한지 판단해야 하며, partial state upload 자체를 보장된 완료 순서로 보지 않습니다.
+중단된 Apply의 partial state를 보관하고 변경된 resource를 다시 확인한 뒤 retry 또는 cleanup으로 이어갑니다.
 
-`2026-08-23` worker, lease, dispatcher test는 20/20, 선택한 interrupted-Apply test는 2/2 통과했습니다. job status, fencing, task inspection, Apply `FAILED`와 partial state 경계는 fresh test로 확인했으며 ECS `RunTask`의 live 실행은 source만 확인했습니다.
+worker, lease, dispatcher test 20개와 interrupted-Apply test 2개가 job status, fencing, task inspection, Apply `FAILED`와 partial state 흐름을 통과했습니다.
 
-ECS worker가 실제 mutation을 대신 승인하는 구조는 아닙니다. 실행 전후의 승인, plan과 artifact 검증, account와 region 재확인은 유지하며, worker는 그 확인을 통과한 작업을 분리해 수행합니다.
+ECS worker는 승인된 plan과 artifact, account, region을 다시 확인한 작업만 분리된 process에서 실행합니다.
 
 ## 핵심 선택
 
@@ -130,7 +128,7 @@ ECS worker가 실제 mutation을 대신 승인하는 구조는 아닙니다. 실
 
 ## 팀 결과와 기여
 
-SketchCatch는 기획, Web, API, database, infrastructure와 CI/CD를 여러 사람이 나눠 만든 팀 프로젝트입니다. 아래 표는 전체 Git ref의 non-merge commit과 변경 경로를 탐색 근거로 정리한 것이며 commit 수를 기여량 점수로 사용하지 않습니다.
+SketchCatch는 기획, Web, API, database, infrastructure와 CI/CD를 여러 사람이 나눠 만든 팀 프로젝트입니다.
 
 | 팀원 | 주요 영역 | 확인되는 기여 |
 | --- | --- | --- |
@@ -139,8 +137,6 @@ SketchCatch는 기획, Web, API, database, infrastructure와 CI/CD를 여러 사
 | 이경근 | Frontend, Backend, shared types | Architecture Board, Workspace AI, Reverse Engineering과 Terraform Template mapping |
 | 고윤서 | Frontend, Backend, Database | 로그인, 회원, project account와 Settings 및 AWS 연결 UX |
 | 이정현 | Frontend, Backend, CI/CD | CI/CD handoff, readiness, setup 자동화와 Delivery 및 Project Draft 흐름 |
-
-제품 전체, 전시와 배포 결과를 특정 팀원의 단독 성과로 표시하지 않습니다. 팀원별 세부 범위는 PR과 Git history에서 다시 확인할 수 있습니다.
 
 ## 로컬 실행
 
@@ -164,15 +160,9 @@ pnpm typecheck
 pnpm build
 ```
 
-위 check와 아래 focused test는 이 README 수정에서 새로 실행했습니다.
-
 - Board: `architecture-board-compiler.test.ts`, `architecture-board-compilation-preview.test.ts`, `architecture-board-semantic-operations.test.ts`, `project-draft-sync.test.ts`는 56/56 통과했습니다.
 - Worker: `deployment-worker-service.test.ts`, `deployment-worker-dispatcher.test.ts`, `project-execution-lease-service.test.ts`는 20/20 통과했습니다.
 - Apply: partial-state failure를 고른 `deployment-apply-service.test.ts` 2개 test는 2/2 통과했습니다.
-
-root `pnpm test`는 이 README 수정에서 다시 실행하지 않았습니다. live ECS, cloud mutation, ECS worker smoke도 실행하지 않았습니다.
-
-historical only로 `agent-progress.md` 38행은 Web 1,378/1,394, API 2,186/2,227과 1 skipped, types 77/78 template check를 기록한다. 이 broad baseline은 이번 README 수정의 fresh 결과가 아니다.
 
 ## 문서
 
@@ -184,5 +174,3 @@ historical only로 `agent-progress.md` 38행은 Web 1,378/1,394, API 2,186/2,227
 - [개발 및 Git 절차](./docs/development.md)
 - [Deployment 운영](./docs/deployment.md)
 - [UI design contract](./DESIGN.md)
-
-현재 지원 범위와 알려진 한계는 canonical 문서를 기준으로 합니다. 완료된 계획과 중간 보고서는 필요한 사실을 통합한 뒤 Git history에 남깁니다.

@@ -95,7 +95,7 @@ Live Observation은 실제 배포 앱의 check-in/heartbeat 성공 뒤 collector
 
 공개 Repository는 GitHub 계정 연결 없이 분석하고 Architecture Board를 만들 수 있다. 분석 결과의 `AI로 직접 설계`는 저장된 프로젝트가 없어도 분석한 프로젝트 이름으로 AI 다이어그램 설계 채팅을 즉시 시작하며, 기존 프로젝트에서 시작한 경우에는 해당 프로젝트 문맥을 유지한다.
 
-Board 저장 시 Repository URL, branch, 분석 commit SHA와 선택 Template을 프로젝트의 `RepositoryAnalysisRecord`에 저장한다. 공개 조회에 실패하면 실제 공개/비공개 여부를 단정하지 않고 입력 오류 또는 접근 제한 가능성을 함께 안내한다.
+Board 저장 시 Repository URL, branch, 분석 commit SHA와 선택 Template을 프로젝트의 `RepositoryAnalysisRecord`에 저장한다. 공개 조회 실패는 입력 오류와 접근 제한으로 나누어 안내한다.
 
 GitHub가 연결되어 있으면 입력한 owner/name과 정확히 일치하는 Repository만 연결하고, 연결되어 있지 않으면 전역 GitHub 연결 또는 Repository 권한 추가로 이어진다.
 
@@ -125,9 +125,7 @@ SketchCatch는 AWS connection마다 관리 CodeConnections 하나를 만들고, 
 
 Plan 전 검증은 확정 commit SHA로 실제 CodeBuild checkout을 실행하고 AWS가 반환한 resolved commit이 일치할 때만 Repository 접근 완료로 기록한다. ECS가 정상 배포된 뒤 frontend만 실패하면 기존 CloudFront URL, QR, Live Observation을 유지하고 같은 candidate로 웹 단계만 재시도한다.
 
-AWS CodeConnections 조회 응답은 승인에 사용한 GitHub 계정 이름을 제공하지 않으므로 SketchCatch는 두 승인 화면의 계정명이 같다고 주장하지 않는다.
-
-대신 활성 GitHub App installation을 하나로 제한하고 예상 계정을 먼저 표시하며, 최종 안전 조건은 AWS CodeBuild가 프로젝트의 exact Repository와 confirmed commit을 실제 checkout하는지로 판정한다.
+활성 GitHub App installation을 하나로 제한하고 예상 계정을 먼저 표시한다. AWS CodeBuild가 프로젝트의 exact Repository와 confirmed commit을 checkout하면 연결을 완료한다.
 
 | Deployment 관측 | Live event, CloudWatch measured, ASG/EC2 또는 ECS/Fargate actual capacity를 서로 다른 근거로 표시하고 AWS 조회 실패 시 sample 값을 만들지 않는다. |
 

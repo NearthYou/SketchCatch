@@ -32,11 +32,11 @@ SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Far
 | API ECS service 안정화 | 3분 43초 | 3분 13초 | 30초 단축 |
 | web ECS service 안정화 | 4분 50초 | 2분 56초 | 1분 54초 단축 |
 
-실측 workflow run은 GitHub Actions `29333857003`이며 API와 web release image는 각각 `sha256:f9726dbead5597539a6501d709bd762890fbd3ba68c8fa551e2eee304800ee4c`, `sha256:383a249b11f9e8d5548a3c3daa82c976a24dd1f6b36a2fc42cb408c7f92d9997`로 고정되었습니다.
+API와 web release image는 content digest로 고정했습니다.
 
 배포 후 `https://sketchcatch.net/`, `/health`, `/health/db`는 모두 200을 반환했습니다. 전체 5분 30초 목표에는 39초 미달했으므로 validation 1분 28초와 API 안정화 3분 13초가 다음 최적화 대상입니다.
 
-같은 branch의 read-only runtime Terraform plan `29334381609`는 production state와 선언 사이에 변경점이 없음을 확인했습니다.
+read-only runtime Terraform plan에서 production state와 선언이 일치했습니다.
 
 ALB는 API의 장시간 연결을 고려해 API 60초, web 30초의 deregistration delay를 사용합니다. 두 target group은 10초 간격으로 2회 성공하면 healthy가 됩니다. API health check grace period는 runtime 준비를 위해 60초를 유지하고 web은 30초를 사용합니다.
 
@@ -168,20 +168,29 @@ rollback baseline과 cleanup/ retention도 유지하며 active artifact나 activ
 
 ### managed deployment 최적화 정책
 
-- 최적화 지원 여부는 provider-neutral `ResourceDefinition.capabilities.deployment`에서 판정합니다. Terraform managed resource는 desired-state 최적화 대상이며 data source, `UNKNOWN`, catalog-only resource는 명시적으로 제외합니다. application artifact 재사용은 Direct/GitOps 공통 Registry v1으로 구현하며 runtime no-op은 별도 후속 계층입니다.
+- 최적화 지원 여부는 provider-neutral `ResourceDefinition.capabilities.deployment`에서 판정합니다.
+- Terraform managed resource는 desired-state 최적화 대상으로 두고 data source, `UNKNOWN`, catalog-only resource는 제외합니다.
+- application artifact 재사용은 Direct/GitOps 공통 Registry v1으로 구현하고 runtime no-op은 별도 계층으로 둡니다.
 - Terraform bundle은 파일명 정렬, JSON key canonicalization, LF 개행으로 정규화합니다. desired-state fingerprint에는 provider lock/identity, 비밀값을 제외한 변수 이름, backend label, project/provider/account/region target, state lineage/serial을 포함합니다.
 - 공유 provider plugin cache와 기존 `.terraform.lock.hcl`을 재사용합니다. state가 있으면 Plan workspace에 복원하고 lineage/serial을 identity에 포함합니다. lock, target, state, Terraform content가 바뀌면 반드시 새 Plan을 실행합니다.
 - Plan 전 artifact, connection, architecture, current Plan, workspace 준비는 병렬화합니다. 정적 Terraform 안전 검사를 통과한 뒤에만 credential을 준비하며, credential/lock/state 준비도 서로 독립적으로 병렬화합니다.
 - 동일 Deployment의 동시 Plan 요청은 single-flight로 합칩니다. pending apply Plan은 실제 `tfplan` hash, S3 optimization evidence v1, Plan summary hash, Pre-Deployment result hash, target/state identity, drift TTL이 모두 일치할 때만 재사용합니다. 기본 drift TTL은 5분입니다.
 - cache lookup, sidecar schema/hash/scope, TTL 검증이 실패하면 배포를 실패시키지 않고 `fallback_execute/cache_validation_failed`로 기록한 뒤 정상 Plan을 실행합니다. evidence 생성, 저장 실패도 기존 Plan 저장과 승인을 손상시키지 않습니다.
-- Terraform Plan이 실제 resource mutation 0건임을 증명할 때만 `no_change/terraform_plan_no_changes`로 기록합니다. Apply 직전에도 사용자 승인, artifact/tfplan hash, account/region, sidecar/summary/TTL을 다시 검증하며, 검증된 no-change만 Terraform Apply를 생략합니다. application/full-stack release 작업은 자체 계약에 따라 계속 실행합니다.
+- Terraform Plan이 실제 resource mutation 0건임을 증명할 때만 `no_change/terraform_plan_no_changes`로 기록합니다.
+- Apply 직전에는 사용자 승인, artifact/tfplan hash, account/region, sidecar/summary/TTL을 다시 검증합니다.
+- 검증된 no-change만 Terraform Apply를 생략하고 application/full-stack release 작업은 자체 계약에 따라 실행합니다.
 - `execute`, `reuse`, `no_change`, `fallback_execute`, `unsupported`와 제한된 reason enum만 저장합니다. duration, lock/state hit, miss, 정규화된 resource address별 action은 로그에 남기고 credential, token, 변수 값, raw Terraform JSON, 자유 형식 metadata는 남기지 않습니다.
 - no-change는 코드 fingerprint만으로 판단하지 않고 state와 drift evidence를 요구합니다. 부분 최적화를 위해 `terraform apply -target`을 사용하지 않으며 Plan/Apply/Destroy의 기존 전체 그래프와 승인 경계를 유지합니다.
-- ApplicationArtifact fingerprint는 repository identity, exact commit, 정규화한 build config, build contract/buildspec version, target OS/architecture, secret-free build input identity만 포함합니다. runner, worker 수, queue, retry 같은 artifact byte 비영향 orchestrator/capacity 값은 제외합니다.
+- ApplicationArtifact fingerprint는 repository identity, exact commit, 정규화한 build config, build contract/buildspec version, target OS/architecture, secret-free build input identity를 포함합니다.
+- runner, worker 수, queue, retry처럼 artifact byte에 영향을 주지 않는 orchestrator와 capacity 값은 제외합니다.
 - 같은 project/fingerprint의 build는 RDS claim/lease로 하나만 소유하고 build 동안 heartbeat로 lease를 갱신합니다. active lease가 있으면 중복 build를 시작하지 않고, 만료 lease만 새 claim이 인수합니다. Redis Runtime Cache는 이 결정의 source of truth가 아닙니다.
-- 재사용 직전 provider adapter가 존재 여부, exact SHA-256 digest, account, region, 승인된 namespace/reference, project ownership scope를 read-only로 검증합니다. S3 custom metadata는 digest 증거로 신뢰하지 않고 provider checksum 또는 실제 object stream을 확인합니다. 실패하면 DB row를 신뢰하지 않고 cache miss로 처리해 정상 build를 실행합니다.
+- 재사용 직전 provider adapter가 존재 여부, exact SHA-256 digest, account, region, 승인된 namespace/reference, project ownership scope를 read-only로 검증합니다.
+- S3 custom metadata 대신 provider checksum 또는 실제 object stream을 확인합니다.
+- 검증에 실패하면 cache miss로 처리하고 정상 build를 실행합니다.
 - RDS에는 identity, digest, provider location metadata, 상태만 저장합니다. 실제 사용자 image/zip/bundle은 사용자 ECR/S3 또는 provider storage에 두며 SketchCatch production ECR/S3에 복사하지 않습니다.
-- GitOps release evidence v1은 계속 허용합니다. v2 `artifact` extension은 canonical fingerprint, build contract, digest, provider location을 strict validation하며 malformed v2를 v1로 downgrade하지 않습니다. 실제 AWS mutation이나 real credential 없이 test double과 read-only adapter 계약으로 검증합니다.
+- GitOps release evidence v1은 계속 허용합니다.
+- v2 `artifact` extension은 canonical fingerprint, build contract, digest, provider location을 strict validation합니다.
+- malformed v2는 v1로 downgrade하지 않고 test double과 read-only adapter 계약으로 검증합니다.
 
 ## CI/CD delivery 정책
 
@@ -342,9 +351,17 @@ CI/CD 설치 PR은 인프라, 앱 최초 managed deployment의 승인 Plan에서
 
 Workspace의 기본 동작은 handoff를 `draft`로 먼저 저장하고 Repository 설정 → AWS Role trust → PR 순서로 한 번에 처리한다.
 
-- `POST /api/git-cicd-handoffs/:handoffId/setup`: 중간 실패나 닫힌 PR이 있는 동일 handoff를 재개한다. 열린 PR은 저장된 head SHA와 handoff manifest ownership이 일치할 때만 갱신하고, 사용자 변경이 있거나 닫힌 PR이면 기존 branch를 보존한 채 새 retry branch와 PR로 복구한다. 이전 Pipeline이 실패했거나 PR이 닫혔다면 안정적인 실패 식별값을 담은 retry-only file을 추가해, retry PR merge가 ECS App workflow를 실제로 다시 시작하게 한다. 최초 설치 PR에는 이 file을 만들지 않는다.
-- Repository 설정: GitHub Environment, target branch 전용 custom deployment branch policy와 Actions variables를 GitHub App installation token으로 수렴시킨 뒤 exact read-back을 통과해야 완료된다. 이미 일치하는 값은 write를 생략한다. 빈 managed variable은 삭제하고 absence를 확인해 과거 Static Site URL/API Base URL이 남지 않게 한다.
-- AWS Role trust: Repository/Environment별 scoped Sid의 GitHub OIDC statement만 추가, 교체하고, 같은 Role의 다른 statement를 보존한다. exact 상태면 IAM write를 생략하고, 변경 시 다시 읽어 검증한다. 검증 증거가 handoff에 저장되지 않으면 PR 단계로 진행하지 않는다. 통합 설정 버튼에 대한 한 번의 사용자 승인이 Repository와 AWS 변경 전체의 승인 경계다.
+- `POST /api/git-cicd-handoffs/:handoffId/setup`: 중간 실패나 닫힌 PR이 있는 동일 handoff를 재개한다.
+- 열린 PR은 저장된 head SHA와 handoff manifest ownership이 일치할 때만 갱신한다.
+- 사용자 변경이 있거나 닫힌 PR이면 기존 branch를 보존한 채 새 retry branch와 PR로 복구한다.
+- retry-only file이 ECS App workflow를 다시 시작하며 최초 설치 PR에는 이 file을 만들지 않는다.
+- Repository 설정은 GitHub Environment, target branch 전용 custom deployment branch policy와 Actions variables를 GitHub App installation token으로 수렴시킨다.
+- exact read-back을 통과하면 완료하고 이미 일치하는 값은 write를 생략한다.
+- 빈 managed variable은 삭제해 과거 Static Site URL과 API Base URL을 정리한다.
+- AWS Role trust는 Repository와 Environment별 scoped Sid의 GitHub OIDC statement만 추가하거나 교체한다.
+- 같은 Role의 다른 statement는 보존하고 exact 상태면 IAM write를 생략한다.
+- 변경 뒤 다시 읽어 검증하고 결과를 handoff에 저장한 뒤 PR 단계로 진행한다.
+- 통합 설정 버튼에 대한 한 번의 사용자 승인이 Repository와 AWS 변경 전체의 승인 경계다.
 - 과거 `pipeline_running`/`pipeline_success` handoff에 새 검증 증거가 없으면 setup endpoint가 Repository/AWS 증거만 보완하고 기존 PR/Pipeline 상태는 유지한다. `pipeline_failed`는 Phase 4의 retry action으로 같은 endpoint를 다시 호출한다.
 - 생성 workflow는 AWS credential 또는 SketchCatch 실행 API를 사용하기 전에 `SKETCHCATCH_PROJECT_ID`가 생성 당시 project ID와 같은지 검사하고, API 호출은 `curl --fail-with-body`로 오류 본문을 남긴다.
 - `scripts/smoke/git-cicd-auto-deploy.ps1`은 위 두 apply 단계, pipeline status, static URL marker 확인을 report JSON으로 남긴다.
@@ -399,7 +416,7 @@ Direct와 GitOps의 실제 인수 검증은 production 계정이나 production S
 
 `preflight`는 AWS CLI로 STS identity를 직접 읽고 승인 account와 비교한다. 이어 sandbox API의 AWS Connection 목록과 `/test`를 호출해 저장된 connection이 현재도 같은 account/region을 AssumeRole할 수 있는지 재검증한다.
 
-production AWS account `555980271919`, `sketchcatch.net`, `NearthYou/SketchCatch`는 기본 deny 대상이다. token 원문은 출력하지 않는다.
+production account, service domain과 team repository는 sandbox 실행의 기본 deny 대상입니다. token 원문은 출력하지 않습니다.
 
 ```powershell
 pnpm sandbox:e2e preflight
@@ -460,7 +477,7 @@ Apply 뒤 Terraform 결과를 먼저 저장하고, 비민감 HTTPS `api_base_url
 
 승인된 Terraform state inventory가 증명하는 Task Definition, IAM role, ALB/Target Group, S3, CloudFront와 파생 URL 변경은 정상적인 Terraform 관리 전이로 저장하고 trusted worker가 실제 AWS 상태를 다시 검증한다.
 
-output 누락, 안전성 위반, 준비 좌표 불일치와 runtime release 검증 실패는 전체 Deployment를 성공으로 표시하지 않으며, 이미 저장한 Terraform state/resource/output 증거는 보존한다.
+output, 안전성, 준비 좌표와 runtime release 검증이 모두 통과해야 Deployment를 성공으로 기록한다. 검증 중 저장한 Terraform state, resource와 output은 복구 단계에서 이어서 사용한다.
 
 Direct release는 GitOps와 같은 `ApplicationRelease`에 version, commit SHA, API OCI와 frontend manifest를 묶은 composite SHA-256, provider revision, frontend VersionId/invalidation, Output URL, health, rollback evidence를 저장한다.
 
@@ -534,7 +551,9 @@ destroy/recreate 또는 account/region, ECS service, health Output URL 변경으
 - Terraform sensitive output은 로그와 응답에 실제 값을 남기지 않습니다.
 - `tfplan`, `terraform.tfstate`, `.terraform.lock.hcl`은 deployment scope object key, server-side encryption, metadata/tag, checksum을 적용해 S3에 저장합니다.
 - `.terraform.lock.hcl`은 성능 최적화용 provider lock artifact이므로 누락되거나 복원에 실패해도 Deployment 실행을 실패시키지 않습니다.
-- 프로젝트 삭제는 versioned artifact bucket의 project/deployment prefix를 `ListObjectVersions`로 반복 조회해 모든 object version과 delete marker를 삭제합니다. API task role에는 해당 prefix로 제한된 `s3:ListBucketVersions`, `s3:DeleteObjectVersion` 권한이 필요하며, 정리가 실패하면 프로젝트 기록을 유지합니다.
+- 프로젝트 삭제는 versioned artifact bucket의 project/deployment prefix를 `ListObjectVersions`로 반복 조회합니다.
+- 모든 object version과 delete marker를 삭제하고 API task role은 해당 prefix의 `s3:ListBucketVersions`, `s3:DeleteObjectVersion`만 사용합니다.
+- 정리가 완료된 뒤 프로젝트 기록을 삭제합니다.
 - Destroy 성공 시 Deployment는 `DESTROYED`가 되고 `stateObjectKey`, 현재 Plan pointer, DeployedResource, TerraformOutput을 정리합니다.
 - Destroy 실패 시 Deployment는 `FAILED`와 `failureStage: "destroy"`로 남기며, 재시도하려면 새 destroy plan과 승인이 필요합니다.
 
@@ -676,12 +695,9 @@ Route53/ACM, S3/RDS/Redis는 같은 import batch로 묶지 않습니다. CloudFo
 
 ## Cold rollback artifact
 
-- encrypted sanitized AMI: `ami-0a65f0b7656bf2221`
-- encrypted snapshot: `snap-04862810b1ed8a101`
-- verified release SHA: `e5bea5ed27316f64258718b3064f67ec03369b53`
-- Docker archive: `s3://sketchcatch-555980271919-ap-northeast-2-an/sketchcatch/docker/e5bea5ed27316f64258718b3064f67ec03369b53.tar.gz`
-- archive size: `166650766` bytes
-- archive SHA256: `138dcc19a7e67ee4a658f2a6139349c3c8161047fdc0782d84514f07158e7161`
+- encrypted sanitized AMI와 snapshot
+- private S3에 보관한 release container archive
+- archive size와 SHA-256 integrity check
 
 AMI에는 runtime secret과 container를 제거했으며 secret은 복구 시 ECS task definition이 참조하는 Secrets Manager/SSM에서 다시 주입합니다.
 
@@ -957,8 +973,15 @@ secret은 승인된 secret manager의 cryptographic generator로 정확히 32-by
 
 안전한 two-phase rotation runbook:
 
-1. Cutover phase: v2 issuance를 중지하고 모든 old process가 previous secret으로 더 이상 발급하지 않는지 확인한다. 마지막 old issuer가 멈춘 뒤 그 absolute UTC instant를 `stoppedIssuingAt`으로 한 번 기록한다. 새 process에는 새 key를 current로, old key를 previous로, 기록한 동일 시각을 `LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT`으로 배포한다. future timestamp는 사용하지 않는다.
-2. Cleanup phase: `stoppedIssuingAt + 15분`이 지난 뒤 previous 3개 값을 함께 제거한다. 정확한 경계부터 previous key는 거부되며, overlap 중에도 Store의 trusted `createdAt`이 `stoppedIssuingAt`보다 늦은 session은 previous key로 검증하거나 재생성하지 않는다. Store create/read는 claims와 같은 `Redis TIME` 또는 injected Store clock에서 canonical `evaluatedAt`을 반환하고 capability operation에 함께 전달한다. API process clock, client timestamp, 별도 clock sample로 대체하지 않는다. process restart나 재배포가 `stoppedIssuingAt`을 현재 시각으로 다시 쓰거나 overlap을 연장해서는 안 된다.
+1. Cutover phase: v2 issuance를 중지하고 모든 old process의 previous secret 발급이 끝났는지 확인한다.
+   마지막 old issuer가 멈춘 absolute UTC instant를 `stoppedIssuingAt`으로 한 번 기록한다.
+   새 process에는 새 key를 current로, old key를 previous로, 같은 시각을 `LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT`으로 배포한다.
+   future timestamp는 사용하지 않는다.
+2. Cleanup phase: `stoppedIssuingAt + 15분`이 지난 뒤 previous 3개 값을 함께 제거한다.
+   이 경계부터 previous key를 거부한다.
+   overlap 중 Store의 trusted `createdAt`이 `stoppedIssuingAt`보다 늦은 session은 previous key로 검증하거나 재생성하지 않는다.
+   Store create/read는 `Redis TIME` 또는 injected Store clock의 canonical `evaluatedAt`을 capability operation에 전달한다.
+   process restart와 재배포는 `stoppedIssuingAt`을 다시 쓰거나 overlap을 연장하지 않는다.
 
 Production에서 `LIVE_OBSERVATION_ENABLED=true`이면 `REDIS_URL`이 실제 Redis/ElastiCache에 연결되고 `PING`, `INCRBY`, `PEXPIRE`, `SET NX PX`를 수행할 수 있어야 합니다. Redis가 없거나 readiness가 실패하면 세션 생성은 `503 LIVE_OBSERVATION_CACHE_UNAVAILABLE`로 차단됩니다.
 
