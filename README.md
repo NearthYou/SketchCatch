@@ -103,7 +103,7 @@ worker process는 중단 신호를 `AbortSignal`로 전달합니다. Apply가 �
 
 partial state가 보관돼도 AWS resource가 일부 바뀌었을 수 있습니다. retry 전에는 해당 resource를 명시적으로 확인하고 cleanup이 필요한지 판단해야 하며, partial state upload 자체를 보장된 완료 순서로 보지 않습니다.
 
-`2026-08-23` worker, lease, dispatcher와 선택한 Apply test는 22/22 통과했고, job status, fencing, task inspection, Apply `FAILED`와 partial state 경계는 fresh test로 확인했으며 ECS `RunTask`의 live 실행은 source만 확인했습니다.
+`2026-08-23` worker, lease, dispatcher test는 20/20, 선택한 interrupted-Apply test는 2/2 통과했습니다. job status, fencing, task inspection, Apply `FAILED`와 partial state 경계는 fresh test로 확인했으며 ECS `RunTask`의 live 실행은 source만 확인했습니다.
 
 ECS worker가 실제 mutation을 대신 승인하는 구조는 아닙니다. 실행 전후의 승인, plan과 artifact 검증, account와 region 재확인은 유지하며, worker는 그 확인을 통과한 작업을 분리해 수행합니다.
 
