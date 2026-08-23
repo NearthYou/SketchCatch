@@ -85,7 +85,7 @@ Diagram은 설계 검토를, Terraform은 실행 계획을, cloud state는 실�
 
 그래서 Architecture Board를 Resource, 관계, 설정, 소속과 시각 표현을 함께 다루는 기준 모델로 뒀습니다. Compiler는 현재 Board를 바꾸지 않는 proposal과 전체 diff, diagnostics를 만들고 Preview가 변경 범주와 남은 확인 항목을 보여 줍니다.
 
-사용자가 Preview에서 수락한 뒤에만 semantic과 presentation operation을 반영합니다. fingerprint와 expected revision을 다시 확인한 Project Draft 저장이 성공해야 적용 완료로 표시하므로 저장 충돌이나 실패를 성공으로 바꾸지 않습니다.
+사용자가 Preview에서 수락한 뒤에만 semantic과 presentation operation을 반영합니다. Project Draft는 `expectedRevision`을 확인해 저장하고, 저장 성공을 적용 완료로 표시하므로 저장 충돌이나 실패를 성공으로 바꾸지 않습니다.
 
 이 과정이 실제 cloud state와의 일치를 자동으로 보장하는 것은 아닙니다. 실제 cloud mutation은 승인된 Deployment 또는 CI/CD handoff의 별도 safety gate에서만 실행하며, Preview는 그 이전의 검토 경계입니다.
 
@@ -95,9 +95,11 @@ Terraform Plan, Apply, Destroy처럼 오래 걸리는 작업을 API process에�
 
 API는 `deployment_jobs`에 durable 상태를 기록하고 project execution lease와 fencing version으로 실행권을 확인합니다. active lease는 즉시 막고, 만료되거나 중단된 실행은 terminal 상태를 확인한 뒤에만 recovery가 새 실행권을 가질 수 있습니다.
 
-production에서는 API가 ECS `RunTask`로 one-off worker를 dispatch합니다. worker는 job ID와 DB access context를 기준으로 `RUNNING` job만 실행하고 결과를 `SUCCEEDED`, `FAILED`, `CANCELLED`로 기록합니다.
+production에서는 API가 ECS `RunTask`로 one-off worker를 dispatch합니다. worker는 job ID와 DB access context를 기준으로 `RUNNING` job만 실행하고, `SUCCEEDED`, `FAILED`, `CANCELLED`는 `deployment_jobs`의 terminal status로 기록합니다.
 
-중단 신호는 worker의 `AbortSignal`로 전달하고, 취소는 ECS task가 `STOPPED`인지 확인한 뒤에만 완료로 처리합니다. 이 경계는 API가 Terraform child 종료, partial state checkpoint와 fenced terminal 저장을 기다릴 수 있게 합니다.
+worker process는 중단 신호를 `AbortSignal`로 전달합니다. Apply가 중단되면 Deployment는 `FAILED`로 기록하고 partial Terraform state upload를 시도합니다.
+
+partial state가 보관돼도 AWS resource가 일부 바뀌었을 수 있습니다. retry 전에는 해당 resource를 명시적으로 확인하고 cleanup이 필요한지 판단해야 하며, partial state upload 자체를 보장된 완료 순서로 보지 않습니다.
 
 ECS worker가 실제 mutation을 대신 승인하는 구조는 아닙니다. 실행 전후의 승인, plan과 artifact 검증, account와 region 재확인은 유지하며, worker는 그 확인을 통과한 작업을 분리해 수행합니다.
 
