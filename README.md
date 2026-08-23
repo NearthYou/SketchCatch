@@ -87,6 +87,8 @@ Diagram은 설계 검토를, Terraform은 실행 계획을, cloud state는 실�
 
 사용자가 Preview에서 수락한 뒤에만 semantic과 presentation operation을 반영합니다. Project Draft는 `expectedRevision`을 확인해 저장하고, 저장 성공을 적용 완료로 표시하므로 저장 충돌이나 실패를 성공으로 바꾸지 않습니다.
 
+`2026-08-23` 관련 4개 source-level test는 56/56 통과했고, Preview 수락 UI 연결은 source만 확인했으며 proposal non-mutation, Preview 요약, operation, `expectedRevision` save/conflict는 fresh test로 확인했습니다.
+
 이 과정이 실제 cloud state와의 일치를 자동으로 보장하는 것은 아닙니다. 실제 cloud mutation은 승인된 Deployment 또는 CI/CD handoff의 별도 safety gate에서만 실행하며, Preview는 그 이전의 검토 경계입니다.
 
 ### 재시작될 수 있는 API에서 Terraform 실행 분리하기
@@ -100,6 +102,8 @@ production에서는 API가 ECS `RunTask`로 one-off worker를 dispatch합니다.
 worker process는 중단 신호를 `AbortSignal`로 전달합니다. Apply가 중단되면 Deployment는 `FAILED`로 기록하고 partial Terraform state upload를 시도합니다.
 
 partial state가 보관돼도 AWS resource가 일부 바뀌었을 수 있습니다. retry 전에는 해당 resource를 명시적으로 확인하고 cleanup이 필요한지 판단해야 하며, partial state upload 자체를 보장된 완료 순서로 보지 않습니다.
+
+`2026-08-23` worker, lease, dispatcher와 선택한 Apply test는 22/22 통과했고, job status, fencing, task inspection, Apply `FAILED`와 partial state 경계는 fresh test로 확인했으며 ECS `RunTask`의 live 실행은 source만 확인했습니다.
 
 ECS worker가 실제 mutation을 대신 승인하는 구조는 아닙니다. 실행 전후의 승인, plan과 artifact 검증, account와 region 재확인은 유지하며, worker는 그 확인을 통과한 작업을 분리해 수행합니다.
 
@@ -149,15 +153,24 @@ pnpm dev
 
 ## 검증
 
+### 2026-08-23 fresh checks
+
 ```bash
 pnpm harness:check
 pnpm lint
 pnpm typecheck
 pnpm build
-pnpm test
 ```
 
-현재 base에는 unrelated broad-suite failure가 기록돼 있습니다. 이 문서 PR은 source를 바꾸지 않으며 harness, documentation link, Mermaid, source diff와 가능한 full check 결과를 그대로 보고합니다.
+위 check와 아래 focused test는 이 README 수정에서 새로 실행했다.
+
+- Board: `architecture-board-compiler.test.ts`, `architecture-board-compilation-preview.test.ts`, `architecture-board-semantic-operations.test.ts`, `project-draft-sync.test.ts`는 56/56 통과했다.
+- Worker: `deployment-worker-service.test.ts`, `deployment-worker-dispatcher.test.ts`, `project-execution-lease-service.test.ts`는 20/20 통과했다.
+- Apply: partial-state failure를 고른 `deployment-apply-service.test.ts` 2개 test는 2/2 통과했다.
+
+root `pnpm test`는 이 README 수정에서 다시 실행하지 않았다. live ECS, cloud mutation, ECS worker smoke도 실행하지 않았다.
+
+historical only로 `agent-progress.md` 38행은 Web 1,378/1,394, API 2,186/2,227과 1 skipped, types 77/78 template check를 기록한다. 이 broad baseline은 이번 README 수정의 fresh 결과가 아니다.
 
 ## 문서
 
