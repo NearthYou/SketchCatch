@@ -4,9 +4,9 @@
 
 ## 실제 화면 기준
 
-![현재 dev landing](docs/assets/readme/current-landing.jpg)
+![Architecture Board](docs/assets/readme/visual-workspace.png)
 
-![현재 Architecture flow](docs/assets/readme/architecture-flow.gif)
+![Reverse Engineering Preview](docs/assets/readme/reverse-board-candidates.png)
 
 mockup보다 실제 route와 component를 우선합니다. 문서 image가 current Web과 다르면 code를 기준으로 image와 설명을 갱신합니다.
 

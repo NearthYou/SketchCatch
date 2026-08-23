@@ -4,11 +4,11 @@
 
 [서비스](https://sketchcatch.net) | [제품 범위](./docs/product.md) | [아키텍처](./docs/architecture.md) | [개발 가이드](./docs/development.md)
 
-![SketchCatch 현재 dev landing](./docs/assets/readme/current-landing.jpg)
+| Architecture Board | Reverse Engineering |
+| --- | --- |
+| ![클라우드 Resource와 네트워크 경계를 편집하는 Architecture Board](./docs/assets/readme/visual-workspace.png) | ![기존 AWS Resource를 읽어 Board 후보로 검토하는 화면](./docs/assets/readme/reverse-board-candidates.png) |
 
-아래 GIF는 2026년 8월 23일 현재 `dev`를 로컬에서 실행해 캡처한 실제 화면입니다. Architecture Draft, Terraform Preview와 Pre-Deployment Review를 같은 workspace에서 전환합니다.
-
-![Architecture Draft에서 배포 전 검토까지의 실제 화면](./docs/assets/readme/architecture-flow.gif)
+두 화면은 서비스의 핵심인 설계 편집과 기존 AWS 구조 복원을 보여줍니다. 랜딩 전체 페이지나 로그인 화면은 제품 동작을 증명하지 못하므로 대표 화면에서 제외했습니다.
 
 ## 풀고 싶었던 문제
 
@@ -31,15 +31,11 @@ flowchart LR
 
 AI는 제안을 만들 수 있지만 Board 저장, Terraform handoff, Git 변경과 Deployment 실행은 사용자가 승인해야 합니다.
 
-## 실제 제품 화면
+## 핵심 구현 화면
 
-| Architecture Board | Diagram과 Terraform 동기화 |
+| Diagram과 Terraform 동기화 | 격리된 Deployment worker |
 | --- | --- |
-| ![클라우드 구조를 편집하는 실제 화면](./docs/assets/readme/visual-workspace.png) | ![diagram과 Terraform을 함께 확인하는 화면](./docs/assets/readme/diagram-code-sync.png) |
-
-| Reverse Engineering | 격리된 Deployment worker |
-| --- | --- |
-| ![기존 AWS 환경을 Board 후보로 읽은 화면](./docs/assets/readme/reverse-board-candidates.png) | ![승인된 작업을 독립 실행 환경에서 처리하는 구조](./docs/assets/readme/isolated-deployment-workers.png) |
+| ![diagram과 Terraform을 같은 중간 표현으로 연결하는 구조](./docs/assets/readme/diagram-code-sync.png) | ![승인된 Terraform 작업을 API와 분리하는 구조](./docs/assets/readme/isolated-deployment-workers.png) |
 
 ## 시스템 구성
 
