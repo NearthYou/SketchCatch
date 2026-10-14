@@ -20,7 +20,7 @@ Region과 Availability Zone은 `.parameterFieldList` 밖의 별도 패널 경로
 
 `.parameterFieldList`의 overflow를 `visible`로 바꾼다. 이 컨테이너의 책임은 필드 그룹의 테두리와 구분선이며, 하위 팝업을 자르는 것이 아니다. 공통 `SelectMenu`의 포커스, 키보드 탐색, ARIA, 선택 상태, 위치 계산은 변경하지 않는다.
 
-공유 `SelectMenu` 전체를 `document.body` Portal로 이동하는 방식은 다른 화면의 위치·스크롤·포커스 계약까지 바꾸므로 이번 범위에서 제외한다. 개별 Resource나 필드별 예외 CSS도 누락 위험이 있어 사용하지 않는다.
+공유 `SelectMenu` 전체를 `document.body` Portal로 이동하는 방식은 다른 화면의 위치 / 스크롤 / 포커스 계약까지 바꾸므로 이번 범위에서 제외한다. 개별 Resource나 필드별 예외 CSS도 누락 위험이 있어 사용하지 않는다.
 
 ## 검증 기준
 

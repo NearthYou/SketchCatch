@@ -2,7 +2,7 @@
 
 ## 목표
 
-`015_AWS템플릿Design시각레이어설계_gg.md`의 계약을 테스트 우선으로 구현하고, 여섯 Template를 실제 Board에서 반복 확인한다. 계획 문서 작성에서 멈추지 않고 구현·QA·커밋까지 끝낸다.
+`015_AWS템플릿Design시각레이어설계_gg.md`의 계약을 테스트 우선으로 구현하고, 여섯 Template를 실제 Board에서 반복 확인한다. 계획 문서 작성에서 멈추지 않고 구현 / QA / 커밋까지 끝낸다.
 
 ## 마일스톤 1. Design Catalog와 presentation 계약
 
@@ -22,7 +22,7 @@
 
 ### 커밋 기준
 
-- Catalog와 presentation 타입·builder가 함께 통과할 때 커밋한다.
+- Catalog와 presentation 타입 / builder가 함께 통과할 때 커밋한다.
 
 ## 마일스톤 2. 실제 Catalog materialization과 계층
 
@@ -61,7 +61,7 @@
 
 - Template별 Design node/parent/edge snapshot
 - 모든 좌표와 area size 40px grid 정렬
-- main/support 간격과 같은 행·열 중심선 계약
+- main/support 간격과 같은 행 / 열 중심선 계약
 - sibling node/caption 충돌 0건
 - child footprint parent 포함
 - visible edge의 node/caption crossing 0건
@@ -78,7 +78,7 @@
 - 로그인된 실제 Board에서 6개 Template를 모두 연다.
 - 각 화면을 기준 PNG와 비교한다.
 - Template마다 12개 항목을 확인한다.
-- 실패 항목이 있으면 좌표·size·routing을 수정한 뒤 같은 QA를 반복한다.
+- 실패 항목이 있으면 좌표 / size / routing을 수정한 뒤 같은 QA를 반복한다.
 - 다음 번호 QA 문서와 `006_문서구조_gg.md`를 갱신한다.
 - `agent-progress.md`, `feature_list.json`, `session-handoff.md`에 검증 근거와 남은 위험을 기록한다.
 

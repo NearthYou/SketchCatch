@@ -29,7 +29,7 @@
 
 ## 2. 변경 전 핵심 위험
 
-### 2.1 Terraform artifact가 너무 신뢰되고 있었다
+### 2.1 Terraform 파일 검증 부족
 
 Terraform artifact는 사용자가 업로드하는 파일이다. 그런데 live Deployment에서는 이 파일이 그대로 서버의 Terraform CLI 입력이 된다.
 
@@ -67,7 +67,7 @@ resource "aws_instance" "web" {
 
 그래서 "Terraform 문법이 맞는가"와 "SketchCatch live apply에 안전한가"를 분리해야 했다.
 
-### 2.2 AWS credentials를 준비하기 전에 artifact 검사가 충분하지 않았다
+### 2.2 AWS 자격 증명 발급 전 파일 검사 부족
 
 기존 흐름에서는 init/plan 과정에서 Terraform artifact를 안전성 검사하기 전에 AWS 임시 credential을 준비할 수 있었다.
 
@@ -79,7 +79,7 @@ resource "aws_instance" "web" {
 - `init`, `plan`, `approval`, `apply` 모두 같은 검사 함수를 통과해야 한다.
 - 검사 실패 시 Deployment는 실패 상태로 기록되어야 하며 workspace는 정리되어야 한다.
 
-### 2.3 plan 승인 뒤 artifact나 AWS connection이 바뀔 수 있었다
+### 2.3 Plan 승인 후 파일과 AWS 연결 변경
 
 Terraform apply는 "사용자가 본 plan"을 그대로 적용해야 한다. 그런데 다음 값 중 하나라도 바뀌면 사용자가 승인한 대상과 실제 apply 대상이 달라진다.
 
@@ -99,7 +99,7 @@ Terraform apply는 "사용자가 본 plan"을 그대로 적용해야 한다. 그
 
 그래서 approval 시점과 apply 시점에 snapshot을 저장하고 다시 비교해야 했다.
 
-### 2.4 실패 또는 취소된 Deployment가 예전 approval로 다시 apply될 수 있었다
+### 2.4 실패하거나 취소한 배포의 승인 재사용
 
 Terraform apply가 실패하거나 취소되면 AWS 리소스가 일부 변경되었을 수 있다. 이 상태에서 같은 approval로 다시 apply를 허용하면 사용자가 새 plan을 확인하지 않고 재시도할 수 있다.
 
@@ -109,7 +109,7 @@ Terraform apply가 실패하거나 취소되면 AWS 리소스가 일부 변경�
 - 다시 plan을 만들고 approval을 새로 받아야 한다.
 - 실패/취소/서버 재시작 복구 시 approval snapshot은 지워야 한다.
 
-### 2.5 Terraform runner output이 무제한으로 쌓일 수 있었다
+### 2.5 Terraform 실행 출력의 무제한 누적
 
 Terraform CLI의 stdout/stderr를 문자열로 계속 누적하면, 악의적이거나 비정상적인 Terraform 실행이 API 프로세스 메모리를 과도하게 사용할 수 있다.
 
@@ -125,7 +125,7 @@ Terraform CLI의 stdout/stderr를 문자열로 계속 누적하면, 악의적이
 - 제한 초과 시 command를 실패 처리하고 프로세스를 종료해야 한다.
 - timeout/cancel 후 grace period를 두고 강제 종료해야 한다.
 
-### 2.6 S3 Terraform artifact 크기와 파일명 경계가 약했다
+### 2.6 S3 Terraform 파일 크기와 이름 검사 부족
 
 Terraform artifact는 S3에서 다운로드해 임시 workspace에 파일로 쓴다.
 
@@ -141,7 +141,7 @@ Terraform artifact는 S3에서 다운로드해 임시 workspace에 파일로 쓴
 - 파일명은 basename만 쓰고, `.tf`가 아니면 `main.tf`로 바꿔야 한다.
 - workspace 준비 중 실패하면 임시 디렉터리를 지워야 한다.
 
-### 2.7 Deployment log stream이 무제한 유지될 수 있었다
+### 2.7 배포 로그 스트림의 수명 제한 부재
 
 `GET /api/deployments/:deploymentId/logs/stream`은 SSE로 log를 계속 보내는 endpoint다.
 
@@ -157,7 +157,7 @@ Terraform artifact는 S3에서 다운로드해 임시 workspace에 파일로 쓴
 - stream duration을 제한해야 한다.
 - DB query 단계에서 `afterSequence`와 `limit`을 적용해야 한다.
 
-### 2.8 production 500 응답이 내부 에러 메시지를 그대로 줄 수 있었다
+### 2.8 운영 환경의 500 응답에 내부 오류 노출
 
 기존 global error handler는 production에서도 500 error message를 그대로 response에 담을 수 있었다.
 
@@ -811,7 +811,7 @@ git diff --check
 
 현재 API 경계는 Terraform 입력과 실행 흐름을 줄였지만, 실제 AWS에서 가능한 최종 작업 범위는 role policy에도 영향을 받는다. 이후에는 `SketchCatchTerraformExecutionRole`의 IAM policy를 live apply allowlist와 맞춰 줄이는 작업이 별도로 필요하다.
 
-### 10.2 scanner는 full HCL parser가 아니다
+### 10.2 Scanner의 HCL 해석 범위
 
 `terraform-artifact-safety.ts`는 MVP live apply에 필요한 block/resource/provider/function 제한을 token 기반으로 검사한다.
 
@@ -840,7 +840,7 @@ git diff --check
 - `required_providers.aws.version` 허용 범위를 정한다.
 - provider version이 없으면 기본 pinning을 생성하거나 approval 전 차단한다.
 
-### 10.4 presigned URL 자체는 실제 byte size를 강제하지 않는다
+### 10.4 Presigned URL의 파일 크기 제한
 
 `terraform_file` presigned upload 요청에는 `byteSize` 제한을 추가했다. 하지만 S3 presigned PUT 자체가 클라이언트가 실제로 올린 content length를 이 코드만으로 완전히 강제하는 구조는 아니다.
 

@@ -1,4 +1,4 @@
-# GitHub · CodeBuild · S3 · ECS/Fargate 통합 배포 구현 계획
+# GitHub  /  CodeBuild  /  S3  /  ECS/Fargate 통합 배포 구현 계획
 
 ## 0. 문서 상태
 
@@ -6,8 +6,8 @@
 - 대상 브랜치: `codex/demo-repository-owner-parity`
 - 대상 사용자 여정: Repository 분석 → 웹 포함 ECS/Fargate Architecture Board → 코드 사전 검증 → Terraform Plan 승인 → Terraform Apply → ECS API 릴리즈 → S3 웹 릴리즈 → HTTPS URL/QR → Live Observation
 - 구현 우선순위: 이번 데모에서는 S3 + CloudFront + ALB + ECS/Fargate 웹 포함 경로만 end-to-end로 완성한다.
-- 문서 성격: 사람에게는 결정 근거를 설명하고, 구현 AI에게는 작업 순서·계약·완료 조건을 제공하는 실행 계획이다.
-- 2026-07-15 필수 리뷰 반영: build/deploy 권한 분리, immutable Artifact 재사용, GitHub release-run API, 상태 전이·취소, scope, 삭제 FK, CloudFront exact release 검증 계약을 확정했다.
+- 문서 성격: 사람에게는 결정 근거를 설명하고, 구현 AI에게는 작업 순서 / 계약 / 완료 조건을 제공하는 실행 계획이다.
+- 2026-07-15 필수 리뷰 반영: build/deploy 권한 분리, immutable Artifact 재사용, GitHub release-run API, 상태 전이 / 취소, scope, 삭제 FK, CloudFront exact release 검증 계약을 확정했다.
 
 ### 0.1 구현 상태 표기 기준 (2026-07-16)
 
@@ -18,9 +18,9 @@
   변경하므로 제품 코드가 자동 수행하지 않는다. 리허설 전에 사용자가 Repository 분석부터 다시 생성해야 한다.
 - 외부 Demo Repository의 README 수정은 이 저장소 구현과 분리한다. Repository 구조는 commit
   `23a87399cbe3456f3f427140f88b8d199ace34f9`에서 정적 확인했지만, 외부 Repository 쓰기와 실제 build는 별도
-  권한·검증 단계다.
+  권한 / 검증 단계다.
 
-이 계획은 데모만을 위한 가짜 성공 상태를 만들지 않는다. 실제 GitHub Repository, 사용자 AWS 계정의 CodeConnections·CodeBuild·S3·CloudFront·ECR·ECS/Fargate·ALB, 실제 Terraform Plan/Apply와 실제 Health Check를 연결한다.
+이 계획은 데모만을 위한 가짜 성공 상태를 만들지 않는다. 실제 GitHub Repository, 사용자 AWS 계정의 CodeConnections / CodeBuild / S3 / CloudFront / ECR / ECS/Fargate / ALB, 실제 Terraform Plan/Apply와 실제 Health Check를 연결한다.
 
 ## 1. 최종 목표
 
@@ -31,7 +31,7 @@
 1. `https://github.com/whiskend/audience-live-check.git`과 `https://github.com/jh-9999/audience-live-check.git`은 owner가 달라도 Repository evidence가 같으면 같은 ECS/Fargate 추천 절차를 밟는다.
 2. 사용자가 선택한 Repository만 GitHub App과 AWS CodeConnections의 대상이 된다.
 3. AWS 연결이 없으면 GitHub 빌드 연결을 시작하지 않고 AWS 연결 안내 모달을 표시한다.
-4. AWS 연결이 있으면 SketchCatch가 CodeConnections와 프로젝트별 CodeBuild 설정을 자동 생성하고, 사용자는 AWS 콘솔의 필수 GitHub 승인만 수행한다.
+4. AWS 연결이 있으면 SketchCatch가 CodeConnections와 프로젝트별 CodeBuild 설정을 자동 생성하고, 사용자는 AWS 콘솔의 필수 GitHub 승인만 실행한다.
 5. 코드 사전 검증이 실패하면 Terraform Plan/Apply를 시작하지 않는다.
 6. 코드 사전 검증이 성공하면 Terraform Plan을 생성하고 사용자 승인을 기다린다.
 7. 코드 사전 검증은 API OCI image와 frontend `dist`를 한 번만 만들고, digest/manifest와 함께 SketchCatch 내부 Artifact S3에 24시간 보관한다.
@@ -40,7 +40,7 @@
 10. ECS 애플리케이션 실패는 RDS의 직전 정상 release를 AWS에서 재검증한 뒤 그 ECS Task Definition으로 자동 복구한다.
 11. ECS 성공 뒤 S3/CloudFront 단계가 실패하면 ECS를 되돌리지 않고 `부분 실패`로 기록하며 동일 frontend Artifact로 웹 릴리즈 단계만 재시도한다.
 12. 인프라 실패는 이전 성공 Terraform 버전을 이용한 새 rollback Plan을 만들고 사용자 승인을 받는다.
-13. 성공하면 CloudFront HTTPS URL을 배포 이력, 복사 버튼, 새 탭, QR, Live Observation에 제공한다. frontend 부분 실패 중에도 기존 URL·QR·Live Observation은 유지하되 웹이 이전 버전일 수 있음을 명시한다.
+13. 성공하면 CloudFront HTTPS URL을 배포 이력, 복사 버튼, 새 탭, QR, Live Observation에 제공한다. frontend 부분 실패 중에도 기존 URL / QR / Live Observation은 유지하되 웹이 이전 버전일 수 있음을 명시한다.
 14. Direct Deployment와 GitHub Actions CI/CD가 겹치면 두 번째 실행을 대기열에 숨기지 않고 명확히 차단한다.
 
 ## 2. 확정된 제품 결정
@@ -50,39 +50,39 @@
 | AWS 선행 조건 | GitHub 빌드 연결 전에 verified AWS 연결이 반드시 필요하다. |
 | AWS 미연결 UX | `AWS 연결이 먼저 필요합니다` 모달과 `취소`, `AWS 연결하러 가기`를 제공한다. |
 | CodeConnections 소유 범위 | verified `AwsConnection` 하나당 SketchCatch 관리 CodeConnections 하나를 만든다. 여러 프로젝트가 공유한다. |
-| GitHub 승인 | AWS가 요구하는 GitHub handshake만 사용자가 AWS 콘솔에서 수행한다. ARN·이름·region은 입력하지 않는다. |
+| GitHub 승인 | AWS가 요구하는 GitHub handshake만 사용자가 AWS 콘솔에서 실행한다. ARN / 이름 / region은 입력하지 않는다. |
 | Repository 범위 | 사용자가 선택한 Repository만 연결한다. 계정의 모든 Repository를 자동 선택하지 않는다. |
 | CodeBuild 소유 범위 | Source Repository를 사용하는 SketchCatch 프로젝트마다 CodeBuild project 하나를 만든다. |
 | CodeBuild 생성 시점 | Repository 분석만으로 만들지 않는다. 배포 콘솔에서 첫 Plan을 만들 때 lazy creation한다. |
 | 첫 버튼 | `빌드 환경 준비 후 Plan 생성`을 사용한다. 준비 완료 뒤에는 `Plan 생성`을 사용한다. |
-| Runtime 범위 | 이번 데모의 완성 범위는 웹 포함 ECS/Fargate다. 정적 웹은 S3/CloudFront, API는 ALB/ECS가 담당한다. Lambda·EC2/ASG의 확장 seam은 보존한다. |
-| 코드 검증 순서 | API·frontend 코드 사전 검증 → Terraform Plan → 사용자 승인 → Terraform Apply → ECS API 릴리즈 → S3 웹 릴리즈 순서다. |
+| Runtime 범위 | 이번 데모의 완성 범위는 웹 포함 ECS/Fargate다. 정적 웹은 S3/CloudFront, API는 ALB/ECS가 담당한다. Lambda / EC2/ASG의 확장 seam은 보존한다. |
+| 코드 검증 순서 | API / frontend 코드 사전 검증 → Terraform Plan → 사용자 승인 → Terraform Apply → ECS API 릴리즈 → S3 웹 릴리즈 순서다. |
 | 사전 검증 | exact commit checkout, API Dockerfile 존재/build, 임시 container port/health, frontend dependency/build, `dist` 생성 확인만 필수다. |
 | 테스트 실행 | Repository의 unit/integration/E2E 또는 임의 test script는 기본 실행하지 않는다. |
 | Artifact 단일 생성 | 사전 검증에서 API OCI image와 frontend `dist`를 한 번만 만들고 SketchCatch 내부 Artifact S3에 저장한다. Apply/release에서는 재빌드하지 않고 승인한 동일 bytes만 사용한다. |
-| 실행 권한 경계 | Repository 코드는 배포 권한이 없는 CodeBuild에서만 실행한다. ECR/ECS와 서비스용 S3/CloudFront 변경은 SketchCatch trusted release worker만 수행한다. |
+| 실행 권한 경계 | Repository 코드는 배포 권한이 없는 CodeBuild에서만 실행한다. ECR/ECS와 서비스용 S3/CloudFront 변경은 SketchCatch trusted release worker만 실행한다. |
 | GitHub Actions 역할 | GitHub Actions는 OIDC로 SketchCatch release-run API만 호출하고 CodeBuild `StartBuild`나 AWS runtime 변경을 직접 수행하지 않는다. |
 | Artifact 보관 | 승인 대기는 생성 후 24시간, frontend 부분 실패 Artifact는 실패 시점부터 24시간 보관한다. 성공 후 큰 임시 파일은 삭제하고 digest/manifest/배포 evidence는 유지한다. 만료 시 자동 재빌드하지 않고 새 사전 검증을 요구한다. |
-| commit 고정 | Plan이 commit `A` 기준이면 승인 전에 `B`가 올라와도 현재 실행은 `A`만 배포한다. `B`는 새 검증·Plan이 필요하다. |
+| commit 고정 | Plan이 commit `A` 기준이면 승인 전에 `B`가 올라와도 현재 실행은 `A`만 배포한다. `B`는 새 검증 / Plan이 필요하다. |
 | Output URL | 사용자가 입력하지 않는다. Terraform Apply 결과의 CloudFront HTTPS URL을 자동 저장한다. |
 | CloudFront routing | default behavior와 frontend route는 private S3 origin으로, `/api/*`와 `/health`는 ALB/ECS origin으로 전달한다. |
 | 릴리즈 순서 | ECS stabilization과 health가 성공하기 전에는 S3의 활성 `index.html`을 바꾸지 않는다. |
 | S3 안전 활성화 | hash가 포함된 JS/CSS/assets를 먼저 업로드하고 `index.html`을 마지막에 교체한다. 데모에서는 기존 정적 asset을 삭제하지 않는다. |
 | 앱 rollback | ECS 실패는 이전 정상 Task Definition으로 자동 rollback하고 실제 health 회복까지 검증한다. S3 실패에는 자동 rollback을 실행하지 않는다. |
-| 부분 실패 | ECS 성공 뒤 S3 upload/index/invalidation이 실패하면 ECS는 유지하고 웹 단계만 재시도한다. 기존 URL·QR·Live Observation은 유지하되 이전 웹일 수 있다는 경고를 표시한다. |
+| 부분 실패 | ECS 성공 뒤 S3 upload/index/invalidation이 실패하면 ECS는 유지하고 웹 단계만 재시도한다. 기존 URL / QR / Live Observation은 유지하되 이전 웹일 수 있다는 경고를 표시한다. |
 | 실행 취소 | ECS 변경 전에는 즉시 취소한다. ECS 변경 뒤에는 직전 정상 revision과 health를 복구한 후 취소 완료로 처리한다. frontend 활성화 뒤 취소는 S3 자동 rollback 없이 `부분 취소`로 기록한다. |
 | 배포 scope | `full_stack`만 preflight → Plan/Apply → app release를 실행한다. `infrastructure`는 app preflight/release를, `application`은 Terraform init/plan/apply를 생략한다. frontend 재시도는 S3/CloudFront 단계만 실행한다. |
 | 인프라 rollback | 직전 성공 인프라 버전만 제안하고, 현재 state에 대한 새 Terraform Plan을 만든 뒤 승인받는다. |
 | 동시 실행 | Direct와 GitHub CI/CD는 하나의 CodeBuild를 재사용하고 프로젝트 단위 lease를 공유한다. 두 번째 실행은 즉시 차단한다. |
 | AWS 연결 삭제 | 실패 이력의 존재만으로 막지 않는다. 실제 리소스/state가 남았거나 실행 중이거나 성공 배포가 미파기 상태일 때만 막는다. |
 | 기존 개발 AWS 연결 | 권한 업데이트 UI를 만들지 않는다. 개발자는 연결을 삭제하고 최신 CloudFormation으로 다시 연결한다. |
-| 기존 CodeConnections | 외부에서 만든 연결을 탐색·재사용하지 않는다. SketchCatch 관리 연결을 별도로 만든다. |
+| 기존 CodeConnections | 외부에서 만든 연결을 탐색 / 재사용하지 않는다. SketchCatch 관리 연결을 별도로 만든다. |
 | UI 디자인 | 기존 Settings card, modal, button, badge, spacing, color token을 재사용하고 responsive/accessibility 상태를 제공한다. |
-| 기존 아키텍처 스펙 | 현재 strict Repository overlay의 S3 + CloudFront + ALB + ECS 구성을 유지·표준화한다. HTTP-only로 저장된 현재 데모 프로젝트만 Repository 분석부터 웹 포함 스펙으로 다시 생성한다. |
+| 기존 아키텍처 스펙 | 현재 strict Repository overlay의 S3 + CloudFront + ALB + ECS 구성을 유지 / 표준화한다. HTTP-only로 저장된 현재 데모 프로젝트만 Repository 분석부터 웹 포함 스펙으로 다시 생성한다. |
 
 ## 3. 범위 밖
 
-- 사용자 임의 Dockerfile 또는 shell command 생성·실행
+- 사용자 임의 Dockerfile 또는 shell command 생성 / 실행
 - 사용자의 모든 GitHub Repository 자동 승인
 - 사용자 보유 CodeConnections 탐색 및 재사용
 - 기존 개발 AWS 연결용 권한 upgrade wizard
@@ -107,28 +107,28 @@
 | CodeBuild project source/auth 사전 조회 | 같은 gateway의 `BatchGetProjects` 경로 | 관리 build environment 검증에 사용한다. |
 | ECS release, health, rollback evidence | Direct gateway와 evidence verifier | AWS CLI 명령 자체는 재사용하지 않고, 오류 code와 AWS evidence 검증 규칙만 trusted release worker로 옮긴다. |
 | Apply 이후 Terraform output/state/resource 저장 | `deployment-apply-service.ts` | URL 연결 뒤 앱 release를 실행하는 순서를 유지한다. |
-| HTTPS `api_base_url` reconciliation | `ecs-fargate-output-reconciliation.ts`, `direct-application-release-service.ts` | CloudFront output을 source of truth로 사용한다. |
+| HTTPS `api_base_url` reconciliation | `ecs-fargate-output-reconciliation.ts`, `direct-application-release-service.ts` | CloudFront output을 기준으로 사용한다. |
 | S3/OAC/CloudFront와 ALB/ECS 분리 아키텍처 | `apps/api/src/services/aiArchitectureDrafts.ts`의 strict Repository overlay | 삭제하지 않고 웹 포함 ECS/Fargate의 표준 생성 규칙으로 유지한다. |
-| CloudFront ordered cache behavior Terraform 렌더링 | `apps/api/src/services/terraform/diagram-to-terraform.ts` | `/api/*`뿐 아니라 `/health`도 ALB origin으로 렌더링·인식하도록 보강한다. |
+| CloudFront ordered cache behavior Terraform 렌더링 | `apps/api/src/services/terraform/diagram-to-terraform.ts` | `/api/*`뿐 아니라 `/health`도 ALB origin으로 렌더링 / 인식하도록 보강한다. |
 | GitHub Actions의 S3 upload/invalidation 계약 | `apps/api/src/git-cicd/git-cicd-workflows.ts`와 관련 workflow 생성 코드 | upload/invalidation 명령은 workflow에서 제거하고, 안전한 활성화 순서와 evidence 규칙만 trusted release worker로 옮긴다. |
 | Application Release ledger | `apps/api/src/releases/project-release-ledger-service.ts` | Direct/GitOps의 URL, commit, digest, rollback evidence를 공통 기록한다. |
 | 배포 이력 URL 링크 | `apps/web/features/workspace/DirectDeploymentScreen.tsx` | 성공 카드, 복사, QR 진입점을 추가한다. |
 | QR와 Live Observation UI | `LiveObservationModal.tsx`, `live-observation.ts` | CloudFront URL과 새 manifest 검증을 연결한다. |
 | 프로젝트당 RUNNING Deployment partial unique index | `deployments_project_running_unique` | Direct 내부 중복 방어로 유지하되 GitOps까지 포괄하는 공용 lease를 추가한다. |
-| AWS Role CloudFormation 생성 | `aws-connection-service.ts` | CodeConnections·CodeBuild lifecycle 권한을 추가한다. |
+| AWS Role CloudFormation 생성 | `aws-connection-service.ts` | CodeConnections / CodeBuild lifecycle 권한을 추가한다. |
 
 ### 4.2 반드시 새로 구현하거나 교체할 부분
 
 | 차이 | 현재 문제 | 목표 |
 | --- | --- | --- |
-| CodeConnections lifecycle | 생성·상태 조회·삭제 구현과 SDK dependency가 없다. | AWS 연결별 PENDING → AVAILABLE 상태를 관리한다. |
-| CodeBuild lifecycle | `BatchGetProjects`와 `StartBuild`만 있고 `CreateProject/UpdateProject/DeleteProject`가 없다. | 프로젝트별 project/service role을 자동 생성·갱신·정리한다. |
+| CodeConnections lifecycle | 생성 / 상태 조회 / 삭제 구현과 SDK dependency가 없다. | AWS 연결별 PENDING → AVAILABLE 상태를 관리한다. |
+| CodeBuild lifecycle | `BatchGetProjects`와 `StartBuild`만 있고 `CreateProject/UpdateProject/DeleteProject`가 없다. | 프로젝트별 project/service role을 자동 생성 / 갱신 / 정리한다. |
 | 현재 `demo-app-build` | 사용자 AWS 계정에 실제 project가 없으면 실행할 수 없다. | 첫 Plan 전에 자동 생성하여 수동 사전 생성 의존성을 없앤다. |
-| Build 순서 | 현재 prepare phase는 ECR push까지 수행하며 ECR 생성 전 Plan과 충돌하고 frontend 사전 검증이 없다. | preflight CodeBuild는 사용자 runtime AWS Resource를 변경하지 않고 API Docker build/health와 frontend build/dist를 함께 확인한 뒤 immutable Artifact를 SketchCatch 내부 S3에 저장한다. 실제 push/upload는 trusted release worker만 수행한다. |
+| Build 순서 | 현재 prepare phase는 ECR push까지 수행하며 ECR 생성 전 Plan과 충돌하고 frontend 사전 검증이 없다. | preflight CodeBuild는 사용자 runtime AWS Resource를 변경하지 않고 API Docker build/health와 frontend build/dist를 함께 확인한 뒤 immutable Artifact를 SketchCatch 내부 S3에 저장한다. 실제 push/upload는 trusted release worker만 실행한다. |
 | ECS 기본값 | `sourceRoot=apps/api`, `containerName=web`, health `/`, template port `80`이 데모 Repository와 맞지 않는다. | API build context `.`, Dockerfile `apps/api/Dockerfile`, container `api`, port `8080`, health `/health`로 통일한다. |
 | Frontend build 기본값 | CodeBuild가 frontend source/output을 명시적으로 받지 않는다. | frontend root `apps/web`, build output `apps/web/dist`를 evidence 기반 기본값으로 저장한다. |
 | Demo Repository | API image와 Vite web이 분리되어 있지만 CodeBuild가 ECS image만 릴리즈한다. | API는 ECR/ECS, Vite `dist`는 S3에 배포하고 둘을 CloudFront 한 주소로 제공한다. |
-| ECS Architecture | base template은 HTTP ALB-only이고 strict overlay에만 S3 web + ECS API가 있다. | 웹 화면 `예`와 Repository evidence가 확인되면 strict overlay를 정식 웹 포함 스펙으로 사용한다. 저장된 HTTP-only 데모 Board는 재분석·재생성한다. |
+| ECS Architecture | base template은 HTTP ALB-only이고 strict overlay에만 S3 web + ECS API가 있다. | 웹 화면 `예`와 Repository evidence가 확인되면 strict overlay를 정식 웹 포함 스펙으로 사용한다. 저장된 HTTP-only 데모 Board는 재분석 / 재생성한다. |
 | CloudFront routing | Terraform의 API traffic 인식이 `/api/*`에 편중되어 `/health` 분리 route를 보장하지 않는다. | default/frontend는 S3, `/api/*`와 `/health`는 ALB/ECS로 고정한다. |
 | Static activation | S3 upload 순서와 부분 실패 계약이 Direct release에 없다. | hashed assets 먼저, `index.html` 마지막, invalidation 순서로 활성화하고 이전 asset은 삭제하지 않는다. |
 | Terraform과 앱 릴리즈 소유권 | Terraform bootstrap `index.html`과 앱 릴리즈가 같은 key를 관리하면 다음 Apply가 데모 페이지로 되돌릴 수 있다. | Terraform은 최초 bootstrap object와 삭제 lifecycle만 소유하고, 배포 후 content/cache metadata drift는 무시한다. 실제 웹 content는 trusted release worker가 소유한다. |
@@ -138,7 +138,7 @@
 | 실행 주체 | Direct는 server override buildspec의 CodeBuild가 ECS를 변경하고, GitOps는 GitHub Actions가 Repository buildspec으로 CodeBuild를 시작한 뒤 ECS를 변경한다. | 두 경로 모두 GitHub/CodeBuild에는 배포 권한을 주지 않고 SketchCatch release-run API와 trusted worker로 통일한다. |
 | 오류 분류 | CodeBuild 실패가 단계별 사용자 언어로 분리되지 않는다. | build environment, API/frontend preflight, ECS release, S3/index/invalidation, ECS rollback error code를 분리한다. |
 | AWS 연결 삭제 | deployment row 하나만 있어도 상태와 무관하게 삭제가 막힌다. | 실제 cloud 영향과 state evidence로 판단한다. |
-| 인프라 rollback | 이전 성공 artifact로 새 rollback Plan을 만드는 제품 흐름이 없다. | 직전 성공 버전을 선택해 새 Plan/승인/Apply를 수행한다. |
+| 인프라 rollback | 이전 성공 artifact로 새 rollback Plan을 만드는 제품 흐름이 없다. | 직전 성공 버전을 선택해 새 Plan/승인/Apply를 실행한다. |
 
 ## 5. 목표 사용자 흐름
 
@@ -217,9 +217,9 @@ sequenceDiagram
 6. trusted release worker가 Artifact checksum과 현재 runtime fingerprint를 재검증한 뒤 ECR/ECS를 활성화하고, 새 ECS task 집합의 health가 성공한 후 frontend를 S3/CloudFront에 활성화한다.
 7. ECS 실패는 자동 rollback evidence를 기록한다. ECS 성공 뒤 S3/CloudFront 실패는 `부분 실패`로 기록하고 동일 frontend Artifact를 사용하는 웹 릴리즈 재시도만 제공한다.
 8. API가 AWS evidence를 재검증해 Release ledger에 기록하고 workflow는 release-run 상태 API로 결과만 확인한다.
-9. 취소·lease 상실 시 API는 실행 중 CodeBuild에 `StopBuild`를 호출하고 terminal 상태까지 확인한다. fencing version이 지난 worker/build 결과는 AWS mutation과 DB 결과 저장에 사용할 수 없다.
+9. 취소 / lease 상실 시 API는 실행 중 CodeBuild에 `StopBuild`를 호출하고 terminal 상태까지 확인한다. fencing version이 지난 worker/build 결과는 AWS mutation과 DB 결과 저장에 사용할 수 없다.
 
-## 6. 웹 포함 ECS/Fargate 아키텍처 유지·보완
+## 6. 웹 포함 ECS/Fargate 아키텍처 유지 / 보완
 
 ### 6.1 표준 스펙
 
@@ -241,7 +241,7 @@ flowchart LR
   RW -->|/* invalidation + verify| CF
 ```
 
-### 6.2 유지·보완 규칙
+### 6.2 유지 / 보완 규칙
 
 - `applyStrictRepositoryEvidencePolicy`의 S3 web bucket, Public Access Block, OAC, bootstrap object, bucket policy, CloudFront distribution을 제거하지 않는다.
 - 웹 화면 `예`와 Repository의 frontend evidence가 함께 확인된 ECS/Fargate 추천에서 이 strict overlay를 표준 웹 포함 스펙으로 사용한다.
@@ -412,10 +412,10 @@ type ProjectExecutionLease = {
 ```
 
 - insert/conditional update transaction으로 한 실행만 승리시킨다.
-- 현재 `holderId`와 `fencingVersion`이 모두 일치하는 실행만 heartbeat·coordinate 기록·release할 수 있다.
+- 현재 `holderId`와 `fencingVersion`이 모두 일치하는 실행만 heartbeat / coordinate 기록 / release할 수 있다.
 - acquire/recovery마다 단조 증가하는 `fencingVersion`을 발급하고 모든 worker 상태 변경 조건에 포함한다. 이전 version의 실행은 Artifact 승인, AWS mutation, Release ledger 저장을 할 수 없다.
 - trusted worker는 모든 mutating AWS call 직전에 현재 lease owner/fencing version을 조건부 확인한다. credential은 worker 밖으로 전달하지 않는다.
-- `activeCodeBuildId`와 `activeWorkerTaskArn`은 중단·startup recovery가 실제 실행 주체를 조회하는 durable coordinate다.
+- `activeCodeBuildId`와 `activeWorkerTaskArn`은 중단 / startup recovery가 실제 실행 주체를 조회하는 durable coordinate다.
 - TTL이 지났더라도 이전 CodeBuild와 worker task의 terminal 상태를 확인하기 전에는 새 holder에게 lease를 넘기지 않는다. 중단/terminal 확인에 실패하면 자동 회수하지 않는다.
 - lease token은 외부 client나 Repository code에 발급하지 않는다. API와 trusted worker는 DB의 holder/fencing 조건을 신뢰 경계로 사용한다.
 - 기본 heartbeat는 30초, TTL은 2분으로 시작하고 실제 가장 긴 AWS call 특성에 맞춰 조정한다.
@@ -468,9 +468,9 @@ type ReleaseCandidate = {
 - CodeBuild에는 exact key별 짧은 만료시간의 presigned multipart upload만 제공한다. 사용자 AWS 계정에 Artifact bucket이나 cross-account S3 IAM 설정을 요구하지 않는다.
 - 저장소는 SketchCatch 운영 AWS 계정의 기존 `S3_BUCKET_NAME` Artifact bucket과 `deployments/*` 경계를 재사용한다. public access block, encryption, object versioning, 24시간 lifecycle/multipart abort와 API/worker 최소 권한을 인프라 코드에 반영한다. Board의 frontend S3와는 별도이며 사용자에게 표시하지 않는다.
 - 승인 대기 candidate는 생성 후 24시간 보관한다. ECS 성공 뒤 frontend가 `partially_failed`가 되면 API archive는 정리하고 frontend archive의 만료를 실패 시점부터 24시간으로 갱신한다. 전체 성공 뒤에는 큰 archive를 삭제하되 작은 frontend manifest object/VersionId와 DB의 digest/evidence는 보존한다.
-- 만료·취소·실패 candidate는 S3 archive를 삭제하고 status/evidence만 보존한다. 만료된 candidate를 자동 재빌드하거나 승인 없이 교체하지 않는다.
+- 만료 / 취소 / 실패 candidate는 S3 archive를 삭제하고 status/evidence만 보존한다. 만료된 candidate를 자동 재빌드하거나 승인 없이 교체하지 않는다.
 
-### 8.5 Deployment 승인·rollback metadata
+### 8.5 Deployment 승인 / rollback metadata
 
 기존 `Deployment`에 다음 source-of-truth를 추가한다.
 
@@ -541,7 +541,7 @@ type DeploymentExecutionEvidence = {
 
 다음 권한은 명시적으로 부여하지 않는다.
 
-- ECR auth/push/pull과 ECS/ELB 변경·조회
+- ECR auth/push/pull과 ECS/ELB 변경 / 조회
 - 서비스용 S3 bucket read/write와 CloudFront invalidation
 - Task Definition register/describe/deregister와 `iam:PassRole`
 - Terraform, CloudFormation, IAM lifecycle, STS `AssumeRole`
@@ -550,7 +550,7 @@ Artifact upload는 사용자 AWS Role 권한이 아니라 SketchCatch API가 can
 
 ### 9.3 trusted release worker 권한
 
-실제 ECR/ECS와 서비스용 S3/CloudFront 변경은 SketchCatch worker가 verified `AwsConnection` role을 assume해 수행한다.
+실제 ECR/ECS와 서비스용 S3/CloudFront 변경은 SketchCatch worker가 verified `AwsConnection` role을 assume해 실행한다.
 
 1. Terraform Apply output과 저장된 resource inventory에서 ECR repository, ECS cluster/service, Target Group, static bucket, CloudFront distribution을 읽는다.
 2. verified `AwsConnection` Role을 read-only verification session policy로 assume한다.
@@ -677,7 +677,7 @@ SketchCatch API/worker 책임:
 - lease acquire/heartbeat/fencing/release
 - server-generated buildspec으로 `StartBuild`
 - returned build ID 즉시 DB 저장과 `BatchGetBuilds` polling
-- cancel·lease 상실 시 `StopBuild` 후 `STOPPED` 또는 다른 terminal status 확인
+- cancel / lease 상실 시 `StopBuild` 후 `STOPPED` 또는 다른 terminal status 확인
 - release worker task 중단과 terminal 확인; 확인 전에는 새 fencing owner 발급 금지
 - candidate checksum 검증과 승인 snapshot 저장
 - trusted release worker dispatch, AWS mutation, rollback, Release ledger 저장
@@ -745,7 +745,7 @@ Dockerfile `RUN`과 package lifecycle script는 Repository가 제어한다. 따�
 - Repository의 `npm test`, `pnpm test`, integration/E2E 자동 실행
 - Repository buildspec 또는 사용자 임의 shell command 실행. install/build는 검증된 allowlist preset만 사용한다.
 
-API는 CodeBuild 성공 문자열만 신뢰하지 않는다. S3 HEAD/VersionId/size/checksum, OCI image digest, frontend file manifest, commit/build fingerprint를 다시 계산·검증한 뒤에만 candidate를 `verified`로 전환한다.
+API는 CodeBuild 성공 문자열만 신뢰하지 않는다. S3 HEAD/VersionId/size/checksum, OCI image digest, frontend file manifest, commit/build fingerprint를 다시 계산 / 검증한 뒤에만 candidate를 `verified`로 전환한다.
 
 ### 11.2 trusted worker `release-activate`
 
@@ -758,7 +758,7 @@ Terraform Apply 성공 뒤 실행한다.
 5. exact resource deploy session policy로 사용자 AWS 연결 Role을 다시 assume
 6. OCI archive를 load하고 commit tag와 immutable digest를 승인 ECR repository에 push
 7. ECR에서 image digest 재조회; expected digest와 다르면 즉시 중단
-8. RDS의 직전 `succeeded` ApplicationRelease Task Definition ARN/image digest를 조회하고 AWS에서 존재·좌표·digest 재검증
+8. RDS의 직전 `succeeded` ApplicationRelease Task Definition ARN/image digest를 조회하고 AWS에서 존재 / 좌표 / digest 재검증
 9. 새 Task Definition 등록과 ECS Service update
 10. 새 Task Definition으로 실행된 task의 running 상태 확인
 11. 해당 새 task ENI/IP/port가 Target Group의 healthy target과 일치하는지 확인하고 `/health` 검증
@@ -793,13 +793,13 @@ Terraform Apply 성공 뒤 실행한다.
 ### 11.4 frontend 부분 실패와 재시도
 
 - ECS 성공 뒤 S3 upload, `index.html` 교체, CloudFront invalidation, final smoke 중 하나가 실패하면 release 상태를 `partially_failed`로 기록한다.
-- 화면에는 `API는 새 버전으로 배포되었지만 웹은 이전 버전일 수 있습니다`라고 표시한다. 기존 CloudFront URL·QR·Live Observation은 계속 제공하되 전체 릴리즈를 성공으로 표시하지 않는다.
+- 화면에는 `API는 새 버전으로 배포되었지만 웹은 이전 버전일 수 있습니다`라고 표시한다. 기존 CloudFront URL / QR / Live Observation은 계속 제공하되 전체 릴리즈를 성공으로 표시하지 않는다.
 - `웹 배포 다시 시도`는 같은 release commit과 검증된 S3/CloudFront resource 좌표를 사용한다.
 - 이번 데모에서는 이전 S3 object version 복원, CloudFront과 ECS의 동시 rollback, 자동 ECS downgrade를 하지 않는다.
 
 ### 11.5 Deployment/ApplicationRelease 상태 전이
 
-| 사건 | Deployment | ApplicationRelease | Terraform state/output | URL·QR·Live Observation | 다음 동작 |
+| 사건 | Deployment | ApplicationRelease | Terraform state/output | URL / QR / Live Observation | 다음 동작 |
 | --- | --- | --- | --- | --- | --- |
 | Apply 성공, app release 실행 중 | `RUNNING` | `running` | 보존 | 기존 URL이 있으면 유지 | release 진행 |
 | ECS 실패, rollback 성공 | `FAILED` | `rolled_back` | 보존 | 복구된 기존 URL 유지 | 앱 재배포 또는 Destroy Plan |
@@ -808,7 +808,7 @@ Terraform Apply 성공 뒤 실행한다.
 | frontend retry 실행 중 | `PARTIALLY_FAILED` | `retrying` | 보존 | 경고 유지 | lease로 중복 차단 |
 | frontend retry 성공 | `SUCCESS` | `succeeded` | 보존 | 성공 표시 | Artifact archive cleanup |
 | frontend retry 재실패 | `PARTIALLY_FAILED` | `partially_failed` + 최신 `failureStage` | 보존 | 경고 유지 | 만료 전 재시도 |
-| ECS mutation 뒤 취소·복구 성공 | `CANCELLED` | `cancelled` | 보존 | 복구된 기존 URL 유지 | 새 실행 가능 |
+| ECS mutation 뒤 취소 / 복구 성공 | `CANCELLED` | `cancelled` | 보존 | 복구된 기존 URL 유지 | 새 실행 가능 |
 | frontend 활성화 뒤 취소 | `PARTIALLY_CANCELED` | `partially_cancelled` | 보존 | 유지하되 불일치 경고 | 새 release 또는 웹 재시도 |
 
 Application release 실패 때문에 이미 저장된 Terraform state/output/resource inventory를 삭제하거나 Apply를 성공하지 않은 것으로 되돌리지 않는다. 반대로 Terraform Apply만 성공했다고 전체 Deployment를 `SUCCESS`로 조기 전환하지 않는다.
@@ -908,7 +908,7 @@ AI는 이 결정적 오류 정보를 설명할 수 있지만 코드를 자동 �
 3. trusted release worker가 runtime authorization fingerprint를 만들 때 같은 URL과 distribution/resource identity를 다시 검증한다.
 4. 성공/rollback/부분 실패 `ApplicationRelease.outputUrl`에 저장한다.
 5. Direct Deployment 이력과 CI/CD Activity에서 클릭 가능한 링크를 제공한다.
-6. 성공 카드에서 `URL 복사`, `새 탭에서 열기`, `QR 보기`를 제공한다. 부분 실패·부분 취소에서도 같은 동작을 유지하되 이전 frontend일 수 있다는 경고를 인접 표시한다.
+6. 성공 카드에서 `URL 복사`, `새 탭에서 열기`, `QR 보기`를 제공한다. 부분 실패 / 부분 취소에서도 같은 동작을 유지하되 이전 frontend일 수 있다는 경고를 인접 표시한다.
 
 ### 13.2 CloudFront 기반 관측 계약
 
@@ -954,7 +954,7 @@ AI는 이 결정적 오류 정보를 설명할 수 있지만 코드를 자동 �
 - S3에 이미 올라간 이전 hash asset과 현재 활성 `index.html`을 삭제하지 않는다.
 - 만료되지 않은 동일 release candidate의 frontend archive/manifest로 실패한 S3 upload/index/invalidation 단계만 다시 실행한다. 다시 build하지 않는다.
 - 화면과 Release ledger에는 `partially_failed`, backend 성공 revision/digest, frontend 실패 stage, retry 가능 여부를 함께 기록한다.
-- 기존 URL·QR·Live Observation은 유지하고 `웹은 이전 버전일 수 있습니다`를 표시한다.
+- 기존 URL / QR / Live Observation은 유지하고 `웹은 이전 버전일 수 있습니다`를 표시한다.
 - 이번 데모 범위에는 S3와 ECS의 완전한 동시 rollback이 포함되지 않는다.
 
 ### 14.3 인프라 rollback
@@ -993,7 +993,7 @@ AI는 이 결정적 오류 정보를 설명할 수 있지만 코드를 자동 �
 - 모든 성공 Deployment가 DESTROYED임
 - 실패 Apply가 명시적으로 cleanup되어 state/resource evidence가 정리됨
 
-현재 `deployments.awsConnectionId`와 `ProjectDeploymentTarget.connectionId`의 `ON DELETE RESTRICT`를 그대로 두면 위 허용 규칙을 구현할 수 없다. Phase 0 migration은 다음을 함께 수행한다.
+현재 `deployments.awsConnectionId`와 `ProjectDeploymentTarget.connectionId`의 `ON DELETE RESTRICT`를 그대로 두면 위 허용 규칙을 구현할 수 없다. Phase 0 migration은 다음을 함께 실행한다.
 
 - Deployment에 비밀이 아닌 `awsAccountIdSnapshot`, `awsRegionSnapshot`, `awsConnectionNameSnapshot`을 저장한다.
 - 과거 이력 보존을 위해 `deployments.awsConnectionId`를 nullable + `ON DELETE SET NULL`로 전환한다.
@@ -1064,7 +1064,7 @@ Apply 이후 진행 상태:
 - `API는 새 버전으로 배포되었지만 웹 배포가 완료되지 않았습니다` banner 표시
 - 성공한 ECS revision/digest와 실패한 frontend stage를 분리해서 표시
 - `웹 배포 다시 시도` 제공, `전체 앱 다시 배포`는 보조 action으로만 제공
-- URL 복사·새 탭·QR·Live Observation은 유지하고 `현재 웹은 이전 버전일 수 있습니다`를 함께 표시
+- URL 복사 / 새 탭 / QR / Live Observation은 유지하고 `현재 웹은 이전 버전일 수 있습니다`를 함께 표시
 - 최종 smoke가 성공하기 전에는 전체 릴리즈를 성공으로 표시하지 않음
 
 차단:
@@ -1079,7 +1079,7 @@ rollback:
 - frontend 실패는 rollback이 아니라 부분 실패와 웹 단계 재시도로 설명
 - 인프라 rollback은 `이전 인프라 버전으로 Plan 생성` 버튼과 영향 확인 modal 제공
 
-### 16.3 디자인·접근성 완료 조건
+### 16.3 디자인 / 접근성 완료 조건
 
 - 기존 card, modal, button, status badge, spacing, color token 재사용
 - 640px 이하 한 열 배치와 full-width primary action
@@ -1122,7 +1122,7 @@ rollback:
 - [x] `apps/web` production build output이 `apps/web/dist/index.html`인 구성을 정적 확인
 - [x] frontend가 same-origin `/api/*`를 사용하는 구성을 정적 확인
 - [x] API OCI archive/image digest와 frontend 파일별 SHA-256 manifest/composite release digest 계약 확인
-- [x] build snapshot에 frontend manifest/lockfile/package-manager version/allowlist install·build preset 고정
+- [x] build snapshot에 frontend manifest/lockfile/package-manager version/allowlist install / build preset 고정
 - [x] 외부 Repository 코드는 수정하지 않고 현재 commit의 build 계약만 정적 확인
 - [ ] 외부 Demo Repository README의 API image와 frontend artifact build command 갱신 — 별도 Repository 쓰기 권한 필요
 
@@ -1132,11 +1132,11 @@ rollback:
 
 완료 조건: 같은 exact commit에서 API Docker image와 frontend `dist`를 독립적으로 생성하고, frontend가 CloudFront same-origin API를 호출한다.
 
-### Phase 2. 웹 포함 ECS/Fargate 스펙 유지·보완
+### Phase 2. 웹 포함 ECS/Fargate 스펙 유지 / 보완
 
 - [x] strict Repository overlay의 S3/OAC/CloudFront + ALB/ECS 구성을 표준 웹 포함 경로로 유지
 - [x] frontend S3 versioning과 `index.html` VersionId release evidence
-- [x] CloudFront default/frontend → S3, `/api/*`·`/health` → ALB edge와 parameter 검증
+- [x] CloudFront default/frontend → S3, `/api/*` / `/health` → ALB edge와 parameter 검증
 - [x] Terraform bootstrap `index.html`의 content/cache drift ignore로 trusted release worker 소유권 분리
 - [x] API port/health/container/name 기본값 통일
 - [x] Terraform 복수 origin/ordered behavior rendering 보강
@@ -1257,13 +1257,13 @@ rollback:
 - [x] 승인 SHA/build fingerprint 재검증
 - [x] Apply 후 CloudFront output reconciliation
 - [x] Apply output/resource inventory AWS 재조회와 exact-resource assume-role session policy/runtime authorization fingerprint
-- [x] 동일 candidate OCI archive 재검증/ECR push/ECS deploy와 새 Task·Target Group health 선확인
+- [x] 동일 candidate OCI archive 재검증/ECR push/ECS deploy와 새 Task / Target Group health 선확인
 - [x] 동일 frontend archive/manifest 재검증, hash asset 선업로드, `index.html` 마지막 교체와 VersionId 저장
 - [x] CloudFront `/*` invalidation Completed와 `/` commit marker, `/health`, 대표 `/api/*` smoke
 - [x] ECS/S3/CloudFront 단계별 release error와 `partially_failed` 상태
 - [x] RDS 직전 succeeded release의 Task Definition/image digest AWS 재검증, ECS automatic/manual rollback과 worker crash recovery
 - [x] S3 실패 시 ECS 유지와 웹 배포 전용 retry
-- [x] ECS 변경 전/후와 frontend 활성화 후 cancel 상태·복구 계약
+- [x] ECS 변경 전/후와 frontend 활성화 후 cancel 상태 / 복구 계약
 - [x] 성공 URL card/복사/QR
 - [x] manual Output URL 입력 의존 제거
 
@@ -1314,7 +1314,7 @@ rollback:
 ### Phase 9. CloudFront Live Observation adapter
 
 - [x] Terraform output/manifest 계약 확장
-- [x] CloudFront default → S3와 `/api/*`·`/health` → ALB origin AWS 재검증
+- [x] CloudFront default → S3와 `/api/*` / `/health` → ALB origin AWS 재검증
 - [x] S3 Public Access Block/OAC/bucket policy 재검증
 - [x] CloudFront URL QR/session eligibility와 부분 실패 경고 상태
 - [x] Target Group metric과 ECS capacity 유지
@@ -1346,7 +1346,7 @@ rollback:
 - [ ] QR 접속과 실제 request 확인 — 실제 AWS 승인 필요
 - [ ] CloudWatch request/error/latency와 diagram path 확인 — 실제 AWS 승인 필요
 - [ ] 의도적 app 실패 자동 rollback 1회 — 실제 AWS 승인 필요
-- [ ] 의도적 frontend 단계 실패 시 ECS 유지·부분 실패·웹 재시도 1회 — 실제 AWS 승인 필요
+- [ ] 의도적 frontend 단계 실패 시 ECS 유지 / 부분 실패 / 웹 재시도 1회 — 실제 AWS 승인 필요
 - [ ] 현재 실행 중 Direct/CI 동시 시작 차단 1회 — 실제 AWS 승인 필요
 - [ ] 생성한 sandbox 리소스 Destroy Plan 승인 후 cleanup — 실제 AWS 승인 필요
 
@@ -1370,7 +1370,7 @@ pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.t
 pnpm --filter @sketchcatch/web exec tsx --test features/workspace/direct-deployment-build-environment.test.ts
 ```
 
-구현 완료 시 코드·인프라 변경이므로 다음 repository 필수 check는 실행한다.
+구현 완료 시 코드 / 인프라 변경이므로 다음 repository 필수 check는 실행한다.
 
 ```bash
 pnpm harness:check
@@ -1446,7 +1446,7 @@ git diff --check
 
 1. `jh-9999/audience-live-check.git` 분석 결과 ECS/Fargate가 표시된다.
 2. GitHub 연결 후 Repository 재선택 없이 같은 분석 상태로 복귀한다.
-3. Board에 CloudFront default → S3와 CloudFront `/api/*`·`/health` → ALB → ECS 경로가 모두 보인다.
+3. Board에 CloudFront default → S3와 CloudFront `/api/*` / `/health` → ALB → ECS 경로가 모두 보인다.
 4. 배포 기본값이 사용자의 수동 입력 없이 완성된다.
 5. CodeConnections는 AVAILABLE이고 CodeBuild project는 해당 project 전용으로 존재한다.
 6. preflight API build/container health와 frontend build/dist 확인이 통과한다.
@@ -1455,7 +1455,7 @@ git diff --check
 9. 실제 release commit SHA가 승인 commit과 같다.
 10. trusted release worker가 승인된 동일 Artifact를 ECR/ECS와 S3에 배포하고, CloudFront URL에서 exact commit marker가 있는 청중 웹페이지와 `/health`가 동작한다.
 11. QR로 접속한 요청이 ALB Target Group과 CloudWatch metric에 집계된다.
-12. Direct Deployment와 CI/CD 화면에 같은 release URL·commit이 표시된다.
+12. Direct Deployment와 CI/CD 화면에 같은 release URL / commit이 표시된다.
 13. ECS app 실패 시 이전 정상 task로 자동 복구된다.
 14. frontend 단계 실패 시 ECS는 유지되고 부분 실패 안내와 웹 배포 재시도가 제공된다.
 15. 동시 실행 두 번째 요청이 명확히 차단된다.
@@ -1463,7 +1463,7 @@ git diff --check
 
 ## 21. 구현 중 금지 사항
 
-- `whiskend` 또는 `jh-9999` owner 문자열로 ECS 추천·배포를 하드코딩하지 않는다.
+- `whiskend` 또는 `jh-9999` owner 문자열로 ECS 추천 / 배포를 하드코딩하지 않는다.
 - 존재하지 않는 `demo-app-build`가 있다고 가정하지 않는다.
 - CodeConnections ARN, CodeBuild name, Output URL을 사용자 필수 입력으로 만들지 않는다.
 - preflight에서 ECR/ECS/CloudFormation/Terraform을 변경하지 않는다.
@@ -1479,7 +1479,7 @@ git diff --check
 - CloudFront domain suffix만 보고 AWS Resource identity를 신뢰하지 않는다.
 - 앱 rollback과 인프라 rollback을 하나의 자동 동작으로 합치지 않는다.
 - frontend 실패를 전체 성공으로 표시하거나 ECS 자동 rollback으로 숨기지 않는다.
-- frontend 부분 실패라는 이유로 기존 URL·QR·Live Observation을 숨기지 않는다. 대신 이전 웹일 수 있음을 표시한다.
+- frontend 부분 실패라는 이유로 기존 URL / QR / Live Observation을 숨기지 않는다. 대신 이전 웹일 수 있음을 표시한다.
 - 이번 데모에서 S3와 ECS의 완전한 동시 rollback을 구현했다고 주장하지 않는다.
 - 실제 사용자 Board를 제품 코드가 무승인으로 덮어쓰지 않는다.
 
@@ -1504,7 +1504,7 @@ git diff --check
 - [x] CodeBuild/Repository code는 build-only 권한만 가지며 trusted worker만 사용자 runtime을 변경한다.
 - [x] GitHub Actions는 OIDC release-run API만 호출하고 StartBuild/StopBuild/AWS mutation은 API/worker가 소유한다.
 - [x] AWS 연결별 CodeConnections와 프로젝트별 CodeBuild가 idempotent하다.
-- [x] preflight와 ECS/S3/CloudFront release error가 코드·문구·resource mutation 기준으로 분리된다.
+- [x] preflight와 ECS/S3/CloudFront release error가 코드 / 문구 / resource mutation 기준으로 분리된다.
 - [x] exact commit과 승인 snapshot이 Apply 직전에 재검증된다.
 - [x] Direct/GitOps가 같은 project lease를 사용한다.
 - [x] fencing version, build ID 즉시 저장, StopBuild terminal 확인, 취소 시 ECS 안전 복구가 동작한다.
@@ -1513,9 +1513,9 @@ git diff --check
 - [x] CloudFront HTTPS URL이 Terraform → target → release → UI → QR로 이어진다.
 - [x] CloudFront `/*` invalidation 완료와 `/` exact commit marker가 확인돼야 release가 성공한다.
 - [x] ECS 자동 rollback, frontend 부분 실패/재시도, 인프라 승인 rollback이 분리된다.
-- [x] 부분 실패에서도 URL·QR·Live Observation을 유지하고 이전 frontend 가능성을 명확히 표시한다.
+- [x] 부분 실패에서도 URL / QR / Live Observation을 유지하고 이전 frontend 가능성을 명확히 표시한다.
 - [x] S3와 ECS의 완전한 동시 rollback은 이번 데모 범위에서 제외됐다고 UI와 문서에 일관되게 표시된다.
 - [x] state-aware AWS 연결 삭제와 managed cleanup retry가 동작한다.
-- [x] 기존 UI와 동일한 디자인·접근성 기준을 focused test/source-contract로 확인했다.
+- [x] 기존 UI와 동일한 디자인 / 접근성 기준을 focused test/source-contract로 확인했다.
 - [x] focused tests와 repository 필수 check를 통과한다. Terraform CLI 검증과 실제 AWS acceptance는 아래 승인 필요 항목으로 분리한다.
-- [ ] 실제 AWS sandbox 검증은 승인·비용·cleanup evidence와 함께 수행했다 — 실제 AWS 승인 필요.
+- [ ] 실제 AWS sandbox 검증은 승인 / 비용 / cleanup evidence와 함께 수행했다 — 실제 AWS 승인 필요.

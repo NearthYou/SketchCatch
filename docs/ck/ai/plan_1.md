@@ -2,19 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Terraform 오류를 Issues 탭에 고정하고, AI chat dock 기반 해결 가이드와 제한된 안전 적용 흐름을 구현한다.
+Goal: Terraform 오류를 Issues 탭에 고정하고, AI chat dock 기반 해결 가이드와 제한된 안전 적용 흐름을 구현한다.
 
-**Architecture:** shared type과 API explanation payload를 먼저 확장한 뒤, 프론트엔드에서 diagnostics 유지 상태를 프로젝트별 `localStorage`와 연결한다. UI는 Terraform 패널 하단 오류 상세를 제거하고 Issues 탭과 AI chat dock으로 책임을 분리한다.
+Architecture: shared type과 API explanation payload를 먼저 확장한 뒤, 프론트엔드에서 diagnostics 유지 상태를 프로젝트별 `localStorage`와 연결한다. UI는 Terraform 패널 하단 오류 상세를 제거하고 Issues 탭과 AI chat dock으로 책임을 분리한다.
 
-**Tech Stack:** TypeScript, React, Next.js, Zod, pnpm, localStorage, existing SketchCatch AI explanation API.
+Tech Stack: TypeScript, React, Next.js, Zod, pnpm, localStorage, existing SketchCatch AI explanation API.
 
 ---
 
 ## Milestone 0. 기준 확인과 작업 격리
 
-**Priority:** P0
+Priority: P0
 
-**Files:**
+Files:
 - Read: `AGENTS.md`
 - Read: `docs/AGENTS.md`
 - Read: `agent-progress.md`
@@ -27,9 +27,9 @@
 
 ## Milestone 1. 타입과 API guidance payload 확장
 
-**Priority:** P0
+Priority: P0
 
-**Files:**
+Files:
 - Modify: `packages/types/src/index.ts`
 - Modify: `apps/api/src/routes/ai.ts`
 - Modify: `apps/api/src/services/aiTerraformErrorExplanation.ts`
@@ -44,9 +44,9 @@
 
 ## Milestone 2. Terraform issue 상태 모델과 localStorage 유지
 
-**Priority:** P0
+Priority: P0
 
-**Files:**
+Files:
 - Create or Modify: `apps/web/features/workspace/terraform-issues-state.ts`
 - Modify: `apps/web/features/workspace/WorkspaceRightPanel.tsx`
 - Test: workspace issues state/unit tests
@@ -60,9 +60,9 @@
 
 ## Milestone 3. Terraform 패널 오류 노출 방식 변경
 
-**Priority:** P1
+Priority: P1
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/TerraformCodePanel.tsx`
 - Modify: `apps/web/features/workspace/workspace.module.css`
 - Test: Terraform panel or workspace right panel tests
@@ -76,9 +76,9 @@
 
 ## Milestone 4. Issues 탭 UI 개선
 
-**Priority:** P1
+Priority: P1
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/TerraformIssuesPanel.tsx`
 - Modify: `apps/web/features/workspace/workspace.module.css`
 - Test: Issues panel rendering tests
@@ -91,9 +91,9 @@
 
 ## Milestone 5. AI chat dock 연결
 
-**Priority:** P1
+Priority: P1
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/ProjectWorkspaceDraftManager.tsx`
 - Modify: `apps/web/features/workspace/WorkspaceAiChatDock.tsx`
 - Modify: `apps/web/features/workspace/api.ts`
@@ -108,9 +108,9 @@
 
 ## Milestone 6. 안전 적용 흐름 구현
 
-**Priority:** P1
+Priority: P1
 
-**Files:**
+Files:
 - Create or Modify: `apps/web/features/workspace/terraform-safe-fixes.ts`
 - Modify: `apps/web/features/workspace/TerraformCodePanel.tsx`
 - Modify: `apps/web/features/workspace/WorkspaceAiChatDock.tsx`
@@ -127,9 +127,9 @@
 
 ## Milestone 7. 검증과 문서 정리
 
-**Priority:** P2
+Priority: P2
 
-**Files:**
+Files:
 - Modify as needed: `docs/data-models.md`
 - Modify as needed: `agent-progress.md`
 - Modify as needed: `session-handoff.md`
@@ -161,7 +161,7 @@
 2. UI 컴포넌트에 Terraform 실행이나 cloud mutation 책임을 넣지 않는다.
 3. safe fix는 deterministic rule-based 로직으로 제한한다.
 4. AI 설명 실패가 Issues 표시 실패로 번지지 않게 한다.
-5. persisted issue state는 RDS source of truth처럼 취급하지 않는다.
+5. persisted issue state는 RDS 기준처럼 취급하지 않는다.
 6. `localStorage`는 프로젝트별 key로 격리한다.
 7. 새 Amazon Q 인프라 의존성은 이번 브랜치에서 만들지 않는다.
 8. 타입 변경은 `packages/types`에서 시작해 API와 web으로 흘린다.

@@ -1,4 +1,4 @@
-# GitHub 전역 연결·Repository Analysis·Delivery Center 통합 계획
+# GitHub 전역 연결 / Repository Analysis / Delivery Center 통합 계획
 
 ## 1. 목적
 
@@ -16,7 +16,7 @@
 
 ## 2. 현재 문제
 
-### 2.1 사용자 흐름이 세 위치로 나뉜다
+### 2.1 세 위치로 나뉜 사용자 흐름
 
 1. Repository 시작 화면에는 공개 URL 분석과 프로젝트 CI/CD 연결이 함께 있다.
 2. Workspace의 배포 modal에는 CI/CD readiness, PR, Pipeline Run과 로그가 있다.
@@ -25,13 +25,13 @@
 
 이 구조에서는 사용자가 GitHub 계정 연결, 프로젝트 Repository 연결, CI/CD 설정과 CI/CD 실행을 같은 종류의 작업으로 오해하기 쉽다.
 
-### 2.2 공개 분석과 인증된 분석이 자동으로 이어지지 않는다
+### 2.2 공개 분석과 인증 분석의 연결 누락
 
 현재 공개 URL 분석은 GitHub App installation을 사용하지 않는 public GitHub API 경로다. 비공개 Repository, 잘못된 URL, 접근 권한 부족, 삭제된 Repository를 입력하면 branch와 commit SHA를 얻지 못하고 분석이 실패한다.
 
 환경설정에 GitHub installation이 이미 연결되어 있어도 URL 분석 실패 후 인증된 Repository Analysis로 자동 전환하지 않는다. 분석 성공 결과가 없으면 같은 화면의 GitHub 연결 영역도 표시되지 않아, 안내 문구와 실제 복구 동작이 일치하지 않는다.
 
-### 2.3 실패 원인을 과도하게 단정할 수 있다
+### 2.3 실패 원인 오판 가능성
 
 연결 전 public GitHub API만으로는 다음 상태를 구분할 수 없다.
 
@@ -42,19 +42,19 @@
 
 또한 rate limit, timeout, GitHub 5xx는 사용자 입력이나 Repository 공개 범위 문제와 분리해야 한다.
 
-### 2.4 Board 생성과 Git/CI/CD 연결 경계가 섞여 있다
+### 2.4 Board 생성과 Git/CI/CD 연결 책임 혼재
 
 현재 공개 Repository는 계정 연결 없이 분석할 수 있지만 Architecture Board 생성 전에 active `SourceRepository` 연결을 요구한다. 설계를 만들기 위해 공개 코드를 읽는 행위와 Repository에 PR을 만들거나 Pipeline을 실행하는 행위가 같은 승인 경계로 묶여 있다.
 
 ## 3. 목표 원칙
 
-1. **공개 분석과 변경 권한을 분리한다.** 공개 Repository 분석과 Board 생성은 GitHub 계정 연결 없이 가능하다.
-2. **비공개 접근은 인증 뒤에만 판단한다.** public 조회 실패만으로 비공개라고 단정하지 않는다.
-3. **GitHub installation은 사용자 단위로 재사용한다.** 환경설정에서 연결한 installation은 모든 프로젝트에서 연결 가능 상태로 조회한다.
-4. **Source Repository 선택은 프로젝트마다 명시적으로 확정한다.** 전역 GitHub 연결이 프로젝트 Repository를 자동 변경하지 않는다.
-5. **설정과 실행을 같은 화면에서 보되 책임은 분리한다.** Delivery Center가 상태를 조합해 보여주지만 기존 계정, Repository, monitoring, deployment target, handoff 계약을 하나의 DB row로 합치지 않는다.
-6. **외부 왕복 뒤 원래 작업으로 돌아온다.** GitHub 연결 또는 권한 추가 후 project, Repository URL, branch, 분석 단계와 사용자 입력을 복원한다.
-7. **기존 안전 게이트를 유지한다.** Git 변경, PR 생성, Deployment는 각각 기존 `UserAcceptedChange`와 승인 절차를 거친다.
+1. 공개 분석과 변경 권한을 분리한다. 공개 Repository 분석과 Board 생성은 GitHub 계정 연결 없이 가능하다.
+2. 비공개 접근은 인증 뒤에만 판단한다. public 조회 실패만으로 비공개라고 단정하지 않는다.
+3. GitHub installation은 사용자 단위로 재사용한다. 환경설정에서 연결한 installation은 모든 프로젝트에서 연결 가능 상태로 조회한다.
+4. Source Repository 선택은 프로젝트마다 명시적으로 확정한다. 전역 GitHub 연결이 프로젝트 Repository를 자동 변경하지 않는다.
+5. 설정과 실행을 같은 화면에서 보되 책임은 분리한다. Delivery Center가 상태를 조합해 보여주지만 기존 계정, Repository, monitoring, deployment target, handoff 계약을 하나의 DB row로 합치지 않는다.
+6. 외부 왕복 뒤 원래 작업으로 돌아온다. GitHub 연결 또는 권한 추가 후 project, Repository URL, branch, 분석 단계와 사용자 입력을 복원한다.
+7. 기존 안전 게이트를 유지한다. Git 변경, PR 생성, Deployment는 각각 기존 `UserAcceptedChange`와 승인 절차를 거친다.
 
 이번 MVP 흐름은 사용자에게 active GitHub installation이 하나인 상태만 지원한다. 개인 계정과 여러 organization installation 사이의 자동 선택 또는 선택 UI는 후속 범위다. 여러 active installation이 감지되면 임의의 installation을 선택하지 않고 전역 GitHub 연결 정리가 필요하다는 안내만 표시한다.
 
@@ -236,13 +236,13 @@ public Repository Analysis API는 최소한 다음 오류를 구분한다.
 - 다른 Repository로 교체하는 시나리오는 이번 범위에서 지원하지 않고 연결을 거부한다.
 - Source Repository에 저장된 마지막 인증 분석 SHA와 공개 분석 revision이 다르면 두 분석 결과가 다르다는 비차단 안내를 표시한다.
 - 이 값은 현재 GitHub head를 자동 조회한 결과라고 표현하지 않는다.
-- commit SHA 차이만으로 Architecture Resource 추가·변경·제거를 추론하거나 CI/CD를 차단하지 않는다.
+- commit SHA 차이만으로 Architecture Resource 추가 / 변경 / 제거를 추론하거나 CI/CD를 차단하지 않는다.
 - 사용자가 원하면 최신 Repository Analysis를 다시 실행할 수 있지만, 재분석 결과가 기존 Architecture Board를 자동 변경하지 않는다.
 - Git/CI/CD handoff는 계속 `sourceRepositoryId`만 받고 identity는 RDS의 active row에서 읽는다.
 
 ## 8. 공개 분석 결과 보존 계약
 
-공개 Repository로 Architecture Board를 만든 뒤 다시 접속해도 Delivery Center가 원래 Repository URL, branch와 분석 revision을 자동 입력할 수 있도록 분석 provenance를 RDS에 영구 저장한다. `sessionStorage`와 Runtime Cache는 외부 왕복과 짧은 재사용만 담당하며 영구 source of truth가 아니다.
+공개 Repository로 Architecture Board를 만든 뒤 다시 접속해도 Delivery Center가 원래 Repository URL, branch와 분석 revision을 자동 입력할 수 있도록 분석 provenance를 RDS에 영구 저장한다. `sessionStorage`와 Runtime Cache는 외부 왕복과 짧은 재사용만 담당하며 영구 기준이 아니다.
 
 Project Draft metadata에 provenance를 섞지 않고 provider-neutral한 별도 `RepositoryAnalysisRecord` 계약을 둔다. 이 record는 공개 URL 분석 사실을 저장할 뿐, provider 권한이 검증된 `SourceRepository`를 대신하지 않는다.
 
@@ -285,7 +285,7 @@ type RepositoryAnalysisRecord = {
 - Repository Analysis 화면은 저장된 record가 있으면 이전 URL, branch와 분석 시각을 표시할 수 있다.
 - Delivery Center는 record를 읽어 Repository와 monitoring branch 입력을 미리 채운다.
 - `sourceRepositoryId`가 없으면 `연결 필요`로 표시하고 PR 생성과 Git/CI/CD handoff를 차단한다.
-- `sourceRepositoryId`가 있어도 provider identity와 현재 권한을 다시 검증한 뒤 변경 작업을 수행한다.
+- `sourceRepositoryId`가 있어도 provider identity와 현재 권한을 다시 검증한 뒤 변경 작업을 실행한다.
 - 이 계약은 새 RDS schema와 Drizzle migration이 필요하다. migration 번호는 구현 착수 시 최신 번호와 다른 active branch를 다시 확인한 뒤 선택한다.
 
 ## 9. 구현 단계
@@ -326,7 +326,7 @@ type RepositoryAnalysisRecord = {
 - 기존 설정 URL의 redirect 또는 compatibility rendering을 추가한다.
 - 오래된 안내 문구와 더 이상 유효하지 않은 테스트를 정리한다.
 
-### Phase 6: canonical 문서와 운영 검증
+### Phase 6: 기준 문서와 운영 검증
 
 - 확정 제품 흐름을 `docs/product.md`에 반영한다.
 - 새 DTO와 persistence 결정을 `docs/data-models.md`에 반영한다.
@@ -410,13 +410,13 @@ type RepositoryAnalysisRecord = {
 10. Git 변경, PR, Pipeline과 cloud Deployment의 기존 사용자 승인 경계가 유지된다.
 11. 관련 집중 테스트와 `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`가 통과한다. 기존 실패가 있으면 이번 변경과의 관련성을 분리해 기록한다.
 
-## 13. 롤백·중단 기준
+## 13. 롤백 / 중단 기준
 
 - 공개 분석 허용 때문에 인증되지 않은 Repository가 Git/CI/CD handoff에 사용되면 배포하지 않는다.
 - GitHub 연결 후 exact target 대신 다른 Repository가 연결될 수 있으면 배포하지 않는다.
 - 전역 installation 재사용이 다른 사용자의 installation 또는 credential 접근을 허용하면 즉시 중단한다.
 - callback 실패 시 사용자의 Repository Analysis 상태가 복구되지 않거나 무한 redirect가 발생하면 배포하지 않는다.
-- Repository Analysis 추론만으로 Resource를 자동 추가·변경·제거하거나 실제 cloud 변경을 수행하면 배포하지 않는다.
+- Repository Analysis 추론만으로 Resource를 자동 추가 / 변경 / 제거하거나 실제 cloud 변경을 수행하면 배포하지 않는다.
 - commit SHA 차이만으로 Architecture 불일치를 확정하거나 정상 CI/CD를 차단하면 배포하지 않는다.
 - Delivery Center가 기존 Apply Plan 승인, PR 생성 승인 또는 Deployment Safety Gate를 우회하면 배포하지 않는다.
 
@@ -436,5 +436,5 @@ type RepositoryAnalysisRecord = {
 - 한 사용자가 여러 GitHub user 또는 organization installation을 동시에 연결했을 때 Repository owner와 권한 범위를 기준으로 자동 선택하는 정책
 - 여러 installation이 같은 Repository에 접근할 수 있을 때 사용자가 installation을 선택하는 UI
 - installation별 기본값, 최근 사용 기록과 프로젝트별 선호 installation 저장
-- Repository의 코드 변경을 근거로 Architecture Resource 추가·변경·제거를 판정하는 semantic drift 분석
-- 분석 근거 신뢰도, 지원 framework별 coverage와 오탐·미탐 기준을 충족한 뒤 제공하는 Architecture 변경 제안
+- Repository의 코드 변경을 근거로 Architecture Resource 추가 / 변경 / 제거를 판정하는 semantic drift 분석
+- 분석 근거 신뢰도, 지원 framework별 coverage와 오탐 / 미탐 기준을 충족한 뒤 제공하는 Architecture 변경 제안

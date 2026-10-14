@@ -424,7 +424,7 @@ SketchCatch AWS 계정 = SketchCatch backend 역할을 만들 계정
 
 운영 환경에서는 장기 access key보다 IAM Role, OIDC, SSO 같은 방식을 우선한다. 여기서는 로컬 실습을 빨리 이해하기 위해 CLI profile 기준으로 설명한다.
 
-### 6.2 profile 이름 정하기
+### 6.2 profile 이름 설정
 
 profile 이름 예시:
 
@@ -870,7 +870,7 @@ roleArn = arn:aws:iam::<USER_ACCOUNT_ID>:role/SketchCatchTerraformExecutionRole
 lastVerifiedAt = <timestamp>
 ```
 
-## 11. deployment init까지 연결하기
+## 11. deployment init까지 연결
 
 이미 project 안에 아래 값이 있어야 한다.
 

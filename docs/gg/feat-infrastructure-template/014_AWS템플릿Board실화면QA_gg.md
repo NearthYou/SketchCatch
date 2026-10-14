@@ -6,7 +6,7 @@
 
 `../old/feat-infrastructure-template/007_AWS템플릿패턴_gg.md`의 여섯 PNG 패턴과 `013_AWS템플릿보드배치매핑_gg.md`의 배치 계약이 실제 Architecture Board에서도 같은 구조로 보이는지 확인한 기록이다.
 
-검증 대상은 화면 표현뿐이다. Resource ID·종류·수·Terraform value·relationship ID/source/target/label·API·배포 동작은 바꾸지 않는다.
+검증 대상은 화면 표현뿐이다. Resource ID / 종류 / 수 / Terraform value / relationship ID/source/target/label / API / 배포 동작은 바꾸지 않는다.
 
 ## 실행 조건
 
@@ -31,7 +31,7 @@
 
 모든 Template는 `materializeCatalogResourceNode`를 통해 먼저 `source: "resource-settings-panel"` Catalog resource로 node를 만들고, 기존 Template의 역할 label만 표시한다. 역할 label은 Terraform logical name이나 임시 아이콘이 아니다.
 
-| Template | Board node 수 | Catalog key/type/icon/kind 일치 | 가짜 node·아이콘 | 결과 |
+| Template | Board node 수 | Catalog key/type/icon/kind 일치 | 가짜 node / 아이콘 | 결과 |
 | --- | ---: | --- | --- | --- |
 | Static Web Hosting | 6 | 6 / 6 | 0 | PASS |
 | Minimal Serverless API | 12 | 12 / 12 | 0 | PASS |
@@ -39,7 +39,7 @@
 | 3-Tier Web App | 30 | 30 / 30 | 0 | PASS |
 | ECS Fargate Container App | 20 | 20 / 20 | 0 | PASS |
 | EKS Container App | 19 | 19 / 19 | 0 | PASS |
-| **합계** | **103** | **103 / 103** | **0** | **PASS** |
+| 합계 | 103 | 103 / 103 | 0 | PASS |
 
 PNG에만 있는 Viewer, Client, Route 53, ACM, AZ frame, Private Subnet, Ingress, Pod, Container, ECR, CloudWatch 같은 노드는 이번 Template 정의에 없으므로 임시로 만들지 않았다. 필요한 node가 Catalog에 없을 때 먼저 Catalog를 확장한다는 `007`의 규칙은 유지한다.
 
@@ -52,11 +52,11 @@ PNG에만 있는 Viewer, Client, Route 53, ACM, AZ frame, Private Subnet, Ingres
 | C1 | 로그인된 실제 Board가 templateId로 열린다 | 로컬 Board URL 진입과 렌더 확인 |
 | C2 | 정의된 Resource 수가 실제 Board와 같다 | DOM/Board resource count 대조 |
 | C3 | 모든 node가 실제 Catalog key/type/icon/kind와 일치한다 | materialization 결과 대조 |
-| C4 | raw Terraform logical name·가짜 AWS tile·임시 emoji가 없다 | 화면 label과 node source 확인 |
+| C4 | raw Terraform logical name / 가짜 AWS tile / 임시 emoji가 없다 | 화면 label과 node source 확인 |
 | C5 | PNG의 주 요청/워크로드 흐름 방향이 보인다 | 실화면 screenshot 비교 |
-| C6 | VPC·API·Cluster·Namespace 등 필요한 parent/group 안에 child가 있다 | parent와 visual footprint 확인 |
-| C7 | IAM·Policy·Permission·Logs·Definition support가 main flow와 분리돼 있다 | 실화면 screenshot 비교 |
-| C8 | 원본의 행·열·layer 순서가 유지된다 | PNG와 Board screenshot 비교 |
+| C6 | VPC / API / Cluster / Namespace 등 필요한 parent/group 안에 child가 있다 | parent와 visual footprint 확인 |
+| C7 | IAM / Policy / Permission / Logs / Definition support가 main flow와 분리돼 있다 | 실화면 screenshot 비교 |
+| C8 | 원본의 행 / 열 / layer 순서가 유지된다 | PNG와 Board screenshot 비교 |
 | C9 | 같은 parent의 sibling caption과 node가 겹치지 않는다 | Board screenshot 및 collision integration test |
 | C10 | child의 visual footprint가 parent area 밖으로 잘리지 않는다 | Board screenshot 및 containment test |
 | C11 | non-containment edge가 다른 resource caption을 가로지르지 않는다 | Board screenshot 및 routing integration test |
@@ -77,16 +77,16 @@ PNG에만 있는 Viewer, Client, Route 53, ACM, AZ frame, Private Subnet, Ingres
 
 | Template | C5~C8에서 확인한 배치 | C6에서 확인한 container/group |
 | --- | --- | --- |
-| Static Web Hosting | CloudFront → S3와 OAC·Public Access·Policy support가 main row를 방해하지 않는다 | root layout만 사용 |
+| Static Web Hosting | CloudFront → S3와 OAC / Public Access / Policy support가 main row를 방해하지 않는다 | root layout만 사용 |
 | Minimal Serverless API | API 내부 단계가 세로로 이어지고 Lambda → DynamoDB가 오른쪽으로 이어진다 | API Gateway가 route/method/integration/deployment/stage를 포함 |
-| Full Serverless Web App | Frontend·Identity·API·Compute·Data/Ops가 왼쪽에서 오른쪽 순으로 읽힌다 | API Gateway가 authorizer와 API 단계들을 포함 |
+| Full Serverless Web App | Frontend / Identity / API / Compute / Data/Ops가 왼쪽에서 오른쪽 순으로 읽힌다 | API Gateway가 authorizer와 API 단계들을 포함 |
 | 3-Tier Web App | A/B 열과 Public/App/DB 행, 각 tier의 좌측 route rail이 보인다 | VPC 안 subnet, ASG 안 Launch Template, DB subnet 안 DB support를 포함 |
 | ECS Fargate Container App | network/ingress와 cluster workload가 VPC 안에서 분리되고 rail이 오른쪽에 놓인다 | VPC 안 subnet과 ECS Cluster, Cluster 안 ECS Service/Task Security Group을 포함 |
 | EKS Container App | AWS infra → EKS Cluster → Namespace workload가 중첩되고 IAM rail이 오른쪽에 놓인다 | VPC 안 Cluster, Cluster 안 Namespace, Namespace 안 Deployment/Service를 포함 |
 
 ## 최종 전 수정한 시각 문제
 
-최종 PASS 전에는 다음 표현 문제를 발견해 배치 계약 안에서만 고쳤다. Resource 종류·수·값·relationship 의미는 바꾸지 않았다.
+최종 PASS 전에는 다음 표현 문제를 발견해 배치 계약 안에서만 고쳤다. Resource 종류 / 수 / 값 / relationship 의미는 바꾸지 않았다.
 
 - Static: `bucket-policy → bucket` line이 Public Access Block을 가로지르지 않도록 우측 rail routing으로 변경했다.
 - Full Serverless: Lambda Permission이 API Gateway area와 겹치지 않도록 Compute 상단 support 위치로 옮겼다.

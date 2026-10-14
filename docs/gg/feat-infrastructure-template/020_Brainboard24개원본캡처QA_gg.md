@@ -7,7 +7,7 @@
 - 대상: 24개 (`빈 보드로 시작` 제외)
 - 안전 조건: `Plan`, `Apply`, `Deploy`는 실행하지 않음
 - 저장 위치: `brainboard-captures/*.json`
-- 순서·해시 인덱스: `brainboard-capture-index.json`
+- 순서 / 해시 인덱스: `brainboard-capture-index.json`
 
 ## 결과
 
@@ -54,7 +54,7 @@ Terraform은 화면에 보이는 34줄만 저장하지 않도록 line number를 
 - raw parent는 referential dangling이 없지만 43개의 2-node cycle을 포함한다. Region↔VPC, AZ↔Subnet처럼 큰 container와 그 안의 child가 서로를 parent로 가리키는 경우다.
 - normalize 단계에서는 기존의 유효한 parent는 보존하고, parent rectangle이 child보다 작은 59개 link만 대상으로 child를 완전히 감싸는 가장 작은 strictly-larger candidate를 선택한다. 후보 동률은 임의 선택하지 않고 override를 요구한다.
 - AWS처럼 보이는 node는 341개, Terraform address는 331개다. block 없는 8개 visual node는 presentation으로 분류해야 하고, FSx/RDS 두 사례는 하나의 address를 두 visual이 나타내므로 visual-alias 또는 대표 resource 선택이 필요하다.
-- title/name exact match 170개와 type별 단일 후보 63개만 직접 대응된다. 나머지 38개 type group은 HCL 값·reference·containment·edge topology와 review된 override로 해결하며 배열 순서끼리 맞추지 않는다.
+- title/name exact match 170개와 type별 단일 후보 63개만 직접 대응된다. 나머지 38개 type group은 HCL 값 / reference / containment / edge topology와 review된 override로 해결하며 배열 순서끼리 맞추지 않는다.
 - `text` 11개는 visible text가 빈 문자열로 캡처됐고 `brainboard_shape` 2개는 fill/stroke 정보가 없다. 이 값은 추측하지 않고 unresolved evidence로 남긴다.
 - Terraform expression을 평범한 문자열로 낮추면 `"var.foo"`와 `var.foo`가 구분되지 않는다. variable/local/index/function/interpolation/heredoc을 위한 tagged expression 계약이 준비되기 전에는 의미 보존 완료로 표시하지 않는다.
 - Terraform block 331개 중 83개는 `main.tf`가 아닌 파일에 있으므로 file name을 `main.tf`로 기본화하지 않는다.

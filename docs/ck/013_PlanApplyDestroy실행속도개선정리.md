@@ -278,7 +278,7 @@ deployments/{deploymentId}/terraform/.terraform.lock.hcl
 
 lock file은 성능 최적화용 artifact다.
 
-누락되거나 다운로드/업로드에 실패해도 Deployment 자체를 실패시키지 않는다. 이 경우 Terraform이 기존처럼 init을 다시 수행한다.
+누락되거나 다운로드/업로드에 실패해도 Deployment 자체를 실패시키지 않는다. 이 경우 Terraform이 기존처럼 init을 다시 실행한다.
 
 변경 파일은 아래와 같다.
 
@@ -363,7 +363,7 @@ init만 따로 보면 개선폭은 더 컸다.
 
 lock file 복원/저장은 best-effort로 동작한다.
 
-lock file이 없거나 복원에 실패하면 Terraform이 기존처럼 provider version을 다시 선택하고 init을 수행한다.
+lock file이 없거나 복원에 실패하면 Terraform이 기존처럼 provider version을 다시 선택하고 init을 실행한다.
 
 저장하는 lock file에는 provider version/checksum 정보만 있고 AWS credential이나 Terraform state 값은 들어가지 않는다.
 
@@ -400,7 +400,7 @@ deployment destroy result save
 
 Deployment 생성 직후 frontend에서 `/deployments/:deploymentId/init`을 호출하도록 했다.
 
-이 init은 AWS 리소스를 생성하지 않는다. Terraform provider 준비와 lock file 생성만 수행한다.
+이 init은 AWS 리소스를 생성하지 않는다. Terraform provider 준비와 lock file 생성만 실행한다.
 
 실패하더라도 Deployment 생성 자체는 유지되며, 이후 첫 Plan에서 기존 흐름대로 다시 init을 수행할 수 있다.
 

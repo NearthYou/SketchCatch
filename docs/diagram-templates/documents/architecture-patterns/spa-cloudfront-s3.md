@@ -76,7 +76,7 @@ S3와 CloudFront는 subnet에 배치하지 않는다. 이 패턴만으로 VPC, p
 | default cache behavior | `viewer_protocol_policy = "redirect-to-https"`, 허용 method 최소화, compression, cache policy |
 | distribution | `enabled`, `default_root_object = "index.html"`, price class, IPv6 요구, logging |
 | SPA error response | 403/404를 `/index.html`과 적절한 response code/cache TTL로 매핑 |
-| certificate | custom domain이면 **us-east-1** ACM certificate ARN, TLS 최소 버전, alias |
+| certificate | custom domain이면 us-east-1 ACM certificate ARN, TLS 최소 버전, alias |
 | bucket policy | CloudFront service principal + 해당 distribution `AWS:SourceArn`만 `s3:GetObject` 허용 |
 
 ## 배포 전 검증 조건

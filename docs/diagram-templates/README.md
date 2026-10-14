@@ -1,6 +1,6 @@
-# SketchCatch 다이어그램 패턴 지식 저장소
+# 다이어그램 패턴 자료
 
-이 디렉터리는 SketchCatch Architecture Draft와 Amazon Q Business가 공통으로 참조할 검증된 AWS 아키텍처 패턴의 Git 원본이다. 실제 Amazon Q Business 인덱싱 대상은 `documents/` 아래 문서이며, `source-inventory.md`와 `source-review.md`는 검토 증거라서 기본 인덱싱 대상에서 제외한다. Runtime 검색·검증 계약과 품질 증거는 `anonymous-q-runtime.md`를 따른다.
+설계 초안 생성과 Amazon Q Business 검색에 사용하는 AWS 패턴 문서입니다. 인덱싱 대상은 `documents/` 안의 문서입니다. 자료 목록과 검토 기록인 `source-inventory.md`, `source-review.md`는 기본 인덱싱 대상에서 제외합니다. 검색과 검증 기준은 [실행 문서](anonymous-q-runtime.md)에 있습니다.
 
 ## 디렉터리 구조
 

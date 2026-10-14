@@ -76,7 +76,7 @@ gg의 책임은 Repository Analysis, Template Selection, 선택 근거 전달까
 1. `선택한 Template을 AI 보완으로 넘기기`를 누른다.
 2. Workspace가 열리면 보드에 선택된 TemplateDefinition의 Resource가 생성됐는지 확인한다.
 3. `AI 채팅 열기`를 누른다.
-4. `AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.` 안내와 선택된 Template 이름·ID를 확인한다.
+4. `AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.` 안내와 선택된 Template 이름 / ID를 확인한다.
 5. AI 입력창에 예를 들어 `HTTPS와 이미지 캐시 정책을 추가해줘`를 입력하고 `보내기`를 누른다.
 
 확인할 결과:
@@ -104,7 +104,7 @@ gg의 책임은 Repository Analysis, Template Selection, 선택 근거 전달까
 
 - 결과 카드가 잘리지 않고 버튼과 링크를 누를 수 있다.
 - 분석 중에는 중복 실행이 막힌다.
-- 분석 성공·실패·연결 해제·identity 불일치·GitHub 인증 오류가 각기 한국어로 설명된다.
+- 분석 성공 / 실패 / 연결 해제 / identity 불일치 / GitHub 인증 오류가 각기 한국어로 설명된다.
 - Console error, 실패한 네트워크 요청, 예상하지 못한 HTTP 4xx/5xx가 없다.
 
 ## QA 기록 형식

@@ -2,12 +2,12 @@
 
 ## 1. 문서 목적
 
-이 문서는 `GitHub 전역 연결·Repository Analysis·Delivery Center 통합 계획`을 실제 코드와 테스트로 옮길 수 있는 작은 구현 단위로 나눈다. 각 단위는 사용자에게 확인 가능한 행동 하나와 그 행동을 지탱하는 저장·API 계약 하나를 함께 완성한다.
+이 문서는 `GitHub 전역 연결·Repository Analysis·Delivery Center 통합 계획`을 실제 코드와 테스트로 옮길 수 있는 작은 구현 단위로 나눈다. 각 단위는 사용자에게 확인 가능한 행동 하나와 그 행동을 지탱하는 저장 / API 계약 하나를 함께 완성한다.
 
 기준 계획은 `002_GitHub전역연결과_Repository분석_Delivery통합계획_JH.md`다. 이 문서와 기준 계획이 충돌하면 다음 원칙을 적용한다.
 
 1. 공개 Repository 분석과 Board 생성에는 GitHub 연결을 요구하지 않는다.
-2. Repository를 변경하거나 PR·Pipeline을 실행할 때만 검증된 `SourceRepository`를 요구한다.
+2. Repository를 변경하거나 PR / Pipeline을 실행할 때만 검증된 `SourceRepository`를 요구한다.
 3. Board를 만든 Repository 정보는 RDS의 `RepositoryAnalysisRecord`에 저장한다.
 4. commit SHA 차이는 최신성 안내일 뿐 Architecture Board 변경이나 CI/CD 차단 조건이 아니다.
 5. 이번 범위에서 여러 active GitHub installation 선택과 Repository 변경에 따른 Architecture 재설계는 지원하지 않는다.
@@ -134,7 +134,7 @@ TDD 순서:
 
 - 프로젝트당 record가 최대 한 건이다.
 - 새 Repository로 교체할 때 이전 `sourceRepositoryId`가 남지 않는다.
-- secret과 원본 Repository 파일은 저장·응답하지 않는다.
+- secret과 원본 Repository 파일은 저장 / 응답하지 않는다.
 
 ### U02. Board 생성과 공개 Repository 분석 저장 연결
 
@@ -151,13 +151,13 @@ TDD 순서:
 
 트랜잭션 경계:
 
-- 현재 Web의 Board 저장 API와 analysis record API가 분리되어 있으므로 Board 저장을 먼저 수행한다.
+- 현재 Web의 Board 저장 API와 analysis record API가 분리되어 있으므로 Board 저장을 먼저 실행한다.
 - analysis record 저장 실패 시 Board 생성 성공을 숨기지 않고 `Repository 정보 저장 재시도` 오류를 표시하며 Workspace 이동을 보류한다.
 - 재시도는 동일 PUT으로 idempotent하게 처리한다.
 
 TDD 순서:
 
-1. `hasConnectedRepository=false`여도 공개 분석·질문 완료 시 readiness가 통과하는 test를 실패시킨다.
+1. `hasConnectedRepository=false`여도 공개 분석 / 질문 완료 시 readiness가 통과하는 test를 실패시킨다.
 2. Board 저장 성공 후 analysis record PUT을 호출하는 client boundary test를 실패시킨다.
 3. record 저장 실패 시 재시도 가능 상태가 유지되는 test를 실패시킨다.
 
@@ -170,7 +170,7 @@ TDD 순서:
 
 사용자 결과:
 
-- 잘못된 URL·미확인 Repository, rate limit, GitHub 일시 장애, branch 문제를 서로 다른 문구와 재시도 동작으로 본다.
+- 잘못된 URL / 미확인 Repository, rate limit, GitHub 일시 장애, branch 문제를 서로 다른 문구와 재시도 동작으로 본다.
 
 변경 범위:
 
@@ -219,7 +219,7 @@ TDD 순서:
 - CTA는 `publicAnalysis` 성공 여부와 독립적으로 렌더링된다.
 - 여러 installation 중 하나를 임의 선택하지 않는다.
 
-### U05. GitHub 연결·권한 추가 뒤 원래 분석 계속하기
+### U05. GitHub 연결 / 권한 추가 뒤 원래 분석 계속
 
 사용자 결과:
 
@@ -293,7 +293,7 @@ TDD 순서:
 
 - Workspace navigation에 `Delivery` 추가
 - profile loading/error/empty state
-- 기존 Repository·monitoring·deployment target editor의 공통 컴포넌트 재사용
+- 기존 Repository / monitoring / deployment target editor의 공통 컴포넌트 재사용
 - readiness action을 Workspace 내부 panel로 연결
 
 완료 조건:
@@ -335,7 +335,7 @@ TDD 순서:
 완료 조건:
 
 - SHA mismatch만으로 readiness를 차단하지 않는다.
-- 리소스 추가·변경·제거를 자동 추론하지 않는다.
+- 리소스 추가 / 변경 / 제거를 자동 추론하지 않는다.
 - 자동 Board 재생성 또는 자동 덮어쓰기가 없다.
 
 ## 5. 구현 순서와 의존성
@@ -355,7 +355,7 @@ U01 + U06 + U08
  └─ U10 최신성 안내
 ```
 
-각 단위는 실패 test 하나를 먼저 추가하고 해당 test만 통과시키는 최소 구현을 만든다. 단위가 끝날 때 관련 package typecheck를 실행한다. 전체 완료 전에는 API·Web 전체 test, lint, typecheck, build와 harness check를 수행한다.
+각 단위는 실패 test 하나를 먼저 추가하고 해당 test만 통과시키는 최소 구현을 만든다. 단위가 끝날 때 관련 package typecheck를 실행한다. 전체 완료 전에는 API / Web 전체 test, lint, typecheck, build와 harness check를 실행한다.
 
 ## 6. 공통 검증 시나리오
 
@@ -372,7 +372,7 @@ U01 + U06 + U08
 
 ## 7. 문서와 운영 반영
 
-구현과 함께 다음 canonical 문서를 갱신한다.
+구현과 함께 다음 기준 문서를 갱신한다.
 
 - `docs/product.md`: 공개 분석, 전역 GitHub 연결, Delivery 사용자 흐름과 비범위
 - `docs/data-models.md`: `RepositoryAnalysisRecord`, `ProjectDeliveryProfile`, API DTO
@@ -386,7 +386,7 @@ Migration 생성 직전 최신 번호를 다시 확인한다. 현재 계획 번�
 - U01부터 U10까지 사용자 결과와 완료 조건이 모두 충족된다.
 - 공개 Repository Board 생성이 GitHub 연결에 의존하지 않는다.
 - Board Repository provenance가 RDS에 남고 Delivery에서 재사용된다.
-- 비공개·잘못된 URL·권한 없음·provider 장애를 과도하게 단정하지 않는다.
+- 비공개 / 잘못된 URL / 권한 없음 / provider 장애를 과도하게 단정하지 않는다.
 - Workspace Delivery가 프로젝트 Delivery 상태의 기본 관리 위치다.
-- Git 변경과 cloud 변경은 기존 사용자 승인·plan·logging·secret masking 안전 게이트를 유지한다.
+- Git 변경과 cloud 변경은 기존 사용자 승인 / plan / logging / secret masking 안전 게이트를 유지한다.
 - 관련 회귀 test와 전체 필수 검증이 통과한다.

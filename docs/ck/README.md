@@ -1,6 +1,6 @@
-# CK 배포 실행 문서 인덱스
+# 배포 실행 참고 문서
 
-이 폴더는 Deployment, AWS Role 연결, Terraform Plan/Apply/Destroy, cleanup, AI 다이어그램 검수 관련 구현 참고 문서를 모은다. 실제 공통 정책은 `docs/deployment.md`, API/DB 계약은 `docs/data-models.md`, 실행 경계는 `docs/architecture.md`가 우선한다.
+AWS 역할 연결과 Terraform Plan/Apply/Destroy, 자원 정리, AI 다이어그램 검수의 구현 참고 문서입니다. 현재 배포 절차는 [배포 운영](../deployment.md), 데이터 형식은 [데이터 모델](../data-models.md), 서비스 구성은 [아키텍처](../architecture.md)를 따릅니다.
 
 ## 빠른 읽기 순서
 

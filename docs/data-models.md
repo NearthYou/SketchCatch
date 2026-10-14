@@ -170,17 +170,17 @@ graph를 기준으로 다음 순서를 지킨다.
 1. `contains`/`hosts`와 Terraform 참조에서 parent-child containment를 확정한다.
 2. 가장 깊은 영역의 자식부터 배치하고 실제 자식 경계로 Region, VPC, AZ, Subnet, Group 크기를 계산한다.
 3. 사용자/진입점에서 compute/data로 이어지는 주 흐름을 우선 한 축으로 정렬한다.
-4. IAM, 보안, 관측, 배포 같은 지원 리소스는 주 흐름의 상단·하단 lane으로 분리하고 연결 대상 가까이에 둔다.
+4. IAM, 보안, 관측, 배포 같은 지원 리소스는 주 흐름의 상단 / 하단 lane으로 분리하고 연결 대상 가까이에 둔다.
 5. 반복 AZ/Subnet/resource 묶음은 같은 순서와 크기로 정렬한다.
 6. IaC dependency edge는 보존하되, 밀도가 높은 Board에서는 구현 세부 관계를 `detail`로 분류하고
    Listener/Target Group 같은 중간 리소스 체인을 사람이 읽는 `summary` 관계로 축약한다.
 7. support lane 배치가 다른 복수 후보를 만들고 node/area 겹침, parent 경계 위반, 역방향 edge,
-   edge-resource 및 Area 제목 교차, edge 교차, 반복 정렬 오차, canvas 면적·공백률·세로 비율을 점수화해
+   edge-resource 및 Area 제목 교차, edge 교차, 반복 정렬 오차, canvas 면적 / 공백률 / 세로 비율을 점수화해
    최저 점수를 선택한다.
 8. 최종 node와 영역 위치가 정해진 뒤 edge handle과 장애물 회피 경로를 계산한다.
 
 AWS resource type은 MVP Provider Adapter의 첫 분류 입력이지만 배치 모델의 role, graph, containment, 반복 패턴,
-품질 점수는 AWS 전용 좌표를 전제하지 않는다. `docs/diagram-layout-reference`의 이미지와 설명은 설계·회귀 근거이며
+품질 점수는 AWS 전용 좌표를 전제하지 않는다. `docs/diagram-layout-reference`의 이미지와 설명은 설계 / 회귀 근거이며
 production runtime 입력이 아니다.
 
 정확한 `draft.diagramJson` fixture와 `templateResourceId`가 있는 명시적 Template 좌표는 작성된 위치를 그대로
@@ -201,7 +201,7 @@ node 중 `Global IAM`과 `Definition / Ops`만 실제 `design_group` 컨테이�
 
 기존 자동 배치와 별도로 Architecture Board Compiler는 Resource, 관계, Terraform parameter, containment,
 presentation node, geometry, z-index, edge routing을 모두 변경한 제안을 만들 수 있다. 명시된 요구사항, 기존
-Deployment 상태, Provider·Terraform 유효성과 충돌해도 후보에서 자동 탈락시키지 않고 diagnostic과 품질 비용으로
+Deployment 상태, Provider / Terraform 유효성과 충돌해도 후보에서 자동 탈락시키지 않고 diagnostic과 품질 비용으로
 표현한다.
 
 ```ts
@@ -228,7 +228,7 @@ type ArchitectureBoardCompilationProposal = {
 `ArchitectureBoardCompilationInput.semanticContext`는 상위 Adapter가 명시적으로 허용한
 `resource-*`, `relationship-*`, `configuration-*`, `containment-set`, `presentation-*` operation과
 requirement/deployment/provider/terraform signal을 전달하는 선택 입력이다. Compiler는 이를 제안과
-diagnostic에 반영하지만, 호출만으로 Board·DB·IaC를 변경하지 않는다. `provenance.candidateIds`에는
+diagnostic에 반영하지만, 호출만으로 Board / DB / IaC를 변경하지 않는다. `provenance.candidateIds`에는
 원본 baseline을 포함한 모든 후보를, `layoutProfileIds`에는 실제 geometry 후보군에 추가한 사례 기반
 spacing profile을 남긴다.
 
@@ -244,9 +244,9 @@ AI Architecture Draft Adapter는 서버가 `metadata.authoredSourceId`로 체크
 semantic operation이 있을 때도 `original`은 요청 전 source graph를 가리킨다. 요청된 graph는 별도
 `requested-original` 후보에서 시작하며, 명시 operation이 있는 호출은 source original을 조용히 선택해
 요청을 취소하지 않는다. Board 자동 정리는 현재 Diagram을 authored source로 취급하며 `presentation`,
-`geometry`, `edge-routing` 변경만 허용한다. Resource·관계·설정·containment 변경 후보는 자동 정리 결과로
+`geometry`, `edge-routing` 변경만 허용한다. Resource / 관계 / 설정 / containment 변경 후보는 자동 정리 결과로
 제공하거나 적용하지 않는다. Template 검토도 현재 Diagram을 authored source로 취급하고,
-AI Draft·Reverse Engineering은 같은 node ID/type이라도 config·관계 label이 달라질 수 있으므로 요청 graph를
+AI Draft / Reverse Engineering은 같은 node ID/type이라도 config / 관계 label이 달라질 수 있으므로 요청 graph를
 다시 materialize한다. Reverse Engineering은 scan finding, analysis exclusion, provider scan error를
 `deployment`/`provider` signal로 전달해 proposal diagnostic과 승인 화면에 유지한다.
 
@@ -255,17 +255,17 @@ Resource 추가, Resource 삭제 순으로 커진다. 이 비용은 파괴적 �
 좋은 후보가 자동 선택되는 것을 막는다. Compiler는 제안만 반환하며 현재 `ProjectDraft`, `DiagramJson`, IaC Preview를
 직접 변경하지 않는다. 실제 적용은 하나의 `User-Accepted Change`로 처리하고 Deployment 검증 계약은 그대로 유지한다.
 
-Compiler의 `quality.score`에는 시각·구조·diagnostic·Compilation Distance와 함께, checked-in 된 versioned Template
+Compiler의 `quality.score`에는 시각 / 구조 / diagnostic / Compilation Distance와 함께, checked-in 된 versioned Template
 knowledge artifact의 사례 기반 비용도 포함된다. Compiler는 현재 graph와 가장 가까운 사례를 찾아 containment depth,
-형제 간격, viewport 비율, edge 길이, 흐름·support·공백 비율의 차이를 비용으로 반영한다. 가장 가까운 사례의 sibling
+형제 간격, viewport 비율, edge 길이, 흐름 / support / 공백 비율의 차이를 비용으로 반영한다. 가장 가까운 사례의 sibling
 gap과 vertical gap은 제한된 spacing profile로도 변환되어 기존 여섯 geometry 후보군을 확장한다. 이 profile은 baseline보다
-node/Area 겹침, 경계 이탈, edge 관통·교차, 역방향 edge, support lane 침범을 하나라도 늘리면 선택되지 않는다. 이 artifact는
+node/Area 겹침, 경계 이탈, edge 관통 / 교차, 역방향 edge, support lane 침범을 하나라도 늘리면 선택되지 않는다. 이 artifact는
 29개 사용 가능 Template과 1개 unavailable evidence를 별도 생성 명령으로 검증하며, 원본 `source-exact` fixture 자체는
 변경하지 않는다.
 
 Template 검토는 source fingerprint를 가진 별도 session으로 진행한다. gallery/start 경로가 소비할 수 있는 승인 variant는
-`presentation`, `geometry`, `edge-routing`만 포함해야 하며, Resource·관계·설정·containment 변경이 있으면 `hold`로
-남긴다. template ID·source fingerprint·승인 범위가 하나라도 맞지 않으면 authored source로 안전하게 되돌아간다.
+`presentation`, `geometry`, `edge-routing`만 포함해야 하며, Resource / 관계 / 설정 / containment 변경이 있으면 `hold`로
+남긴다. template ID / source fingerprint / 승인 범위가 하나라도 맞지 않으면 authored source로 안전하게 되돌아간다.
 
 파라미터가 다른 Terraform resource를 참조할 때 보드가 만든 자동 연결선은 `DiagramEdge.metadata`로 구분한다.
 
@@ -632,9 +632,9 @@ type DeleteProjectResponse = {
 ```
 
 프로젝트 삭제 시 `projects/{projectId}/`와 연결된 모든 `deployments/{deploymentId}/` prefix의 현재 object,
-이전 version, delete marker와 프로젝트 전용 CodeBuild·IAM Role 정리를 먼저 시도한다. 이 외부 정리는
-best-effort이므로 S3 또는 AWS 권한/API 오류가 발생해도 RDS의 프로젝트·배포 기록 삭제를 막거나
-`managed_cleanup_failed`를 반환하지 않는다. S3 정리 실패는 응답의 `cleanup`에 남기고, CodeBuild·IAM 정리
+이전 version, delete marker와 프로젝트 전용 CodeBuild / IAM Role 정리를 먼저 시도한다. 이 외부 정리는
+best-effort이므로 S3 또는 AWS 권한/API 오류가 발생해도 RDS의 프로젝트 / 배포 기록 삭제를 막거나
+`managed_cleanup_failed`를 반환하지 않는다. S3 정리 실패는 응답의 `cleanup`에 남기고, CodeBuild / IAM 정리
 실패는 비밀값 없이 서버 경고 로그에 남긴다. 진행 중인 Deployment, worker job 또는 project execution lease는
 별도 동시성 보호이므로 계속 삭제를 차단한다.
 
@@ -693,7 +693,7 @@ type ProjectDraftConflictResponse = ApiErrorResponse & {
 - 서버 draft를 읽은 편집은 그 `revision`을 `expectedRevision`으로 보낸다.
 - 서버 draft가 없는 새 프로젝트의 최초 저장만 `expectedRevision: null`을 보낸다.
 - `PUT /api/projects/:projectId/draft`는 `projectId`와 `expectedRevision`이 모두 일치하는 row만 갱신한다. 최초 생성 경쟁은 `INSERT ... ON CONFLICT DO NOTHING`으로 한 요청만 성공시킨다.
-- 현재 서버 revision이 다르면 API는 `409 Conflict`와 현재 revision·저장 시각을 반환하며 DiagramJson을 변경하지 않는다.
+- 현재 서버 revision이 다르면 API는 `409 Conflict`와 현재 revision / 저장 시각을 반환하며 DiagramJson을 변경하지 않는다.
 - `GET /api/projects/:projectId/draft`는 `private, no-store`로 응답한다. Workspace는 서버 조회가 성공하고 서버 draft가 있으면 해당 값을 기준으로 열고, IndexedDB의 로컬 draft도 같은 서버 revision으로 교체한다. 서버 draft가 없는 경우에만 로컬 draft를 사용한다. 서버 조회 실패는 오래된 로컬 draft로 숨기지 않는다.
 - IndexedDB의 `LocalProjectDraft.baseServerRevision`은 로컬 편집이 시작된 서버 revision이다. 로컬 저장 횟수와 함께 증가하지 않고, 서버 저장 성공 또는 최신 상태 재로드 후 반환된 revision으로 교체된다.
 - 일반 Project Workspace는 탭 인스턴스마다 별도의 IndexedDB `workspaceId`를 생성하고 `sessionStorage`에 보관해 같은 탭의 새로고침에서 재사용한다. 시작 시 해당 ID를 `Web Locks`로 배타 점유하므로 탭 복제로 `sessionStorage`가 복사되어도 lock을 얻지 못한 새 탭은 새 ID를 발급한다. 따라서 같은 프로젝트를 연 다른 탭의 recovery draft가 충돌 탭의 로컬 복구본을 덮어쓰지 않으면서 새로고침 후에도 해당 탭의 복구본을 찾는다. 기존 `project:{projectId}` key의 recovery draft는 처음 읽을 때 탭 전용 key로 복사한다. URL 또는 호출자가 `localCacheWorkspaceId`/`workspaceId`를 명시한 특수 복구 흐름만 해당 scope를 재사용한다.
@@ -742,7 +742,7 @@ type TerraformGenerateResponse = {
 
 `POST /api/terraform/generate`는 `preview` mode Architecture Dependency Diagnostics를 함께 반환한다. 이 diagnostics는 Terraform HCL 생성 결과와 구분된 구조 경고이며, `warning`만으로는 HTTP 성공 응답이나 Terraform Preview 생성을 바꾸지 않는다.
 
-Terraform 역동기화는 사용자가 편집 중인 Terraform 문자열을 기존 `DiagramJson`에 반영한다. 명백한 문법·구조 오류는 `error`로 저장을 차단한다. 유효하지만 SketchCatch subset 밖인 top-level block, expression, nested block은 `warning`으로 반환하고 원문 전용으로 보존한다. 미지원 구문이 포함된 resource/data block은 부분 값으로 Diagram을 변경하지 않는다.
+Terraform 역동기화는 사용자가 편집 중인 Terraform 문자열을 기존 `DiagramJson`에 반영한다. 명백한 문법 / 구조 오류는 `error`로 저장을 차단한다. 유효하지만 SketchCatch subset 밖인 top-level block, expression, nested block은 `warning`으로 반환하고 원문 전용으로 보존한다. 미지원 구문이 포함된 resource/data block은 부분 값으로 Diagram을 변경하지 않는다.
 
 ```ts
 type TerraformSyncToDiagramRequest = {
@@ -872,7 +872,7 @@ type ArchitectureDiagnostic = {
 };
 ```
 
-`contextual`은 확정된 영역 배치 또는 파라미터 변경 뒤에만 관련 리소스를 점검하고, 새 아이콘 생성·drag 중에는 표시하지 않는다. `preview`와 `pre_deployment`는 지원 리소스를 전체 점검한다. 이 진단의 `warning`은 Terraform code 생성이나 Deployment 실행을 단독으로 차단하지 않으며, 차단 정책은 Pre-Deployment Check와 Deployment Safety Gate가 별도로 결정한다.
+`contextual`은 확정된 영역 배치 또는 파라미터 변경 뒤에만 관련 리소스를 점검하고, 새 아이콘 생성 / drag 중에는 표시하지 않는다. `preview`와 `pre_deployment`는 지원 리소스를 전체 점검한다. 이 진단의 `warning`은 Terraform code 생성이나 Deployment 실행을 단독으로 차단하지 않으며, 차단 정책은 Pre-Deployment Check와 Deployment Safety Gate가 별도로 결정한다.
 
 Editor validation diagnostics는 Deployment의 `init`, `validate`, `plan`, `apply` stage와 섞지 않는다. Deployment 실행은 승인된 Terraform artifact와 AWS 연결을 기준으로 별도 안전 게이트를 가진다. Editor validation은 사용자 편집 코드가 저장 가능한지 확인하는 선행 검사일 뿐, 실제 cloud mutation을 의미하지 않는다.
 
@@ -915,7 +915,7 @@ type AwsConnectionListResponse = {
 `GET /api/aws/connections`의 `awsConnections`에는 현재 사용할 수 있는 `verified` 연결만 포함한다.
 삭제 중 오류가 발생한 이전 연결은 배포나 GitHub 빌드 선택지에 다시 섞이지 않도록
 `cleanupRetries`에 별도로 반환한다. 내부 `deletionErrorSummary`는 이 응답으로 노출하지 않고,
-설정 화면은 안전한 안내 문구와 기존 삭제 미리보기·확인 절차를 통해 정리 재시도를 제공한다.
+설정 화면은 안전한 안내 문구와 기존 삭제 미리보기 / 확인 절차를 통해 정리 재시도를 제공한다.
 
 같은 AWS account의 이전 `verified` 연결이 정리 실패 상태로 남아 있으면 새 연결 검증은
 `409 conflict`로 중단하고 이전 연결 정리를 먼저 재시도하도록 안내한다. 동시에 발생한 검증 요청이
@@ -1064,11 +1064,11 @@ preset, versioning이 활성화된 S3 hosting bucket, CloudFront distribution/or
 EC2/ASG target은 저장소 분석에서 정확히 하나로 확인한 `appspec.yml|yaml`을 `appspec` build evidence로
 확정하고 CodeDeploy application/deployment group, Auto Scaling group, HTTPS Output URL을 비밀이 아닌
 `runtimeConfig` 좌표로 저장한다. `0039_ec2_asg_gitops_runtime.sql`은 기존 ECS와 Lambda discriminator를
-보존하면서 `ec2_asg`를 확장한다. 새 PUT은 안전한 resource name, runtime discriminator 일치, credential·query·
+보존하면서 `ec2_asg`를 확장한다. 새 PUT은 안전한 resource name, runtime discriminator 일치, credential / query /
 fragment가 없는 HTTPS URL을 요구한다.
 
 EC2/ASG GitOps release evidence는 현재 bundle의 SHA-256, S3 URI와 VersionId, 이전 검증 bundle URI와
-VersionId, 원본·활성 CodeDeploy deployment ID, 전체/성공 instance 수와 `codedeploy_failure | instance_failure |
+VersionId, 원본 / 활성 CodeDeploy deployment ID, 전체/성공 instance 수와 `codedeploy_failure | instance_failure |
 health_check_failure | null` 실패 원인을 가진다. API는 verified connection으로
 CodeDeploy deployment/group, S3 checksum, ASG healthy InService instance, CodeDeploy instance status를 다시
 조회한 뒤 모두 일치할 때만 공통 `ApplicationRelease` 원장에 기록한다.
@@ -1084,7 +1084,7 @@ URL을 비민감 `runtimeConfig`로 저장한다. `0038_lambda_gitops_runtime.sq
 version, 확인한 commit SHA와 시각만 저장한다. 웹 포함 ECS target의 `ecsWeb`은 API의 source root,
 Dockerfile, container port, health path와 frontend의 source/output, package manifest, lockfile, package manager
 version, install/build preset을 분리해 저장한다. 이 값 전체를 candidate config fingerprint에 포함한다. 기존
-runtime 필드는 Lambda·EC2·정적 사이트와 legacy ECS row를 읽기 위해 유지하지만, 새 웹 포함 ECS PUT은 완전한
+runtime 필드는 Lambda / EC2 / 정적 사이트와 legacy ECS row를 읽기 위해 유지하지만, 새 웹 포함 ECS PUT은 완전한
 `ecsWeb.api`와 `ecsWeb.frontend`가 필수다.
 
 `runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate,
@@ -1103,7 +1103,7 @@ API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Dir
 웹 포함 ECS target은 SketchCatch가 관리하는 격리된 `ProjectBuildEnvironment`를 가진다. CodeBuild project는
 확인된 commit만 checkout하고 API OCI archive, frontend archive, 파일별 SHA-256 manifest를 만든 뒤 SketchCatch
 내부 Artifact S3의 `ReleaseCandidate` prefix에 업로드한다. CodeBuild는 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront를
-변경하지 않는다. Docker layer cache는 사용자 AWS 계정의 프로젝트 전용 build-cache ECR Repository에만 읽고 쓴다. 실제 release activation은 SketchCatch trusted worker가 수행한다. Lambda, EC2/ASG, Static의
+변경하지 않는다. Docker layer cache는 사용자 AWS 계정의 프로젝트 전용 build-cache ECR Repository에만 읽고 쓴다. 실제 release activation은 SketchCatch trusted worker가 실행한다. Lambda, EC2/ASG, Static의
 기존 runtime adapter는 이 ECS 전용 전환과 별도로 호환한다. 사용자 임의 shell 문자열은 저장하거나 실행하지 않는다.
 Direct build를 시작하기 전에 active GitHub Source Repository의 owner/name과 CodeBuild project의 `GITHUB` source
 URL을 비교하고, source auth가 `CODECONNECTIONS`인지 확인한다. 다른 저장소, OAuth source, inactive installation은
@@ -1113,7 +1113,7 @@ scope별 실행 의미는 다음과 같다.
 
 - `infrastructure`: Terraform Plan 승인 후 Terraform Apply/Destroy를 실행한다.
 - `application`: immutable artifact와 artifact approval manifest를 준비한 후 runtime release만 실행한다. Terraform init/plan/apply는 실행하지 않는다.
-- `full_stack`: immutable artifact를 먼저 준비하고 Terraform Plan을 승인한다. 실행 시 Terraform Apply와 output/state/resource inventory를 먼저 저장하고, 안전한 `api_base_url`을 ECS target에 연결한 뒤 준비된 artifact를 runtime에 release한다. output 누락·민감값·HTTP URL·준비한 ECR/cluster/service/container/port 좌표 불일치는 release 전에 실패로 기록하며 이미 저장한 Terraform 결과는 보존한다. 같은 승인 실행과 Terraform state inventory가 증명하는 Task Definition, IAM role, ALB/Target Group, S3, CloudFront와 파생 URL 전이는 정상적인 Terraform 관리 좌표 갱신으로 받아들이고, trusted worker가 실제 AWS 상태를 다시 검증한다.
+- `full_stack`: immutable artifact를 먼저 준비하고 Terraform Plan을 승인한다. 실행 시 Terraform Apply와 output/state/resource inventory를 먼저 저장하고, 안전한 `api_base_url`을 ECS target에 연결한 뒤 준비된 artifact를 runtime에 release한다. output 누락 / 민감값 / HTTP URL / 준비한 ECR/cluster/service/container/port 좌표 불일치는 release 전에 실패로 기록하며 이미 저장한 Terraform 결과는 보존한다. 같은 승인 실행과 Terraform state inventory가 증명하는 Task Definition, IAM role, ALB/Target Group, S3, CloudFront와 파생 URL 전이는 정상적인 Terraform 관리 좌표 갱신으로 받아들이고, trusted worker가 실제 AWS 상태를 다시 검증한다.
 
 Direct runtime 성공은 build 결과만 신뢰하지 않는다. ECS, Lambda, CodeDeploy/S3/ASG, S3/CloudFront adapter가
 AWS 상태를 다시 조회해 commit, digest, provider revision, HTTPS Output URL과 health가 모두 일치할 때만 성공을
@@ -1132,7 +1132,7 @@ provider metadata의 이전 정상 revision을 `application_release_cleanup_plan
 `ApplicationArtifact`는 Direct Deployment와 Git/CI/CD가 공유하는 provider-neutral application build 원장이다.
 실제 image, zip, bundle, manifest, chart, machine image byte는 사용자 계정의 ECR/S3 또는 해당 provider storage에
 남기고, RDS `application_artifacts`에는 identity, provider location metadata, digest, 검증 상태만 저장한다.
-Redis Runtime Cache와 RDS row 어느 쪽도 provider 존재 여부의 source of truth가 아니다.
+Redis Runtime Cache와 RDS row 어느 쪽도 provider 존재 여부의 기준이 아니다.
 
 ```ts
 type ApplicationArtifactKind =
@@ -1181,7 +1181,7 @@ canonical `artifactFingerprint`는 repository provider/owner/name identity, exac
 input identity를 결합해 계산한다. 파일 key와 JSON key 순서는 canonical 정렬을 사용한다. runner 종류, worker 수,
 queue, retry, timeout처럼 artifact byte를 바꾸지 않는 orchestrator/capacity 값은 포함하지 않는다. secret 형태의
 build input key는 fingerprint 입력 단계에서 거부하며 secret value를 hash하거나 저장하는 방식으로 우회하지 않는다.
-웹 포함 ECS의 non-null `ecsWeb`은 API·Frontend 빌드 필드 전체와 runtime Secret 이름만 canonical build config에
+웹 포함 ECS의 non-null `ecsWeb`은 API / Frontend 빌드 필드 전체와 runtime Secret 이름만 canonical build config에
 포함한다. legacy `ecsWeb: null | undefined`는 기존 v1 fingerprint를 유지하고, 기존 non-null ECS Web config는
 완전한 설정으로 새 fingerprint를 계산해 불완전한 이전 identity의 artifact를 재사용하지 않는다.
 RDS row의 내부 상태는 `building | available | invalid | failed`이며 API는 완전한 digest/location을 가진
@@ -1304,7 +1304,7 @@ Repository를 고르는 별도 사용자 입력을 받지 않고 active `SourceR
 CodeConnection 정리를 먼저 시도한 뒤 metadata와 프로젝트 build environment 연결을 제거한다. AWS 원격 정리는
 best-effort이므로 권한 또는 AWS API 오류로 일부 리소스 정리에 실패해도 SketchCatch의 연결 해제를 막거나
 `CODECONNECTION_DELETE_FAILED`로 되돌리지 않는다. 이 경우 남은 AWS 리소스는 사용자가 AWS에서 직접 정리할 수
-있다. AWS 계정 연결과 이미 배포된 애플리케이션·인프라는 유지하며, 앱 빌드나 배포가 진행 중이면 해제를
+있다. AWS 계정 연결과 이미 배포된 애플리케이션 / 인프라는 유지하며, 앱 빌드나 배포가 진행 중이면 해제를
 차단한다. `DELETING` 상태는 상태 새로고침과 새 Direct/GitOps 실행의 영속 fence이며, 중단된 로컬 해제 claim은
 1시간 뒤 재시도할 수 있다. 기존 `ERROR` row의 `cleanupRetryRequired`는 이전 실패 상태를 읽기 위한 하위 호환
 필드이며, 다시 해제하면 같은 best-effort 정책으로 로컬 연결을 제거한다.
@@ -1322,10 +1322,10 @@ source URL, CodeConnection, build image와 compute 설정의 canonical fingerpri
 
 CodeConnections `AVAILABLE`은 GitHub OAuth handshake 완료 상태이며 Repository 접근 완료를 뜻하지 않는다.
 Web은 이를 `AWS OAuth 연결됨`으로 표시하고 Marketplace 주문 화면이 아닌 AWS Connector for GitHub의 직접
-설치·Repository 권한 설정 경로를 함께 제공한다.
+설치 / Repository 권한 설정 경로를 함께 제공한다.
 CodeBuild project 생성 또는 Repository checkout이 `OAuthProviderException`으로 실패하면 API는 원래 provider
 token 문구를 노출하지 않고
-`CODECONNECTION_REPOSITORY_ACCESS_REQUIRED` 409를 반환하며, 대상 Repository와 App 설치·권한 복구 방법을
+`CODECONNECTION_REPOSITORY_ACCESS_REQUIRED` 409를 반환하며, 대상 Repository와 App 설치 / 권한 복구 방법을
 `repositoryVerificationStatus = failed` 및 안전한 `repositoryVerificationStatusReason`으로 저장한다.
 
 CodeConnections `AVAILABLE`과 Repository 접근 검증은 별도 상태다. 기존 build environment와 새로 준비한 environment는
@@ -1362,7 +1362,7 @@ GitOps frontend 부분 실패 재시도는
 `POST /api/git-cicd/release-runs/:runId/frontend/retry`를 사용한다. project owner만 호출할 수 있고,
 `ApplicationRelease.status=partially_failed`, frontend failure stage, 만료되지 않은 동일 `ReleaseCandidate`를
 transaction에서 확인한 뒤 pipeline run을 다시 `queued`로 만든다. 재시도 worker는 API image build, ECR publish,
-Task Definition 등록, ECS update를 실행하지 않고 frontend archive checksum 검증과 S3/CloudFront 단계만 수행한다.
+Task Definition 등록, ECS update를 실행하지 않고 frontend archive checksum 검증과 S3/CloudFront 단계만 실행한다.
 API 재시작으로 queued retry가 복구될 때도 worker mode는 `retry_frontend`로 유지한다.
 
 ## Deployment
@@ -1469,7 +1469,7 @@ Apply/Destroy 직전 승인 snapshot과 준비 snapshot이 다르면 실행하�
 같은 저장 snapshot, revision, AWS connection, scope, `deploymentTargetFingerprint`로 `prepare` 요청이
 겹치면 서버는
 내부 `deployments.preparation_key` SHA-256과 active partial unique index를 기준으로 하나의 미승인
-`PENDING`/`RUNNING` Deployment를 재사용한다. 이 키는 중복 클릭과 탭·네트워크 재시도를 흡수하기 위한 DB
+`PENDING`/`RUNNING` Deployment를 재사용한다. 이 키는 중복 클릭과 탭 / 네트워크 재시도를 흡수하기 위한 DB
 내부 idempotency 값이며 API `Deployment` DTO에는 노출하지 않는다. 승인되거나 terminal 상태가 된 실행은
 재사용 대상이 아니므로 이후 명시적 배포 준비는 새 Deployment를 만든다.
 
@@ -1565,7 +1565,7 @@ type DeploymentProgressSnapshot = {
 Resource 수와 현재 stage의 고유 Terraform Resource 완료 로그를 함께 확인할 수 있을 때만
 `resource_count`를 사용하고 99% 이하로 제한한다. 완료 수에는 현재 실행의 `startedAt` 이후에 기록된
 로그만 포함하므로 같은 Deployment의 이전 시도 결과가 섞이지 않는다. 작업량을 측정할 수 없는 단계와
-실패·취소 상태는 `indeterminate`이며, 경과 시간이나 heartbeat 로그 개수로 퍼센트를 만들지 않는다.
+실패 / 취소 상태는 `indeterminate`이며, 경과 시간이나 heartbeat 로그 개수로 퍼센트를 만들지 않는다.
 
 Web은 이 서버 측 `indeterminate`를 실제 측정값으로 오해하지 않도록 `약` 표시가 붙은 stage 기반
 추정 퍼센트로 표현할 수 있다. 실행 요청 5%, Init 15%, Preflight 30%, Validate 45%, Plan 75%,
@@ -1650,7 +1650,7 @@ type DeploymentPlanArtifact = {
 };
 ```
 
-Terraform apply Plan을 만들 때 프로젝트·AWS connection·Terraform scope가 같은 최신 state 소유 Deployment를 한 번 선택하고 state를 workspace에 복원한다. 선택한 Deployment ID와 S3 object key, state lineage hash, serial을 Plan artifact에 고정한다. Apply는 AWS credential을 준비하기 전에 현재 baseline을 다시 선택하고 네 값을 비교하며, 하나라도 다르면 기존 `tfplan`을 실행하지 않고 새 Plan과 승인을 요구한다. state가 없는 최초 Plan은 네 값이 모두 `null`이다.
+Terraform apply Plan을 만들 때 프로젝트 / AWS connection / Terraform scope가 같은 최신 state 소유 Deployment를 한 번 선택하고 state를 workspace에 복원한다. 선택한 Deployment ID와 S3 object key, state lineage hash, serial을 Plan artifact에 고정한다. Apply는 AWS credential을 준비하기 전에 현재 baseline을 다시 선택하고 네 값을 비교하며, 하나라도 다르면 기존 `tfplan`을 실행하지 않고 새 Plan과 승인을 요구한다. state가 없는 최초 Plan은 네 값이 모두 `null`이다.
 
 `terraformArtifactSha256`은 Plan 생성 시점에 복원한 Terraform artifact 내용을 기준으로 계산한다. 컬럼은 기존 row 마이그레이션을 위해 nullable이지만, 새 Plan은 반드시 값을 저장해야 하며 hash가 없는 Plan artifact는 승인할 수 없다. Approval 단계는 현재 S3 Terraform artifact hash와 이 값을 비교해 Plan 생성 이후 원본 Terraform artifact가 바뀐 경우 승인을 막는다.
 
@@ -1839,7 +1839,7 @@ type DeploymentNotification = {
 ```
 
 DB 기준은 `notifications`, `notification_outbox`, `web_push_subscriptions`다. terminal 상태와 Inbox/outbox
-생성은 같은 PostgreSQL transaction에서 처리한다. Inbox 읽음 상태는 RDS가 source of truth이며 알림은
+생성은 같은 PostgreSQL transaction에서 처리한다. Inbox 읽음 상태는 RDS가 기준이며 알림은
 생성 시각부터 90일 보관한다. Web Push subscription endpoint와 `auth`/`p256dh` key는 AES-256-GCM으로
 암호화하고 endpoint SHA-256 hash만 별도 검색 키로 저장한다. 원문 subscription과 VAPID private key는
 API 응답, 로그, 브라우저 저장소에 남기지 않는다.
@@ -1915,17 +1915,17 @@ type GitCicdReadinessResponse = {
 };
 ```
 
-`items`는 다섯 상위 항목을 유지하고, `deployment_target`은 Phase 2에서 사용자가 확정하는 `aws_connection`, `build_config` 두 action key의 누락 목록과 AWS 연결·Region·실행 방식·빌드 설정 네 UI 설정의 완료 수를 함께 제공한다. 저장된 target이 현재 사용자의 verified connection을 가리키고 Region이 일치하며, 현재 Source Repository revision과 확정 build config가 일치하면 `deployment_target`은 `ready`다. Deployment, Apply Plan, `ProjectBuildEnvironment`, Repository checkout 검증, Runtime 좌표와 Output URL은 Phase 2 완료 조건이 아니며 Phase 3 배포 evidence로 확인한다. 모든 상위 항목이 `ready`일 때만 snapshot의 `ready`가 `true`이며, `requiredActionCount`는 `action_required`인 상위 항목 수다. `refreshing`과 `error`는 서버 저장 상태나 readiness 응답 status가 아니라 Web request state로 관리한다.
+`items`는 다섯 상위 항목을 유지하고, `deployment_target`은 Phase 2에서 사용자가 확정하는 `aws_connection`, `build_config` 두 action key의 누락 목록과 AWS 연결 / Region / 실행 방식 / 빌드 설정 네 UI 설정의 완료 수를 함께 제공한다. 저장된 target이 현재 사용자의 verified connection을 가리키고 Region이 일치하며, 현재 Source Repository revision과 확정 build config가 일치하면 `deployment_target`은 `ready`다. Deployment, Apply Plan, `ProjectBuildEnvironment`, Repository checkout 검증, Runtime 좌표와 Output URL은 Phase 2 완료 조건이 아니며 Phase 3 배포 evidence로 확인한다. 모든 상위 항목이 `ready`일 때만 snapshot의 `ready`가 `true`이며, `requiredActionCount`는 `action_required`인 상위 항목 수다. `refreshing`과 `error`는 서버 저장 상태나 readiness 응답 status가 아니라 Web request state로 관리한다.
 
 `approved_apply_plan`은 `DeploymentPlanArtifact.operation: "apply"`인 승인 Plan만 준비 완료로 인정한다. `sourceDeploymentId`는 그 Plan의 원본 Deployment를, `approvedApplyPlanArtifactId`는 승인된 Apply Plan artifact를 가리킨다. `operation: "destroy"` Plan은 cleanup 승인과 실행에만 사용하며 readiness를 충족하거나 `approvedApplyPlanArtifactId`에 들어가지 않는다. 이 조회 DTO 자체는 Apply, Destroy, Git 변경, handoff를 승인하거나 실행하지 않는다.
 
-`sourceDeploymentId`는 `scope in (infrastructure, full_stack)`인 최신 성공 Direct Infrastructure Apply Evidence의 Deployment ID다. `initialApplicationReleaseId`는 current target의 fingerprint, confirmed commit SHA, 안전한 HTTPS Output URL과 일치하고 ReleaseCandidate·composite digest·healthy ECS·frontend VersionId/invalidation/commit marker 증거를 모두 가진 성공 Direct `ApplicationRelease` ID다. 같은 full_stack Deployment의 릴리즈이거나, 기존 bootstrap-only 환경을 복구한 별도 application-scope Deployment의 릴리즈만 인정한다. 인프라 증거가 있고 앱 증거만 없으면 `recommendedDeploymentScope`는 `application`, 인프라 증거도 없으면 `full_stack`이다.
+`sourceDeploymentId`는 `scope in (infrastructure, full_stack)`인 최신 성공 Direct Infrastructure Apply Evidence의 Deployment ID다. `initialApplicationReleaseId`는 current target의 fingerprint, confirmed commit SHA, 안전한 HTTPS Output URL과 일치하고 ReleaseCandidate / composite digest / healthy ECS / frontend VersionId/invalidation/commit marker 증거를 모두 가진 성공 Direct `ApplicationRelease` ID다. 같은 full_stack Deployment의 릴리즈이거나, 기존 bootstrap-only 환경을 복구한 별도 application-scope Deployment의 릴리즈만 인정한다. 인프라 증거가 있고 앱 증거만 없으면 `recommendedDeploymentScope`는 `application`, 인프라 증거도 없으면 `full_stack`이다.
 
 2026-07-07 추가 계약:
 
 - `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`는 handoff의 `repositorySettingsPreview`를 기준으로 GitHub App installation token으로 GitHub Environment와 Actions variables를 적용한다.
 - 응답 DTO는 `GitCicdRepositorySettingsApplyResponse`이며 적용 여부, environment 이름, 적용된 variable 이름과 workflow file 목록을 반환한다.
-- GitHub App 권한이 부족하면 `github_app_permission_required`로 중단하고 GitHub App 설정에서 Administration·Variables의 Read and write와 Actions의 Read-only 승인을 안내한다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않는다.
+- GitHub App 권한이 부족하면 `github_app_permission_required`로 중단하고 GitHub App 설정에서 Administration / Variables의 Read and write와 Actions의 Read-only 승인을 안내한다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않는다.
 - `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`는 승인된 `awsRoleDiff`를 기준으로 IAM trust policy를 적용하고 검증한다.
 - 응답 DTO는 `GitCicdAwsRoleDiffApplyResponse`이며 role ARN, repository, environment, `appliedAt`, `verified`를 반환한다.
 - `GitCicdAwsRoleDiff` JSON에는 적용 후 `applied`, `appliedAt`, `verified`를 기록할 수 있다.
@@ -1934,7 +1934,7 @@ type GitCicdReadinessResponse = {
 
 - `POST /api/projects/:projectId/git-cicd-handoffs`는 handoff를 먼저 `draft`로 저장한 뒤 Repository 설정, 필요한 AWS Role trust, PR 준비를 한 번의 사용자 승인으로 순서대로 처리한다.
 - `POST /api/git-cicd-handoffs/:handoffId/setup`은 중간에 실패했거나 과거 방식으로 생성된 handoff의 미완료 설정을 같은 record에서 다시 확인하고 이어서 처리한다. 과거 `pipeline_running`/`pipeline_success` record는 Repository/AWS 검증 증거만 보완하고 기존 PR과 Pipeline 상태를 유지한다. Direct Deployment의 Destroy나 재배포는 요구하지 않는다.
-- `pipeline_failed` 또는 닫힌 PR로 `cancelled`된 handoff를 재개하면 실패 run identity에서 만든 안정적인 `setupRetryToken`을 PR provider에 전달한다. 이때만 `sketchcatch/<project>/ci-cd/retry.json`을 생성·갱신하며, ECS App workflow는 이 exact path를 재포함해 retry PR merge 뒤 Pipeline을 다시 시작한다. 최초 setup에는 retry file을 만들지 않는다.
+- `pipeline_failed` 또는 닫힌 PR로 `cancelled`된 handoff를 재개하면 실패 run identity에서 만든 안정적인 `setupRetryToken`을 PR provider에 전달한다. 이때만 `sketchcatch/<project>/ci-cd/retry.json`을 생성 / 갱신하며, ECS App workflow는 이 exact path를 재포함해 retry PR merge 뒤 Pipeline을 다시 시작한다. 최초 setup에는 retry file을 만들지 않는다.
 - `GitCicdRepositorySettingsPreview`는 `applied`, `appliedAt`, `verified` 증거를 저장할 수 있다. Repository variable과 target branch 전용 Environment policy는 GitHub에서 다시 읽은 상태가 preview와 정확히 같아야 `verified: true`가 된다. 이미 일치하는 provider 상태는 write를 생략한다.
 - `GitCicdRepositorySettingsApplyResponse`는 기존 필드와 함께 `appliedAt`, `verified`를 반환한다.
 - AWS trust statement는 Repository/Environment별 scoped Sid를 사용한다. 현재 scope의 legacy statement만 교체하고 다른 statement는 보존하며, exact 상태면 IAM write를 생략한다. `awsRoleDiff.verified` 저장까지 확인되지 않으면 PR 단계로 진행하지 않는다.
@@ -2013,7 +2013,7 @@ RDS record를 갱신한 뒤 best-effort로 Runtime Cache snapshot을 갱신한�
 
 ## Git/CI/CD Monitoring and Pipeline Runs
 
-`GitCicdMonitoringConfig`는 하나의 active `SourceRepository`에 속한다. `GitCicdHandoff`는 승인된 Git/PR handoff로 계속 유지한다. `GitCicdPipelineRun`은 하나의 GitHub workflow run ID·attempt에 속하며 `app` 또는 `infra` 실행 하나를 표현한다. 같은 source commit의 App·Infra run도 서로 다른 record이며 handoff 또는 Direct Deployment record를 대체하지 않는다.
+`GitCicdMonitoringConfig`는 하나의 active `SourceRepository`에 속한다. `GitCicdHandoff`는 승인된 Git/PR handoff로 계속 유지한다. `GitCicdPipelineRun`은 하나의 GitHub workflow run ID / attempt에 속하며 `app` 또는 `infra` 실행 하나를 표현한다. 같은 source commit의 App / Infra run도 서로 다른 record이며 handoff 또는 Direct Deployment record를 대체하지 않는다.
 
 ```ts
 type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
@@ -2173,13 +2173,13 @@ type GitCicdPipelineLogListResponse = {
 };
 ```
 
-Monitoring 조회는 설정을 저장하거나 외부 시스템을 변경하지 않는다. 저장된 `GitCicdMonitoringConfig`가 없으면 `GET`과 `ProjectDeliveryProfile`은 Source Repository의 기본 branch, repository root 경로, `validationStatus: "required"`를 사용해 같은 기본 응답을 계산한다. 이 기본값은 사용자가 변경을 수락하고 `PUT`을 호출해 GitHub branch·directory 검증을 통과한 뒤에만 RDS에 저장한다.
+Monitoring 조회는 설정을 저장하거나 외부 시스템을 변경하지 않는다. 저장된 `GitCicdMonitoringConfig`가 없으면 `GET`과 `ProjectDeliveryProfile`은 Source Repository의 기본 branch, repository root 경로, `validationStatus: "required"`를 사용해 같은 기본 응답을 계산한다. 이 기본값은 사용자가 변경을 수락하고 `PUT`을 호출해 GitHub branch / directory 검증을 통과한 뒤에만 RDS에 저장한다.
 
 `POST /api/git-cicd-pipeline-runs/:pipelineRunId/refresh`는 `GitCicdPipelineRunRefreshResponse`를 반환한다. GitHub Actions 읽기가 실패하면 마지막 RDS 상태와 함께 `stale: true` 및 비밀이나 provider 원문을 포함하지 않는 고정 `errorMessage`를 반환한다. 성공 시 `stale: false`, `errorMessage: null`이다.
 
-`POST /api/projects/:projectId/git-cicd-pipeline-runs/refresh`는 project 소유권을 확인한 뒤 해당 project의 enabled, valid monitoring target을 모두 read-only로 발견·갱신한다. 개별 target 실패는 그 target의 마지막 RDS 상태를 보존하고 `targets[].stale`로 표시하며, 응답의 `stale`은 하나 이상의 target이 stale일 때 `true`다. Workspace observer는 콘솔이 닫혀 있어도 이 endpoint를 먼저 호출한 다음 RDS 목록을 읽는다.
+`POST /api/projects/:projectId/git-cicd-pipeline-runs/refresh`는 project 소유권을 확인한 뒤 해당 project의 enabled, valid monitoring target을 모두 read-only로 발견 / 갱신한다. 개별 target 실패는 그 target의 마지막 RDS 상태를 보존하고 `targets[].stale`로 표시하며, 응답의 `stale`은 하나 이상의 target이 stale일 때 `true`다. Workspace observer는 콘솔이 닫혀 있어도 이 endpoint를 먼저 호출한 다음 RDS 목록을 읽는다.
 
-GitHub Actions 발견은 target branch별 최대 2 page, 최근 최대 10 workflow run으로 제한한다. 각 snapshot은 workflow run ID·attempt·execution kind를 그대로 유지하며 commit SHA로 App·Infra job과 log를 합치지 않는다. 특정 run refresh는 workflow run ID와 attempt를 사용해 같은 commit의 다른 run을 함께 갱신하지 않는다. `upstreamOrderingToken`은 provider의 갱신 시각과 workflow run identity로 만든다. RDS upsert는 이전 token 또는 같은 revision의 terminal-to-non-terminal 역행을 원자적으로 거부한다. 거부된 snapshot은 stage/log를 갱신하지 않는다. workflow run identity/attempt 기반 `logRevision`이 바뀌면 Web은 증분 log sequence와 표시 log를 0/빈 목록으로 초기화해 rerun log를 이전 attempt와 섞지 않는다.
+GitHub Actions 발견은 target branch별 최대 2 page, 최근 최대 10 workflow run으로 제한한다. 각 snapshot은 workflow run ID / attempt / execution kind를 그대로 유지하며 commit SHA로 App / Infra job과 log를 합치지 않는다. 특정 run refresh는 workflow run ID와 attempt를 사용해 같은 commit의 다른 run을 함께 갱신하지 않는다. `upstreamOrderingToken`은 provider의 갱신 시각과 workflow run identity로 만든다. RDS upsert는 이전 token 또는 같은 revision의 terminal-to-non-terminal 역행을 원자적으로 거부한다. 거부된 snapshot은 stage/log를 갱신하지 않는다. workflow run identity/attempt 기반 `logRevision`이 바뀌면 Web은 증분 log sequence와 표시 log를 0/빈 목록으로 초기화해 rerun log를 이전 attempt와 섞지 않는다.
 
 API 경로:
 
@@ -2247,7 +2247,7 @@ type ReverseEngineeringScanResult = {
 
 Reverse Engineering의 `원본`은 `architectureJson`에 담긴 Resource, 관계, 설정을 그대로 유지한다. Cloud provider에는
 Architecture Board 좌표가 없으므로 화면에 처음 보여주기 위한 결정론적 기본 위치만 계산한다. 이때 Resource 의미를
-추가·삭제·변경하지 않으며, Board Auto Arrange나 의미 변경을 허용한 Compiler 제안과 구분한다.
+추가 / 삭제 / 변경하지 않으며, Board Auto Arrange나 의미 변경을 허용한 Compiler 제안과 구분한다.
 
 화면의 `supported`/`review_only` 표시는 저장하는 상태가 아니라 읽기 시점의 presentation 값이다.
 `DiscoveredResource.resourceType`, `analysisExcluded`, 관계 유무를 바탕으로 계산하므로, 과거
@@ -2291,7 +2291,7 @@ Redis 기반 Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integra
 
 Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
 
-Terraform 기반 Pre-Deployment Check는 정규화한 파일 이름·내용, Trivy version, checks bundle digest, SketchCatch 제외 rule 목록으로 SHA-256 cache key를 만든다. Trivy finding 결과는 process-local LRU와 Runtime Cache에 5분 동안 저장하며, 같은 API process에서 동일 key 검사가 동시에 요청되면 하나의 in-flight scan을 공유한다. Cache miss 또는 cache 장애 시 실제 Trivy 검사를 실행한다. Cached finding은 검사 재사용 결과일 뿐 severity나 Safety Gate 정책을 변경하지 않는다.
+Terraform 기반 Pre-Deployment Check는 정규화한 파일 이름 / 내용, Trivy version, checks bundle digest, SketchCatch 제외 rule 목록으로 SHA-256 cache key를 만든다. Trivy finding 결과는 process-local LRU와 Runtime Cache에 5분 동안 저장하며, 같은 API process에서 동일 key 검사가 동시에 요청되면 하나의 in-flight scan을 공유한다. Cache miss 또는 cache 장애 시 실제 Trivy 검사를 실행한다. Cached finding은 검사 재사용 결과일 뿐 severity나 Safety Gate 정책을 변경하지 않는다.
 
 버튼 Pre-Deployment Check와 Direct Deployment Plan은 같은 기본 analyzer와 Trivy snapshot cache를 사용한다. Plan이 materialize한 Terraform artifact의 내용 SHA가 버튼 검사 때의 내용과 같으면 Trivy finding snapshot을 재사용하고, 아키텍처 기반 deterministic policy는 현재 `ArchitectureJson`으로 다시 계산한다. Terraform 내용이나 Trivy 정책 identity가 바뀐 경우에만 Trivy를 다시 실행한다.
 
@@ -2452,11 +2452,11 @@ type DeploymentResourceObservationState = "observed" | "delayed" | "unavailable"
 
 지도는 세션 시작 전 지원 Resource를 `configured` UI 상태로 표시한다. 세션 snapshot이 있으면 provider aggregate state를 `observed`, `delayed`, `unavailable` 중 하나로 매핑하고, 현재 Provider Adapter가 관측하지 않는 Resource도 숨기지 않고 `not_supported`(`관측 데이터 없음`)로 표시한다. `configured`는 프론트 표시 상태이며 persisted `DeploymentResourceObservationState` union에는 포함하지 않는다.
 
-v4 union, immutable Architecture 조회 응답, Resource observation state는 기존 Deployment/Architecture/manifest 데이터를 읽는 API·shared contract 변경이다. 새 DB table이나 column을 추가하지 않으므로 DB migration은 없다.
+v4 union, immutable Architecture 조회 응답, Resource observation state는 기존 Deployment/Architecture/manifest 데이터를 읽는 API / shared contract 변경이다. 새 DB table이나 column을 추가하지 않으므로 DB migration은 없다.
 
 `status: "valid"`이면 검증을 통과한 `manifest`가 반드시 존재하고 `invalidReason`은 `null`이다. `status: "manifest_invalid"`이면 `manifest`는 `null`이고 서버가 정한 non-empty generic `invalidReason`이 반드시 존재한다. 호출자가 제공한 실패 사유나 raw diagnostic은 보존하지 않는다. raw Terraform, credential, Role ARN, External ID, private token, password, access key, secret key, private key 등 secret material은 manifest record 어디에도 저장하지 않는다.
 
-manifest materialization 실패는 이미 성공한 Deployment의 `SUCCESS`를 변경하지 않는다. 대신 같은 one-to-one row에 `manifest_invalid`를 기록한다. 기존 adapter v1 row는 repository/parser 호환을 위해 그대로 읽지만 새 v2 session 생성과 immutable reuse에는 사용할 수 없다. row가 없는 Deployment는 인증된 session 생성 요청에서 verified evidence를 한 번 materialize한다. repository는 insert-once이고 conflict에서 동일한 row만 재사용한다. 이후 row는 immutable source of truth로 사용하고, session 생성 때마다 Deployment 접근권한과 approved artifact/account/region, verified AWS connection, 지원되는 non-legacy adapter(v2/v3/v4), adapter ARN identity, 현재 `SKETCHCATCH_PUBLIC_BASE_URL`과 manifest `audienceBaseUrl` 일치를 다시 확인한다.
+manifest materialization 실패는 이미 성공한 Deployment의 `SUCCESS`를 변경하지 않는다. 대신 같은 one-to-one row에 `manifest_invalid`를 기록한다. 기존 adapter v1 row는 repository/parser 호환을 위해 그대로 읽지만 새 v2 session 생성과 immutable reuse에는 사용할 수 없다. row가 없는 Deployment는 인증된 session 생성 요청에서 verified evidence를 한 번 materialize한다. repository는 insert-once이고 conflict에서 동일한 row만 재사용한다. 이후 row는 immutable 기준으로 사용하고, session 생성 때마다 Deployment 접근권한과 approved artifact/account/region, verified AWS connection, 지원되는 non-legacy adapter(v2/v3/v4), adapter ARN identity, 현재 `SKETCHCATCH_PUBLIC_BASE_URL`과 manifest `audienceBaseUrl` 일치를 다시 확인한다.
 
 ### Live Observation capability v2
 
@@ -2482,7 +2482,7 @@ rotation 중 previous key는 absolute `stoppedIssuingAt`을 기준으로 `create
 
 ### Live Observation Store v2
 
-v2 Store는 lifecycle, receipt 집계, fenced provider observation을 위한 전용 provider-neutral seam이다. 외부 Interface는 session 네 연산과 observer lease/commit, presenter lease 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사·초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고 production Redis Adapter는 같은 계약을 Redis TIME과 원자 Lua로 구현한다.
+v2 Store는 lifecycle, receipt 집계, fenced provider observation을 위한 전용 provider-neutral seam이다. 외부 Interface는 session 네 연산과 observer lease/commit, presenter lease 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사 / 초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고 production Redis Adapter는 같은 계약을 Redis TIME과 원자 Lua로 구현한다.
 
 ```ts
 type LiveObservationStore = {
@@ -2535,7 +2535,7 @@ type LiveObservationProviderSnapshot = {
 };
 ```
 
-`available`은 완전한 정량값을 가진다. `requests`는 immutable manifest가 가리키는 동일 Target Group, 동일 완료 period의 2xx/3xx/4xx/5xx response class 합계이고 `errorRate`의 분자는 그중 5xx다. p95가 선택한 period는 각 response class의 전체 finite point에서 정확히 찾고, 모든 query result가 유일한 `StatusCode=Complete`일 때만 사용한다. 같은 period에 하나 이상의 response class가 있을 때만 누락 class를 sparse zero로 보며, latency만 있거나 status가 누락·non-Complete이거나 stale·다른 period의 class만 있으면 request evidence는 unavailable이다. `delayed`는 수치가 모두 `null`이거나, observer가 직전의 완전한 관측값을 재사용한 complete last-known evidence를 가질 수 있다. `unavailable`은 requests, errorRate, p95LatencyMs, availability, capacity 수치를 모두 `null`로 유지한다. Web은 delayed 수치를 현재 정상·장애 판단에 사용하지 않는다. ASG `running`은 `InService` instance만 세고 ECS `running`은 service task count를 사용하며, 두 target의 `healthy`는 immutable manifest의 정확한 target group ARN으로 조회한 ELB target health를 사용하고 항상 `running` 이하다. Manifest materializer는 ASG와 ECS capacity evidence가 동시에 존재하는 output을 모호한 target으로 거부한다. 로그는 최근 5분, 최대 50건, 메시지당 4,096자이며 Authorization/JWT/GitHub token/PEM을 포함한 credential-shaped 값이 중앙 masker로 제거된 fresh evidence만 허용한다.
+`available`은 완전한 정량값을 가진다. `requests`는 immutable manifest가 가리키는 동일 Target Group, 동일 완료 period의 2xx/3xx/4xx/5xx response class 합계이고 `errorRate`의 분자는 그중 5xx다. p95가 선택한 period는 각 response class의 전체 finite point에서 정확히 찾고, 모든 query result가 유일한 `StatusCode=Complete`일 때만 사용한다. 같은 period에 하나 이상의 response class가 있을 때만 누락 class를 sparse zero로 보며, latency만 있거나 status가 누락 / non-Complete이거나 stale / 다른 period의 class만 있으면 request evidence는 unavailable이다. `delayed`는 수치가 모두 `null`이거나, observer가 직전의 완전한 관측값을 재사용한 complete last-known evidence를 가질 수 있다. `unavailable`은 requests, errorRate, p95LatencyMs, availability, capacity 수치를 모두 `null`로 유지한다. Web은 delayed 수치를 현재 정상 / 장애 판단에 사용하지 않는다. ASG `running`은 `InService` instance만 세고 ECS `running`은 service task count를 사용하며, 두 target의 `healthy`는 immutable manifest의 정확한 target group ARN으로 조회한 ELB target health를 사용하고 항상 `running` 이하다. Manifest materializer는 ASG와 ECS capacity evidence가 동시에 존재하는 output을 모호한 target으로 거부한다. 로그는 최근 5분, 최대 50건, 메시지당 4,096자이며 Authorization/JWT/GitHub token/PEM을 포함한 credential-shaped 값이 중앙 masker로 제거된 fresh evidence만 허용한다.
 
 ### Web Signal Dashboard presentation model
 
@@ -2554,11 +2554,11 @@ type LiveObservationSignalPresentation = {
 };
 ```
 
-`actual`은 snapshot, immutable Deployment, 중앙 masker를 지난 runtime log에서 직접 읽은 값이다. `derived`는 current session의 실제 값에 고정 규칙을 적용한 값이며, `inferred`는 하나 이상의 evidence ID를 반드시 가진 가능성이다. `unknown`은 값을 0·정상·변화 없음으로 바꾸지 않고 비교 기준이나 데이터가 부족함을 표시한다. 요청 수가 0이면 `errorRate: 0`과 `availability: 100`도 정상 근거가 아니다. signal은 사용자 영향, 심각도, freshness, evidence quality, stable key 순서로 정렬해 최대 세 개만 노출한다. aggregate snapshot에는 관측 대상 Resource ID가 없으므로 type 일치만으로 관련 Resource를 만들지 않는다.
+`actual`은 snapshot, immutable Deployment, 중앙 masker를 지난 runtime log에서 직접 읽은 값이다. `derived`는 current session의 실제 값에 고정 규칙을 적용한 값이며, `inferred`는 하나 이상의 evidence ID를 반드시 가진 가능성이다. `unknown`은 값을 0 / 정상 / 변화 없음으로 바꾸지 않고 비교 기준이나 데이터가 부족함을 표시한다. 요청 수가 0이면 `errorRate: 0`과 `availability: 100`도 정상 근거가 아니다. signal은 사용자 영향, 심각도, freshness, evidence quality, stable key 순서로 정렬해 최대 세 개만 노출한다. aggregate snapshot에는 관측 대상 Resource ID가 없으므로 type 일치만으로 관련 Resource를 만들지 않는다.
 
-Web session history는 browser memory에만 두며 `observationId`가 바뀌면 즉시 비운다. 최신 15분과 최대 120개 sample만 유지하고 새 페이지 진입 시 복원하지 않는다. missing metric은 sample에 기록하지 않으며 실제 값이 두 개 이상일 때만 작은 SVG history를 그린다. 정규화한 마스킹 runtime log의 opaque fingerprint만 같은 bounded history에 남겨 이전 관측과 비교할 수 있을 때만 단일 오류를 새 오류로 표시한다. 오류·경고·복구·확인 필요 로그는 fingerprint로 묶고 대표 원문은 닫힌 disclosure에서만 연다. 실제 배포 완료·신호·로그 시각 중 두 종류 이상이 있을 때만 접힌 사고 흐름을 표시하며, 인과관계로 단정하지 않는다. 이 UI는 AI 호출·새 polling·Terraform/Deployment/Project/Architecture Board mutation을 만들지 않는다.
+Web session history는 browser memory에만 두며 `observationId`가 바뀌면 즉시 비운다. 최신 15분과 최대 120개 sample만 유지하고 새 페이지 진입 시 복원하지 않는다. missing metric은 sample에 기록하지 않으며 실제 값이 두 개 이상일 때만 작은 SVG history를 그린다. 정규화한 마스킹 runtime log의 opaque fingerprint만 같은 bounded history에 남겨 이전 관측과 비교할 수 있을 때만 단일 오류를 새 오류로 표시한다. 오류 / 경고 / 복구 / 확인 필요 로그는 fingerprint로 묶고 대표 원문은 닫힌 disclosure에서만 연다. 실제 배포 완료 / 신호 / 로그 시각 중 두 종류 이상이 있을 때만 접힌 사고 흐름을 표시하며, 인과관계로 단정하지 않는다. 이 UI는 AI 호출 / 새 polling / Terraform/Deployment/Project/Architecture Board mutation을 만들지 않는다.
 
-Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 120, session accepted event 10,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 수행한다. weighted burst는 candidateCurrentSecond + previousSecond \* (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
+Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 120, session accepted event 10,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 실행한다. weighted burst는 candidateCurrentSecond + previousSecond \* (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
 
 create와 Deployment active claim 설정은 await 없는 하나의 원자 구간이다. 같은 Deployment의 concurrent create는 하나만 created이고 나머지는 모두 같은 session의 active_exists다. expiry와 stop은 claim이 여전히 같은 observationId를 가리킬 때만 compare-delete한다. active claim이 있으면 새 observationId 충돌보다 active_exists를 우선한다.
 
@@ -2653,8 +2653,8 @@ API 계약:
 반환한다. Web은 API 오류에 HTTP method, query/fragment를 제거한 path, HTTP status 또는 응답 없음,
 error code, 선택적인 request ID를 표시하며 credential-bearing query와 fragment는 화면에 복제하지 않는다.
 
-public request/receipt body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. 서버는 manifest의 exact audience application Origin과 capability를 검증한다. `/requests`는 traffic endpoint의 2xx 뒤 receipt를 기록하고, `/receipts`는 외부 앱이 이미 성공시킨 실제 요청의 영수증만 Store에 기록한다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, Store 상한은 `429`를 사용한다.
-별도 per-IP limiter와 `Retry-After` 응답은 모든 환경에서 사용하지 않는다. Audience Web은 요청 진행 중에만 버튼을 잠그고 `429` 뒤에도 즉시 다시 요청할 수 있다. Store의 초당·10초·세션 상한은 적용되며 거부된 요청은 receipt나 pressure에 포함하지 않는다.
+public request/receipt body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. 서버는 manifest의 exact audience application Origin과 capability를 검증한다. `/requests`는 traffic endpoint의 2xx 뒤 receipt를 기록하고, `/receipts`는 외부 앱이 이미 성공시킨 실제 요청의 영수증만 Store에 기록한다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료 / 중지는 `410`, Store 상한은 `429`를 사용한다.
+별도 per-IP limiter와 `Retry-After` 응답은 모든 환경에서 사용하지 않는다. Audience Web은 요청 진행 중에만 버튼을 잠그고 `429` 뒤에도 즉시 다시 요청할 수 있다. Store의 초당 / 10초 / 세션 상한은 적용되며 거부된 요청은 receipt나 pressure에 포함하지 않는다.
 
 SSE는 연결 직후 전체 snapshot을 보내고 live count는 최대 1초, AWS 상태는 최대 10초 간격으로 갱신한다. 15초 heartbeat를 보내며 재연결 시 최신 전체 snapshot을 다시 보낸다. 인증된 GET snapshot은 SSE fallback이다.
 
@@ -2823,9 +2823,9 @@ type ArchitectureIntent = {
 
 검증된 답변만 원래 Requirement Prompt 뒤의 구조화된 `Accepted architecture clarification answers` 문맥과 Amazon Q payload에 포함한다. 질문 문장 자체는 Requirement Prompt에 답변처럼 합치지 않으며, 선택지 클릭과 직접 자연어 입력은 같은 계약을 사용한다.
 
-`POST /api/ai/architecture-draft/stream`은 새 프로젝트의 첫 AI Draft 전용 newline-delimited JSON 경계다. Repository 권한을 필요로 하는 `repositoryAnalysis`와 `repositoryEvidence`는 이 경계에서 hijack 전 400으로 거부하고, 기존 JSON endpoint의 active-user·persisted Repository Analysis 해석 경로만 사용한다. `progress` event는 화면 단계나 질문 요약을 전달하지 않고, 후보 제외에 필요한 서버 발급 `provisionalArchitectureJson`과 `excludableCandidateIds`만 증가하는 `sequence`와 함께 전달한다. 해당 snapshot은 현재 요청의 이전 후보 snapshot을 완전히 대체하며, 최종 `CreateArchitectureDraftResponse`는 별도 terminal event로 전달한다. 클라이언트는 대화 원문이나 장식용 AWS icon에서 Resource 후보를 추측하지 않는다.
+`POST /api/ai/architecture-draft/stream`은 새 프로젝트의 첫 AI Draft 전용 newline-delimited JSON 경계다. Repository 권한을 필요로 하는 `repositoryAnalysis`와 `repositoryEvidence`는 이 경계에서 hijack 전 400으로 거부하고, 기존 JSON endpoint의 active-user / persisted Repository Analysis 해석 경로만 사용한다. `progress` event는 화면 단계나 질문 요약을 전달하지 않고, 후보 제외에 필요한 서버 발급 `provisionalArchitectureJson`과 `excludableCandidateIds`만 증가하는 `sequence`와 함께 전달한다. 해당 snapshot은 현재 요청의 이전 후보 snapshot을 완전히 대체하며, 최종 `CreateArchitectureDraftResponse`는 별도 terminal event로 전달한다. 클라이언트는 대화 원문이나 장식용 AWS icon에서 Resource 후보를 추측하지 않는다.
 
-`candidateExclusions`는 최대 32개이며 `candidateId`, `label`, 지원 `ResourceType`을 포함한다. 서버는 결정론적 후보 graph가 발급한 id·type·trimmed label tuple이 정확히 일치하고, 명시적 safe adjunct allowlist에 속하며, 그 type을 제거해도 남은 edge·nested config·Terraform reference가 유효한 후보만 `excludableCandidateIds`로 발급한다. forged·stale·구조적 후보 제외은 무시한다. 승인된 제외은 Amazon Q prompt·payload·repair validation의 binding constraint로 전달하고, 계획에 명시된 계약대로 해당 `resourceType`의 node와 incident edge를 잠정 graph와 최종 graph에서 제거한다. 제외 결과가 빈 graph, 중복 id, dangling edge/reference를 만들면 안전한 미적용 graph를 유지하고 metadata에 근거를 남긴다. 후보 snapshot 생성, 후보 제외, progress callback은 관찰 경로이므로 실패하더라도 최종 Architecture Draft 생성을 중단하지 않는다. 스트림이 시작된 뒤 발생한 오류는 `error` event의 표준 `ApiErrorResponse`와 `statusCode`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약과 Repository Analysis 권한 경로는 유지한다.
+`candidateExclusions`는 최대 32개이며 `candidateId`, `label`, 지원 `ResourceType`을 포함한다. 서버는 결정론적 후보 graph가 발급한 id / type / trimmed label tuple이 정확히 일치하고, 명시적 safe adjunct allowlist에 속하며, 그 type을 제거해도 남은 edge / nested config / Terraform reference가 유효한 후보만 `excludableCandidateIds`로 발급한다. forged / stale / 구조적 후보 제외은 무시한다. 승인된 제외은 Amazon Q prompt / payload / repair validation의 binding constraint로 전달하고, 계획에 명시된 계약대로 해당 `resourceType`의 node와 incident edge를 잠정 graph와 최종 graph에서 제거한다. 제외 결과가 빈 graph, 중복 id, dangling edge/reference를 만들면 안전한 미적용 graph를 유지하고 metadata에 근거를 남긴다. 후보 snapshot 생성, 후보 제외, progress callback은 관찰 경로이므로 실패하더라도 최종 Architecture Draft 생성을 중단하지 않는다. 스트림이 시작된 뒤 발생한 오류는 `error` event의 표준 `ApiErrorResponse`와 `statusCode`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약과 Repository Analysis 권한 경로는 유지한다.
 
 `ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
 
@@ -2839,7 +2839,7 @@ Requirement Prompt에서 지원 가능한 아키텍처 단서나 대체 가능�
 
 `웹사이트 하나 배포하고 싶어`처럼 대상은 아키텍처와 관련 있지만 화면만 필요한지, 방문자 입력/파일 업로드가 필요한지, 로그인/데이터 저장이 필요한지 알 수 없는 요구사항은 곧바로 `static_site`로 단정하지 않는다. Workspace AI는 전문 용어 대신 쉬운 질문과 추천 답안을 차례로 보여주고, 답변을 모아 구현 리스트를 확인받은 뒤 사용자가 진행을 승인할 때만 자연어 `prompt`를 다시 구성해 `ArchitectureDraft`를 요청한다. 질문에서는 `S3`, `EC2`, `RDS`, `IAM` 같은 내부 리소스 이름을 먼저 묻지 않고, 비용 영향과 보호 범위를 사용자 언어로 설명한다.
 
-예산, 방문자 규모, 보호 수준은 별도 보조 선택값이 아니라 자연어 단서에서 `operatingProfile`로 계산된다. `operatingProfile`은 호환용 `budgetLevel`, `trafficLevel`, `securityPriority`와 함께 세분화된 `budgetProfile`, `trafficProfile`, `databaseProfile`, `managementProfile`, `availabilityProfile`, `uploadProfile`, `realtimeProfile`을 보관한다. 이 값은 EC2/RDS 크기와 저장 용량, CloudFront price class, Auto Scaling 용량, RDS Multi-AZ·백업·자동 업데이트, S3 업로드 용도, Lambda 메모리·timeout, 로그 보존 기간, public access block, deletion protection 같은 실제 config 차이로 반영된다. Provider가 동일한 기본값을 반복해서 반환하더라도 서버가 최종 Preview에 이 정책을 다시 적용한다.
+예산, 방문자 규모, 보호 수준은 별도 보조 선택값이 아니라 자연어 단서에서 `operatingProfile`로 계산된다. `operatingProfile`은 호환용 `budgetLevel`, `trafficLevel`, `securityPriority`와 함께 세분화된 `budgetProfile`, `trafficProfile`, `databaseProfile`, `managementProfile`, `availabilityProfile`, `uploadProfile`, `realtimeProfile`을 보관한다. 이 값은 EC2/RDS 크기와 저장 용량, CloudFront price class, Auto Scaling 용량, RDS Multi-AZ / 백업 / 자동 업데이트, S3 업로드 용도, Lambda 메모리 / timeout, 로그 보존 기간, public access block, deletion protection 같은 실제 config 차이로 반영된다. Provider가 동일한 기본값을 반복해서 반환하더라도 서버가 최종 Preview에 이 정책을 다시 적용한다.
 
 `metadata.guardrailWarnings`는 AI 초안 카드 하단에 표시할 경고 계약이다.
 
@@ -3153,7 +3153,7 @@ type CostProjectEstimateListResponse = {
 
 실제 비용 데이터 출처는 AWS Cost Explorer와 CloudWatch다. Cost Explorer는 `UnblendedCost` 기준으로 일별 비용, 서비스별 비용, `SketchCatchProjectId` tag 기반 프로젝트별 비용을 조회한다. 사용량 분석의 프로젝트 목록은 사용자가 실제로 생성한 프로젝트 레코드를 기준으로 한다. 프로젝트 tag 비용이 있으면 이 값을 우선한다. tag 비용이 없거나 프로젝트와 tag가 맞지 않으면 최신 성공 `deployments`와 `deployed_resources`를 기준으로 프로젝트별 비용을 근사 배분한다. 샘플 fallback도 프로젝트 행을 임의 생성하지 않고 실제 프로젝트 이름을 사용한다. 리소스별 비용은 현재 v1에서 배포 리소스 기준 균등 배분이며, 실제 리소스 단위 Cost Explorer 청구 원장 대체물이 아니다. `/api/costs/usage`는 선택적으로 `projectId` query를 받아 전체 계정 비용 배분을 먼저 계산한 뒤 응답을 해당 프로젝트의 비용, 서비스, 리소스, 그래프로 좁힌다.
 
-월별 비교는 현재 월을 포함한 최근 6개월의 `UnblendedCost`를 반환한다. 현재 월은 `isPartial=true`로 표시하고, 현재까지의 일평균을 해당 월의 전체 일수로 환산해 월말 예상 비용과 전월 대비 금액·비율을 계산한다. `SketchCatchProjectId` tag가 있는 프로젝트는 월별 tag 실측을 우선 사용한다. 각 월의 계정 비용에서 tag 실측 합계를 먼저 차감한 뒤, 남은 금액을 tag가 없거나 해당 월 tag가 누락된 프로젝트의 선택 기간 비용 비율로 배분하고 `isEstimated=true`로 표시한다.
+월별 비교는 현재 월을 포함한 최근 6개월의 `UnblendedCost`를 반환한다. 현재 월은 `isPartial=true`로 표시하고, 현재까지의 일평균을 해당 월의 전체 일수로 환산해 월말 예상 비용과 전월 대비 금액 / 비율을 계산한다. `SketchCatchProjectId` tag가 있는 프로젝트는 월별 tag 실측을 우선 사용한다. 각 월의 계정 비용에서 tag 실측 합계를 먼저 차감한 뒤, 남은 금액을 tag가 없거나 해당 월 tag가 누락된 프로젝트의 선택 기간 비용 비율로 배분하고 `isEstimated=true`로 표시한다.
 
 CloudWatch 기반 낭비 탐지는 v1에서 EC2, RDS, ALB, NAT Gateway를 우선 지원한다. 기준은 EC2/RDS 평균 CPU 5% 미만, RDS 평균 connection 1 미만, ALB 요청량 매우 낮음, NAT Gateway 처리량 낮음이다. 이 결과는 비용 절감 추천으로 표시되지만, 리소스를 자동 중지하거나 삭제하지 않는다.
 
@@ -3528,7 +3528,7 @@ type ProjectDeliveryProfile = {
 
 `buildVerification`은 Plan 요청 과정에서 저장된 `project_build_environments`의 Repository checkout 상태를 읽기 전용으로 투영합니다. record가 없으면 `not_started`, 환경 준비 또는 checkout 미실행은 `preparing`, exact commit 검증 성공은 `verified`, 검증 실패나 연결 해제는 `failed`입니다. 응답은 requested/resolved commit SHA, 검증 시각과 masking된 실패 요약만 포함하며 Build ARN, CodeBuild Role ARN, permissions boundary, credential과 provider token을 포함하지 않습니다. 이 조회는 Build Environment를 생성하거나 검증을 시작하지 않습니다.
 
-`handoffConfigurationPreview`는 readiness가 선택한 `sourceDeploymentId`, 그 Deployment에 정확히 연결된 동일 프로젝트 Architecture, 현재 확정 Deployment Target이 모두 있을 때만 계산하고 그 외에는 `null`입니다. `rdsEnabled`는 Architecture node의 `config.terraformResourceType`이 `aws_db_instance`, `aws_rds_cluster`, `aws_rds_cluster_instance` 중 하나일 때만 `true`이며 subnet group, parameter group, option group, snapshot 같은 지원 Resource는 포함하지 않습니다. URL은 credential·query·fragment가 없는 public HTTPS `runtimeConfig.outputUrl`만 사용합니다. Static Site는 Static URL만, Lambda와 EC2 ASG 및 legacy ECS는 API URL만 반환합니다. `ecsWeb`이 확정된 ECS는 같은 public Output URL을 Static URL과 API Base URL에 표시하며 내부 `apiOriginUrl`은 노출하지 않습니다.
+`handoffConfigurationPreview`는 readiness가 선택한 `sourceDeploymentId`, 그 Deployment에 정확히 연결된 동일 프로젝트 Architecture, 현재 확정 Deployment Target이 모두 있을 때만 계산하고 그 외에는 `null`입니다. `rdsEnabled`는 Architecture node의 `config.terraformResourceType`이 `aws_db_instance`, `aws_rds_cluster`, `aws_rds_cluster_instance` 중 하나일 때만 `true`이며 subnet group, parameter group, option group, snapshot 같은 지원 Resource는 포함하지 않습니다. URL은 credential / query / fragment가 없는 public HTTPS `runtimeConfig.outputUrl`만 사용합니다. Static Site는 Static URL만, Lambda와 EC2 ASG 및 legacy ECS는 API URL만 반환합니다. `ecsWeb`이 확정된 ECS는 같은 public Output URL을 Static URL과 API Base URL에 표시하며 내부 `apiOriginUrl`은 노출하지 않습니다.
 
 ```ts
 type RepositoryEvidenceKind =
@@ -3654,7 +3654,7 @@ Task Definition은 고정 `INSTANCE_ID`를 만들지 않으므로 애플리케�
 
 `GET /api/projects/:projectId/source-repositories`는 각 Source Repository의 마지막 `analysis`를 함께 반환한다. 세 분석 컬럼 중 하나라도 없는 기존 row는 `analysis: null`로 취급한다. 사용자가 다시 분석하면 최신 revision 기준 결과로 세 값을 한 번에 덮어쓴다.
 
-monorepo는 하나의 Repository Analysis 안에 여러 Application Unit을 둔다. Template Selection은 저장소 전체에 대해 한 번만 수행한다. 성공 응답은 선택한 Template 하나와 근거를 포함하고, 지원 패턴과 맞지 않으면 `templateId: null`과 mismatch 이유를 반환한다. 후보 목록과 confidence 점수는 계약에 포함하지 않는다.
+monorepo는 하나의 Repository Analysis 안에 여러 Application Unit을 둔다. Template Selection은 저장소 전체에 대해 한 번만 실행한다. 성공 응답은 선택한 Template 하나와 근거를 포함하고, 지원 패턴과 맞지 않으면 `templateId: null`과 mismatch 이유를 반환한다. 후보 목록과 confidence 점수는 계약에 포함하지 않는다.
 
 성공한 `templateId`만 `CreateArchitectureDraftRequest.templateId`로 AI 파트에 전달한다. AI 파트는 이 값을 기본 결정으로 유지하고 다른 Template으로 교체하지 않으며, 사용자 요구 중 선택 Template에 부족한 내용만 보완한다. Repository evidence 원문이나 분석 원본 파일은 AI 요청에 다시 싣지 않는다.
 
@@ -3688,7 +3688,7 @@ monorepo는 하나의 Repository Analysis 안에 여러 Application Unit을 둔�
 
 Repository Analysis는 저장소 evidence로 배포 방식을 추론한다. Container, Serverless, EC2/VM처럼 배포 방식이 명확한 evidence가 있으면 Template 후보 선택과 중복되는 배포 방식 입력을 숨기고, 사용자가 최종 선택한 Template에서 유효 배포 방식을 계산한다. 공개 URL 분석도 전체 repository tree와 선택된 evidence 파일을 백엔드 Repository Analysis에 전달하고, 응답의 `aiHandoff.recommendation.candidates`를 표시한다. 프론트엔드는 후보 수를 맞추기 위한 Template을 합성하지 않으며, 구형 응답에만 signal 기반 fallback을 사용한다. 배포 evidence가 없거나 모호할 때만 같은 화면에서 `ec2_vm`, `container`, `serverless` 중 하나를 선택하게 하며, UI 표기는 `EC2/VM 기반`, `컨테이너 기반`, `서버리스 기반`으로 한다. 공개 Board 생성의 `usesCiCd`는 `false`이며 Source Repository 연결을 생성 조건으로 사용하지 않습니다. 사용자가 Board를 만든 뒤 필요할 때 Workspace Delivery에서 exact Source Repository와 Git/CI/CD를 연결합니다. 추가 질문은 선택한 Template과 저장소 signal을 함께 기준으로 다시 계산하며, 해당 Template의 생성 결과에 실제 영향을 주는 질문만 최대 5개 표시합니다. 질문, 선택지, 선택 이유는 한국어로 표시하며, 알려진 구형 영문 응답도 프론트엔드에서 한국어 문구로 정규화합니다. boolean과 single-select 답변은 dropdown 대신 선택한 박스 전체가 강조되는 직접 선택 버튼으로 표시합니다. 미답변 상태에서도 생성 버튼은 활성화하지만, 클릭하면 모든 질문에 답하라는 안내를 표시하고 보드 생성과 이동을 중단합니다. Template을 바꾸면 이전 답변을 초기화합니다. Repository Analysis로 확인할 수 없는 파일 업로드, 실시간 기능, 인증서 같은 조건은 임의의 필수 capability로 추론하지 않고, 질문 답변이나 명시적 evidence가 있을 때만 Architecture Draft requirement로 승격합니다.
 
-`questions`는 선택한 Template의 Diagram 생성에 영향을 주는 항목만 최대 5개까지 제공한다. 질문 ID와 정규화한 문장은 한 후보 안에서 중복될 수 없고, `primary_runtime`은 API/runtime, `include_frontend`는 frontend/React/web, `include_database`는 data/DB/storage 의미를 포함해야 한다. 의미 검증에 실패하면 AI 순위와 설명은 유지하고 질문만 deterministic 값으로 교체한다. 사용자가 답변을 제출하면 `POST /api/projects/:projectId/source-repositories/:sourceRepositoryId/template-recommendation`가 `deploymentType`, `usesCiCd`, `answers`를 받아 `RepositoryTemplateRecommendationResult`를 반환한다. 추천은 deterministic supported candidate set과 Template별 허용 질문 집합을 먼저 만들며, 모든 배포 유형에서 중복 없는 비교 후보를 최소 2개, 최대 3개 유지한다. 각 후보는 저장소 evidence와 Template 특성을 연결한 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공합니다. deterministic 1순위의 confidence가 0.85 이상이고 2순위와 0.20 이상 차이가 나면 저장소 evidence가 명확한 것으로 간주하며, AI는 설명과 confidence를 보강할 수 있지만 해당 1순위를 뒤집을 수 없습니다. `OPENAI_API_KEY`가 설정되어 있으면 별도 provider flag 없이 항상 OpenAI Responses Structured Outputs를 먼저 호출해 허용 후보의 순위, confidence, 한국어 reasons/tradeoffs, 질문 문구를 생성한다. deterministic fallback도 동일한 한국어 상세도 계약을 지킵니다. 추천 전용 모델은 `OPENAI_REPOSITORY_TEMPLATE_MODEL`로 바꿀 수 있고 기본값은 저지연 `gpt-5-nano`다. 요청은 최대 10개 evidence 파일의 앞 600자와 100개 tree path만 사용하고 reasoning effort를 `minimal`로 제한한다. 공개 URL의 같은 repository URL과 branch 분석 결과는 Runtime Cache에 5분간 저장해 GitHub와 OpenAI 호출을 반복하지 않으며, 추천 계약 변경 시 cache namespace를 올려 이전 순위 결과를 재사용하지 않습니다. `rankingSource`는 `ai` 또는 `deterministic`을 표시하고, fallback이면 `fallbackReason`이 원인을 제공한다. API key 미설정, timeout, provider 오류, 후보 누락·중복·허용되지 않은 ID가 있을 때만 전체 deterministic 결과로 fallback한다.
+`questions`는 선택한 Template의 Diagram 생성에 영향을 주는 항목만 최대 5개까지 제공한다. 질문 ID와 정규화한 문장은 한 후보 안에서 중복될 수 없고, `primary_runtime`은 API/runtime, `include_frontend`는 frontend/React/web, `include_database`는 data/DB/storage 의미를 포함해야 한다. 의미 검증에 실패하면 AI 순위와 설명은 유지하고 질문만 deterministic 값으로 교체한다. 사용자가 답변을 제출하면 `POST /api/projects/:projectId/source-repositories/:sourceRepositoryId/template-recommendation`가 `deploymentType`, `usesCiCd`, `answers`를 받아 `RepositoryTemplateRecommendationResult`를 반환한다. 추천은 deterministic supported candidate set과 Template별 허용 질문 집합을 먼저 만들며, 모든 배포 유형에서 중복 없는 비교 후보를 최소 2개, 최대 3개 유지한다. 각 후보는 저장소 evidence와 Template 특성을 연결한 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공합니다. deterministic 1순위의 confidence가 0.85 이상이고 2순위와 0.20 이상 차이가 나면 저장소 evidence가 명확한 것으로 간주하며, AI는 설명과 confidence를 보강할 수 있지만 해당 1순위를 뒤집을 수 없습니다. `OPENAI_API_KEY`가 설정되어 있으면 별도 provider flag 없이 항상 OpenAI Responses Structured Outputs를 먼저 호출해 허용 후보의 순위, confidence, 한국어 reasons/tradeoffs, 질문 문구를 생성한다. deterministic fallback도 동일한 한국어 상세도 계약을 지킵니다. 추천 전용 모델은 `OPENAI_REPOSITORY_TEMPLATE_MODEL`로 바꿀 수 있고 기본값은 저지연 `gpt-5-nano`다. 요청은 최대 10개 evidence 파일의 앞 600자와 100개 tree path만 사용하고 reasoning effort를 `minimal`로 제한한다. 공개 URL의 같은 repository URL과 branch 분석 결과는 Runtime Cache에 5분간 저장해 GitHub와 OpenAI 호출을 반복하지 않으며, 추천 계약 변경 시 cache namespace를 올려 이전 순위 결과를 재사용하지 않습니다. `rankingSource`는 `ai` 또는 `deterministic`을 표시하고, fallback이면 `fallbackReason`이 원인을 제공한다. API key 미설정, timeout, provider 오류, 후보 누락 / 중복 / 허용되지 않은 ID가 있을 때만 전체 deterministic 결과로 fallback한다.
 
 Container 추천의 supported candidate set은 고정 ECS/EKS 점수를 사용하지 않는다. Application Unit 수와 종류, 감지된 framework, 관계형 데이터베이스와 로컬 영속성, Kubernetes 및 VM 운영 근거를 repository profile로 계산한다. 단일 backend container와 frontend/backend/database가 분리된 multi-service repository는 서로 다른 후보 집합, confidence, reasons를 가져야 한다. NestJS package와 FastAPI 또는 uvicorn Docker 실행 근거는 backend Application Unit으로 분류한다. OpenAI 요청에는 deterministic confidence를 전달하지 않고 repository profile과 허용 Template 설명을 전달해 저장소별 근거로 confidence를 독립 산정한다.
 

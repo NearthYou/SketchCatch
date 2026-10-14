@@ -353,7 +353,7 @@ apps/web/.\\node_modules\\.bin\\tsx.cmd --test features/workspace/terraform-safe
 | 새 Amazon Q 인증/환경변수/인프라 연결 | 기존 AI provider 흐름을 깨지 않는 범위에서 구현하기로 했다. |
 | 모든 Terraform 오류 자동 수정 | 의미 변경 위험이 커서 deterministic safe fix 두 개로 제한했다. |
 | 실제 AWS apply/destroy | Issues 해결은 코드 수정 흐름이며 cloud mutation이 아니다. |
-| RDS 기반 issue persistence | v1은 프로젝트별 `localStorage` 유지로 충분하다. source of truth처럼 취급하지 않는다. |
+| RDS 기반 issue persistence | v1은 프로젝트별 `localStorage` 유지로 충분하다. 기준처럼 취급하지 않는다. |
 
 ## 15. 진짜 핵심 요약
 

@@ -150,7 +150,7 @@ SSM in-place overwrite만으로 앱을 배포하지 않는다. ASG scale-out 후
 - trigger: workflow_dispatch
 - GitHub Environment approval
 - 같은 S3 backend로 `terraform destroy`
-- S3 release artifact cleanup은 best-effort로 수행한다.
+- S3 release artifact cleanup은 best-effort로 실행한다.
 - cleanup 결과는 workflow log와 SketchCatch handoff 상태에 남긴다.
 
 ## UX 요구사항

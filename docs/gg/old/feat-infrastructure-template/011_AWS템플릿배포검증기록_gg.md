@@ -35,7 +35,7 @@
 | --- | --- | --- |
 | Template registry | 통과 | 정확히 6개 Template, deterministic DiagramJson |
 | AWS Role connection | 통과 | Chrome에서 Role 복구, 실제 `sts:AssumeRole` 및 `sts:GetCallerIdentity` exit 0 |
-| Architecture Board Resource 표현 | 통과 | 6개 Chrome 캡처, catalog icon·parameter default 일치, fallback·raw label·빈 label·clipping 0개 |
+| Architecture Board Resource 표현 | 통과 | 6개 Chrome 캡처, catalog icon / parameter default 일치, fallback / raw label / 빈 label / clipping 0개 |
 | Web Template/Workspace | 통과 | catalog, template library, Terraform panel 관련 41 tests |
 | API Terraform 경로 | 통과 | resource coverage, preview, diagnostics, workspace 관련 75 tests |
 | Terraform CLI | 통과 | 6개 Template 각각 `terraform init`과 `terraform validate`, exit code 0 |
@@ -67,7 +67,7 @@
 
 모든 페이지는 마지막 M5b 코드 수정 뒤 Chrome에서 양쪽 패널을 접고 새로 열어 `Fit view`를 적용해 캡처했다. 노드별 가시 label 존재와 viewport clipping 0개도 DOM 경계에서 확인했다. 오른쪽 Resources/configurator의 Terraform address는 내부 배포 식별 정보이며, 이 표의 Architecture Board node label 판정에는 포함하지 않는다.
 
-최종 캡처 여섯 장과 카탈로그 합성 소스를 각각 검토한 독립 설계·기능 리뷰와 시각 정밀 리뷰는 모두 `PASS`였고 blocking finding은 없었다.
+최종 캡처 여섯 장과 카탈로그 합성 소스를 각각 검토한 독립 설계 / 기능 리뷰와 시각 정밀 리뷰는 모두 `PASS`였고 blocking finding은 없었다.
 
 ## 실제 배포 결과
 
@@ -94,7 +94,7 @@
 
 행동 로그는 Chrome extension session에서 버튼을 직접 누른 시각과 terminal state를 관찰한 시각의 차이다. AWS account ID, bucket 이름, Deployment ID, credential, cookie는 증거에서 제외했다. 배포 artifact는 같은 계정에 이미 있던 bucket을 재사용했으며 새 임시 bucket은 만들지 않았다.
 
-### 실제 실행에서 수정·복구한 항목
+### 실제 실행에서 수정 / 복구한 항목
 
 - Chrome 직접 경로에서 기존 artifact bucket이 아닌 이전 계정 bucket을 API runtime이 참조해 `Access Denied`가 발생했다. 현재 계정에 이미 존재하는 artifact bucket으로 runtime을 바로잡았고, 새 bucket은 만들지 않았다. macOS에서 유효하지 않은 Windows Terraform plugin cache path도 임시 macOS cache로 교정했다.
 - 저장 성공 뒤에도 Terraform leave guard가 남아 Apply 버튼 클릭을 가로막고, 닫힌 실행 기록 disclosure가 Apply 확인 카드를 화면 밖으로 밀어냈다. artifact 저장 시 guard를 해제하고 closed disclosure body를 숨겨 Chrome에서 `AWS 리소스 생성`과 `AWS 리소스 삭제`을 실제로 클릭할 수 있게 고쳤다.

@@ -1,10 +1,12 @@
-# SketchCatch production infrastructure Terraform
+# SketchCatch 운영 인프라
 
-이 디렉터리는 SketchCatch 자체 production infrastructure를 Terraform으로 관리하는 경계입니다. 사용자가 SketchCatch에서 실행하는 IaC Preview/Plan/Apply와 완전히 별개이며, product API나 ECS worker가 이 state를 읽거나 변경하지 않습니다.
+SketchCatch 자체의 AWS 운영 환경을 Terraform으로 관리합니다. 사용자가 서비스에서 배포하는 인프라와는 state를 분리합니다. 서비스 API와 ECS Worker는 운영 인프라의 state를 읽거나 변경하지 않습니다.
 
-## management group
+전체 구성은 [운영 아키텍처](../../../docs/architecture.md#운영-아키텍처)에 있습니다.
 
-| group | Terraform root | state key | 범위 | Phase 9 상태 |
+## 관리 그룹
+
+| 그룹 | Terraform 경로 | state key | 관리 대상 | 도입 단계 |
 | --- | --- | --- | --- | --- |
 | `runtime` | `infra/aws/terraform` | `production/ecs-foundation/terraform.tfstate` | ECS, ALB, target group/listener, ECR, runtime IAM, CloudWatch, ECS security group | 기존 key/address 유지, state audit 선행 |
 | `edge` | `infra/aws/production/edge` | `production/edge/terraform.tfstate` | Route53, ACM, certificate validation | 빈 import gate, live ownership 금지 |
@@ -28,19 +30,19 @@ backend bucket은 자신이 저장하는 state에서 관리하지 않습니다. 
 
 plan role의 backend 권한은 선택한 key와 `<key>.tflock`에만 제한합니다. bucket에는 해당 prefix의 `s3:ListBucket`, state object에는 `s3:GetObject`와 `s3:PutObject`, lock file에는 `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`가 필요합니다. state file의 `s3:DeleteObject` 권한은 주지 않습니다. 이 role은 AWS resource API에는 read-only이지만 backend state/lock에는 위 exact-object write 예외를 가집니다.
 
-## import 순서
+## Import 순서
 
 실제 resource 목록과 group은 `import-manifest.json`이 machine-readable 기준입니다.
 
-1. **runtime state audit**: backend key, `terraform state list`, 실제 resource ID와 현재 HCL address를 대조합니다. 이미 state에 있는 remote object는 다시 import하지 않습니다.
-2. **runtime 보완**: state에 없는 ECS/ALB/ECR/IAM/CloudWatch resource만 한 종류씩 resource/import block PR로 준비합니다.
-3. **edge 격리**: Route53 TTL, 현재 alias target, ACM renewal/validation owner, DNS rollback owner를 기록합니다. runtime의 Route53 state를 edge로 옮길 때는 중복 import가 아니라 별도 state move 계획을 사용합니다.
-4. **data 격리**: S3 backup/versioning, RDS snapshot/deletion protection, Redis snapshot/maintenance 설정을 먼저 확보합니다. S3, RDS, Redis는 같은 import/apply에서 함께 다루지 않습니다.
-5. **cold rollback 격리**: warm EC2/ALB와 legacy ECS service는 제거된 상태를 유지합니다. `legacy-rollback` root는 `enable_cold_rollback=false`가 기본이며 incident 승인 때만 별도 state에 임시 복구 자원을 만듭니다.
+1. runtime state audit: backend key, `terraform state list`, 실제 resource ID와 현재 HCL address를 대조합니다. 이미 state에 있는 remote object는 다시 import하지 않습니다.
+2. runtime 보완: state에 없는 ECS/ALB/ECR/IAM/CloudWatch resource만 한 종류씩 resource/import block PR로 준비합니다.
+3. edge 격리: Route53 TTL, 현재 alias target, ACM renewal/validation owner, DNS rollback owner를 기록합니다. runtime의 Route53 state를 edge로 옮길 때는 중복 import가 아니라 별도 state move 계획을 사용합니다.
+4. data 격리: S3 backup/versioning, RDS snapshot/deletion protection, Redis snapshot/maintenance 설정을 먼저 확보합니다. S3, RDS, Redis는 같은 import/apply에서 함께 다루지 않습니다.
+5. cold rollback 격리: warm EC2/ALB와 legacy ECS service는 제거된 상태를 유지합니다. `legacy-rollback` root는 `enable_cold_rollback=false`가 기본이며 incident 승인 때만 별도 state에 임시 복구 자원을 만듭니다.
 
 각 import PR은 discovery evidence, destination address, import ID 형식, backup, rollback owner, 예상 plan을 포함해야 합니다. 생성된 HCL은 초안으로만 사용하고, import를 수행하기 전 `0 add / 0 change / 0 destroy`에 수렴하도록 검토합니다. import block의 실제 반영도 `terraform apply`이므로 live approval 없이는 실행하지 않습니다.
 
-## review and approved apply workflow
+## 검토와 승인 후 적용
 
 `.github/workflows/production-infra-plan.yml`은 `workflow_dispatch` 전용입니다. 일반 검토는 선택한 group과 정확히 일치하는 `<group>-review-only` 확인 문자열과 GitHub Environment `production-infra-plan` reviewer 승인이 필요합니다. Runtime Cache 장애 복구 apply는 성공한 review-only run ID, 현재 40자리 head SHA, `runtime-cache-ingress-apply-<run-id>` 확인 문자열을 모두 요구하며 `production` Environment의 배포 역할로 넘어갑니다.
 

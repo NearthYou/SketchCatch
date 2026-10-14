@@ -24,7 +24,7 @@ Deployment 레벨은 도구 탭 모음이 아니다.
 
 | 레벨 | 화면에 남길 것 | 화면에 넣지 않을 것 |
 | --- | --- | --- |
-| Architecture Board | Board, Resource 선택, Resource 정보, 필수/추가 파라미터, Terraform 생성·편집·검증·Board 동기화 | 비용 검사, Plan 승인, Apply, Git/CI/CD handoff, 관찰, 이력, Cleanup |
+| Architecture Board | Board, Resource 선택, Resource 정보, 필수/추가 파라미터, Terraform 생성 / 편집 / 검증 / Board 동기화 | 비용 검사, Plan 승인, Apply, Git/CI/CD handoff, 관찰, 이력, Cleanup |
 | Deployment | 배포 전 검사, 배포 기준 저장, Plan, 승인, Direct Apply 또는 Git/CI/CD handoff, 실행 결과 | Resource 파라미터 편집, Terraform 코드 편집, Board 구조 변경 |
 
 다이어그램과 Terraform은 같은 설계 데이터를 본다.
@@ -33,7 +33,7 @@ Deployment 레벨은 도구 탭 모음이 아니다.
 ## 3. 배포 위자드의 고정 흐름
 
 Architecture Board에서 Terraform이 현재 Board와 동기화된 상태일 때만 `배포 시작`을 누를 수 있다.
-그 순간의 Board와 Terraform 파일을 **Deployment Baseline**으로 고정한다.
+그 순간의 Board와 Terraform 파일을 Deployment Baseline으로 고정한다.
 
 ```text
 Architecture Board
@@ -69,7 +69,7 @@ Deployment Wizard
 이 구조는 아래 두 문제를 만든다.
 
 1. Terraform이 Resource 정보와 떨어져 있다.
-2. 사용자가 검사·Plan·승인 순서를 따르지 않고 임의 탭으로 이동할 수 있다.
+2. 사용자가 검사 / Plan / 승인 순서를 따르지 않고 임의 탭으로 이동할 수 있다.
 
 또한 기본 오른쪽 Inspector와 floating 작업 패널이 동시에 열릴 수 있어, Architecture와 Deployment가 같은 우선순위의 팝업처럼 보인다.
 
@@ -103,7 +103,7 @@ type DeploymentBaseline = {
 Baseline은 Terraform이 `current` 상태일 때만 만들 수 있다.
 위자드는 이 값을 바꾸지 않는다. Terraform 수정은 Architecture Board 레벨의 책임이다.
 
-### 5.2 상태를 중복하지 않는다
+### 5.2 상태 중복 방지
 
 Terraform 생성 상태를 Architecture 패널과 Deployment 위자드가 각각 따로 만들면 안 된다.
 Architecture 패널이 Baseline을 만들고, Deployment 위자드는 그 Baseline만 받는다.
@@ -235,7 +235,7 @@ Feat: 순서형 Deployment Wizard 추가
 
 작업:
 
-1. `preflight` 단계에서 Baseline 기준 비용·보안·Terraform 검사를 실행한다.
+1. `preflight` 단계에서 Baseline 기준 비용 / 보안 / Terraform 검사를 실행한다.
 2. 차단 finding이 있으면 `prepare`와 이후 단계를 잠근다.
 3. `prepare` 단계에서 저장된 Baseline, 검증된 AWS 연결, Deployment 초기화를 만든다.
 4. `plan` 단계에서 실제 변경 요약과 위험 경고를 보여준다.
@@ -342,7 +342,7 @@ Refactor: Workspace 탭형 배포 도구 제거
 - AI Dock의 전체 재설계
 - Reverse Engineering 화면 재구성
 - 새 DB migration
-- 실제 AWS Resource 생성·수정·삭제를 QA 중 임의로 실행
+- 실제 AWS Resource 생성 / 수정 / 삭제를 QA 중 임의로 실행
 
 AI Dock은 Architecture 또는 Deployment의 현재 맥락과 겹치지 않도록 열림 상태만 확인한다.
 AI Dock의 최종 소속과 대화 UX 재설계는 이 두 레벨이 안정된 뒤 별도 작업으로 다룬다.

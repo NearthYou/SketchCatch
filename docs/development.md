@@ -105,7 +105,7 @@ CLOUDFORMATION_TEMPLATE_TOKEN_SECRET=<32자 이상 CloudFormation template URL �
 
 팀원이 모두 AI를 활용해 작업할 때 가장 큰 위험은 각 AI가 서로 다른 계약을 전제로 구현하는 것이다. 기능 구현 전 각 담당자는 아래 SSOT 순서를 따른다.
 
-1. [문서 안내](./README.md)에서 작업에 필요한 canonical 문서를 확인한다.
+1. [문서 안내](./README.md)에서 작업에 필요한 기준 문서를 확인한다.
 2. [제품 방향](./product.md)에서 현재 MVP 목표와 기능 우선순위를 확인한다.
 3. [데이터 모델](./data-models.md)에서 필요한 공유 타입, DTO, enum, status, id 필드를 확인한다.
 4. `packages/types/src/index.ts`에 계약이 있는지 확인한다.
@@ -144,9 +144,9 @@ Codex 작업자는 아래 행동을 하지 않는다.
 | `Architecture Board` + `Infrastructure Graph` + `IaC Preview` | `docs/data-models.md`, `docs/architecture.md`, `apps/web/AGENTS.md`, `apps/api/AGENTS.md` | `DiagramJson`, `InfrastructureGraph`, `DiagramNode.parameters`, Terraform generate/validate/sync DTO |
 | `Deployment` + `Git/CI/CD Integration` + `Runtime Cache` | `docs/deployment.md`, `docs/data-models.md`, `docs/architecture.md`, `apps/api/AGENTS.md` | `Deployment`, `DeploymentLog`, `GitCicdHandoff`, approval, cleanup, Redis Runtime Cache |
 | `Reverse Engineering` + `Cost Analysis` + `Deployment Safety Gate` | `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `apps/api/AGENTS.md` | `ProviderAdapter`, `ReverseEngineeringScan`, `CheckFinding`, `CostAnalysis`, `DeploymentSafetyGate` |
-| 팀장 | canonical 문서 전체 | DB schema, API 응답, shared type 충돌 조정 |
+| 팀장 | 기준 문서 전체 | DB schema, API 응답, shared type 충돌 조정 |
 
-담당자별 문서는 참고 자료다. 공통 계약은 반드시 canonical 문서와 shared type에 반영한 뒤 구현한다.
+담당자별 문서는 참고 자료다. 공통 계약은 반드시 기준 문서와 shared type에 반영한 뒤 구현한다.
 
 ## PR 체크리스트
 
@@ -156,7 +156,7 @@ PR 제목과 본문은 사용자가 다른 언어를 명시하지 않는 한 반
 
 - 변경한 기능이 [제품 방향](./product.md)의 어느 목표에 해당하는지
 - 변경한 shared type, DTO, enum, DB schema가 있는지
-- `docs/data-models.md` 또는 다른 canonical 문서 갱신이 필요한지
+- `docs/data-models.md` 또는 다른 기준 문서 갱신이 필요한지
 - 다른 담당자 기능과 연결되는 입력/출력 계약
 - 실행한 체크: `pnpm lint`, `pnpm typecheck`, `pnpm build`
 - 실제 AWS 리소스를 만들거나 삭제하는 경우 사용한 계정, region, cleanup 결과

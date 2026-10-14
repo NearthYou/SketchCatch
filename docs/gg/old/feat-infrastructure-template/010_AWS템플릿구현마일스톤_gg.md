@@ -12,7 +12,7 @@
 
 | 단계 | 결과물 | 검증 | 커밋 기준 | 상태 |
 | --- | --- | --- | --- | --- |
-| M0 | 설계·구현 계획 문서 | 문서 placeholder scan, `git diff --check` | `Docs: AWS Template 구현 설계 및 계획 문서 추가` | 완료 |
+| M0 | 설계 / 구현 계획 문서 | 문서 placeholder scan, `git diff --check` | `Docs: AWS Template 구현 설계 및 계획 문서 추가` | 완료 |
 | M1 | shared `TemplateDefinition` 계약과 여섯 Template registry | shared type test, deterministic DiagramJson test, types typecheck | `Feat: AWS Template 공통 정의 추가` | 완료 |
 | M2 | 누락 ResourceDefinition과 Terraform provider/nested block 지원 | resource coverage, preview, sync, artifact safety tests | `Feat: AWS Template 리소스 및 Terraform 지원 추가` | 완료 |
 | M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 완료 |
@@ -24,7 +24,7 @@
 
 ## 커밋 규칙
 
-- 각 마일스톤은 독립적으로 빌드·테스트 가능한 상태에서 커밋한다.
+- 각 마일스톤은 독립적으로 빌드 / 테스트 가능한 상태에서 커밋한다.
 - 커밋 제목은 저장소의 기존 형식인 `Type: 한국어 제목`을 사용한다.
 - 다른 에이전트의 변경, `.omo/evidence`, 실행 스크립트, `docs/adr` 미커밋 파일은 해당 마일스톤에 직접 필요하지 않으면 staging하지 않는다.
 - 테스트가 실패한 상태를 성공 커밋으로 남기지 않는다.
@@ -64,7 +64,7 @@
 - 여섯 TemplateDefinition을 모두 Terraform Preview로 생성하는 coverage를 추가했다.
 - VPC/subnet을 Preview에서 누락시키던 design kind를 deployable resource kind로 정리했다.
 - hyphen이 포함된 deterministic Terraform resource name reference가 문자열로 감싸지지 않도록 보강했다.
-- DeploymentPanel에 성공·실패·진행 중 상태의 `분 초` 소요 시간 표시와 실시간 갱신을 추가했다.
+- DeploymentPanel에 성공 / 실패 / 진행 중 상태의 `분 초` 소요 시간 표시와 실시간 갱신을 추가했다.
 - template preview coverage, deployment duration tests, API/Web typecheck와 lint를 통과했다.
 
 ### M5a
@@ -92,7 +92,7 @@
 - TDD에서 bare S3 icon과 Workspace 시작 경로가 실패하는 Red, area Resource가 `*_workspace`를 표시하는 Red를 각각 확인한 뒤 Green으로 전환했다.
 - 관련 33 tests, Web typecheck, lint, `git diff --check`를 통과했다.
 - Chrome에서 양쪽 패널을 접고 여섯 Template을 모두 열어 노드 수와 icon 수가 각각 `6/6`, `12/12`, `16/16`, `30/30`, `18/18`, `19/19`임을 확인했다. 모든 보드에서 일반 `AWS` fallback tile 0개, `*_workspace` 가시 label 0개, 빈 label 0개, viewport 밖으로 잘린 node 0개였다.
-- 최종 소스와 여섯 fresh capture를 대상으로 한 독립 설계·기능 리뷰와 시각 정밀 리뷰가 모두 `PASS`했다.
+- 최종 소스와 여섯 fresh capture를 대상으로 한 독립 설계 / 기능 리뷰와 시각 정밀 리뷰가 모두 `PASS`했다.
 
 ### M5c
 

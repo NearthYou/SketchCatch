@@ -2,7 +2,7 @@
 
 ## 1. 문서 목적
 
-이 문서는 Dashboard 설정의 `GitHub App 연결`과 `GitHub 빌드 연결`이 서로 다른 GitHub 계정·organization·Repository 권한으로 완료될 수 있는 문제를 해결하기 위한 UX와 검증 계획이다.
+이 문서는 Dashboard 설정의 `GitHub App 연결`과 `GitHub 빌드 연결`이 서로 다른 GitHub 계정 / organization / Repository 권한으로 완료될 수 있는 문제를 해결하기 위한 UX와 검증 계획이다.
 
 이 개선은 사용자가 두 연결을 모두 완료한 뒤 첫 Plan 또는 실제 build 단계에서야 Repository checkout 실패를 발견하는 일을 막는다. 전역 설정에서는 연결의 선행 조건과 승인 범위를 정확히 안내하고, 프로젝트에서는 선택한 exact Repository를 AWS CodeBuild가 실제로 읽을 수 있다는 증거가 생긴 뒤에만 `빌드 준비 완료`로 표시한다.
 
@@ -16,7 +16,7 @@
 - `docs/architecture.md`
 - `docs/deployment.md`
 
-이 문서는 담당자별 구현 계획이다. 공통 DTO, 상태값, DB 계약 또는 실행 정책을 확정할 때는 canonical 문서와 `packages/types`를 함께 갱신한다.
+이 문서는 담당자별 구현 계획이다. 공통 DTO, 상태값, DB 계약 또는 실행 정책을 확정할 때는 기준 문서와 `packages/types`를 함께 갱신한다.
 
 ## 2. 한 문장 결론
 
@@ -49,7 +49,7 @@
 
 사용자는 모든 설정이 완료됐다고 안내받았지만 실제로는 사용할 수 없는 조합을 만들 수 있다. 이는 단순 문구 문제가 아니라 error prevention과 완료 상태 계약 문제다.
 
-### 3.3 현재 UI 순서도 실제 의존성과 반대다
+### 3.3 UI 순서와 실제 의존성 불일치
 
 현재 Dashboard 설정의 주요 배치는 다음 순서다.
 
@@ -72,7 +72,7 @@ GitHub App installation 확인
 
 downstream 권한인 AWS GitHub 승인을 upstream Repository identity보다 먼저 요청하면, 사용자가 어떤 GitHub 계정이나 organization을 승인해야 하는지 알 수 없다.
 
-### 3.4 현재 완료 판정이 과도하다
+### 3.4 완료 판정 기준의 문제
 
 현재 `AVAILABLE`은 AWS CodeConnection handshake가 완료됐다는 뜻이다. 다음 항목은 증명하지 않는다.
 
@@ -85,7 +85,7 @@ downstream 권한인 AWS GitHub 승인을 upstream Repository identity보다 먼
 
 ## 4. 반드시 지킬 경계
 
-### 4.1 두 GitHub App 승인을 자동 재사용하지 않는다
+### 4.1 GitHub App 승인 재사용 제한
 
 SketchCatch GitHub App과 `AWS Connector for GitHub`는 서로 다른 GitHub App이다. SketchCatch installation token이나 사용자 OAuth token을 AWS CodeConnection에 주입해 승인을 대신하지 않는다.
 
@@ -98,7 +98,7 @@ SketchCatch GitHub App과 `AWS Connector for GitHub`는 서로 다른 GitHub App
 
 전역 GitHub 연결을 먼저 요구하는 이유는 승인을 재사용하기 위해서가 아니다. 사용자가 사용할 GitHub account login과 Repository 범위를 먼저 확인하고, AWS 승인 화면에서 기대하는 대상을 명확히 안내하기 위해서다.
 
-### 4.2 account login 일치만으로 성공 처리하지 않는다
+### 4.2 계정 일치 외의 성공 조건
 
 개인 GitHub 사용자가 organization Repository 권한을 승인하는 정상 흐름이 있으므로 `GitHub 로그인 이름 === Repository owner` 같은 비교는 올바른 검증이 아니다.
 
@@ -112,13 +112,13 @@ SketchCatch GitHub App과 `AWS Connector for GitHub`는 서로 다른 GitHub App
 → resolved source version이 confirmed commit SHA와 일치
 ```
 
-### 4.3 연결과 실행을 분리한다
+### 4.3 연결과 실행 분리
 
 - GitHub App 설치는 Repository를 변경하지 않는다.
 - AWS GitHub 승인은 CodeBuild를 실행하지 않는다.
 - Repository 접근 검증은 user service Resource를 배포하지 않는다.
 - `빌드 준비 완료`는 실제 Deployment 성공을 의미하지 않는다.
-- Terraform Apply, ECS/ECR/S3/CloudFront mutation은 기존 Plan·승인·실행 게이트를 유지한다.
+- Terraform Apply, ECS/ECR/S3/CloudFront mutation은 기존 Plan / 승인 / 실행 게이트를 유지한다.
 
 ## 5. 목표 사용자 흐름
 
@@ -253,7 +253,7 @@ secret, token, private key, 전체 ARN 또는 credential 원문은 오류 화면
 
 ## 7. 상태와 판정 계약
 
-### 7.1 계정 수준 상태와 프로젝트 수준 상태를 분리한다
+### 7.1 계정 상태와 프로젝트 상태 분리
 
 ```ts
 type AwsGitHubAuthorizationStatus =
@@ -356,7 +356,7 @@ POST /projects/:projectId/build-environment/verify-repository-access
 
 요청은 project ID만 받고 Repository URL, commit SHA, AWS account와 CodeConnection ARN을 클라이언트 입력으로 신뢰하지 않는다. 서버가 active Source Repository, Project Deployment Target, verified AWS connection, CodeConnection과 confirmed build config를 RDS에서 다시 읽는다.
 
-이 mutation은 다음만 수행한다.
+이 mutation은 다음만 실행한다.
 
 1. project build-only CodeBuild environment를 create/reconcile한다.
 2. trusted verification buildspec으로 exact source checkout을 시작한다.
@@ -545,7 +545,7 @@ type RepositoryBuildAccessVerification = {
 - validation 실패 시 Plan 또는 release build 전에 차단한다.
 - 다른 프로젝트의 verification evidence를 재사용하지 않는다.
 
-### 11.5 접근성·복구 테스트
+### 11.5 접근성 / 복구 테스트
 
 - prerequisite, pending, available, mismatch와 error 상태가 `role=status` 또는 `role=alert`로 전달된다.
 - 외부 AWS Console 이동 링크에 새 창 안내가 있다.
@@ -564,7 +564,7 @@ type RepositoryBuildAccessVerification = {
 7. 기존 `AVAILABLE` CodeConnection은 삭제하지 않고 프로젝트별 검증 전 상태로 안전하게 전환한다.
 8. 검증 결과는 Repository, AWS connection, CodeConnection과 build fingerprint 변경 시 무효화된다.
 9. Repository 접근 검증은 user service cloud Resource를 배포하거나 변경하지 않는다.
-10. 실패 화면은 expected Repository와 재승인·재검증 동작을 구체적으로 제공한다.
+10. 실패 화면은 expected Repository와 재승인 / 재검증 동작을 구체적으로 제공한다.
 
 ## 13. 범위 밖
 

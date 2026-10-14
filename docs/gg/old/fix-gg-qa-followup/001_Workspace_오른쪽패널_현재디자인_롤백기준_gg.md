@@ -18,10 +18,10 @@
 - 필수 파라미터 입력 수와 오류 수 집계
 - Region과 Availability Zone 입력
 - Terraform argument와 설명 표시
-- 패널 너비 조절과 열기·닫기
+- 패널 너비 조절과 열기 / 닫기
 - 최신 Board Shell과 캔버스 상태
 
-롤백의 목표는 **오른쪽 패널의 시각 디자인만 이전 상태로 되돌리고, 현재 기능과 다른 Workspace 작업은 유지하는 것**이다.
+롤백의 목표는 오른쪽 패널의 시각 디자인만 이전 상태로 되돌리고, 현재 기능과 다른 Workspace 작업은 유지하는 것이다.
 
 ## 2. 현재 오른쪽 패널의 구성
 
@@ -188,7 +188,7 @@ Deployment 레벨
 현재의 회색 패널 배경, 흰 section 카드, summary grid, parameter row, token, badge, 560px container query의 시작점이다.
 
 다만 같은 커밋에 카탈로그, 검증, Workspace, API 관련 변경이 매우 많이 포함되어 있다.
-**이 커밋 전체를 revert하면 안 된다.**
+이 커밋 전체를 revert하면 안 된다.
 
 내부 Inspector 디자인만 과거와 비교할 때의 기준점은 다음이다.
 
@@ -219,7 +219,7 @@ a2fbf8b4  UI: Workspace Board Shell 재구축
 
 따라서 “오른쪽 패널이 떠 있던 디자인으로 돌아간다”는 요구라면 비교 기준은 `a2fbf8b4^`다.
 하지만 이 커밋은 Board Shell, viewport 저장, 영역 이동, 저장 상태 등 많은 기능을 함께 바꿨다.
-**파일 전체 복원이나 커밋 전체 revert는 다른 작업을 잃게 만든다.**
+파일 전체 복원이나 커밋 전체 revert는 다른 작업을 잃게 만든다.
 
 ### 5.3 옛 스타일 제거
 
@@ -241,7 +241,7 @@ a685022f  Feat: Live Observation 실시간 트래픽 이중 레일 애니메이�
 
 ## 6. 나중에 롤백할 때 지켜야 할 보존선
 
-### 반드시 유지할 것
+### 필수 유지 항목
 
 - 현재 `ParameterInputPanel.tsx`의 기능 로직
 - `advanced-parameters.ts`의 추가 설정 계산
@@ -347,7 +347,7 @@ Terraform 보기와 Resource 보기는 같은 panel shell, 같은 여백, 같은
 ## 10. AI 패널 디자인 참고
 
 AI 패널도 오른쪽 Inspector와 같은 Workspace 보조 도구다.
-나중에 AI 기능을 다시 UI로 구성할 때, 아래 두 구현을 기능 코드가 아니라 **화면 참고 자료**로 사용한다.
+나중에 AI 기능을 다시 UI로 구성할 때, 아래 두 구현을 기능 코드가 아니라 화면 참고 자료로 사용한다.
 
 ### 10.1 새 AI Dock 구현
 

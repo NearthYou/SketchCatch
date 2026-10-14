@@ -12,14 +12,14 @@ Workspace 오른쪽 패널, Deployment 모달, AI 채팅창의 시각 디자인�
 
 모든 단계에서 아래 동작은 고정한다.
 
-- 기존 버튼 개수, 문구, 순서, 활성·비활성 조건
+- 기존 버튼 개수, 문구, 순서, 활성 / 비활성 조건
 - 버튼별 `onClick`, form submit, keyboard 동작
 - 클릭 뒤 열리는 화면과 닫히는 화면
 - Resource, Terraform, Deployment, AI 상태 전환
 - API 요청의 종류, 순서, payload
 - Board, Terraform, Deployment 변경 전 사용자 승인
 - Terraform 미저장 변경 이탈 확인
-- AI 초안·수정안의 미리보기와 명시적 적용
+- AI 초안 / 수정안의 미리보기와 명시적 적용
 
 시각 변경 때문에 위 동작을 바꿔야 하는 상황이 생기면 해당 단계의 범위를 중단하고 별도 기능 작업으로 분리한다.
 
@@ -56,7 +56,7 @@ Workspace 오른쪽 패널, Deployment 모달, AI 채팅창의 시각 디자인�
 - Desktop에서는 화면 가장자리와 간격을 둔 console surface로 보인다.
 - Mobile에서는 화면을 온전히 사용하는 modal로 보인다.
 - 닫기, 검사, 기준 저장, Plan, 승인, Direct Deployment, Git/CI/CD, 기록과 결과 행동을 재배치하거나 합치지 않는다.
-- 위험 행동과 승인 행동은 기존 disabled·warning·confirmation 규칙을 유지한다.
+- 위험 행동과 승인 행동은 기존 disabled / warning / confirmation 규칙을 유지한다.
 
 ## 3. 접근 1: CSS-only 시각 개편
 
@@ -160,12 +160,12 @@ Workspace 오른쪽 패널, Deployment 모달, AI 채팅창의 시각 디자인�
 
 ### 목표
 
-접근 2의 안정된 영역을 기능 controller와 표현 component로 나눠, 이후 시각 변경이 API·상태·승인 로직에 닿지 않게 한다.
+접근 2의 안정된 영역을 기능 controller와 표현 component로 나눠, 이후 시각 변경이 API / 상태 / 승인 로직에 닿지 않게 한다.
 
 ### 적용 전 조건
 
 - 접근 2의 DOM 구조와 동작 계약이 안정돼 있어야 한다.
-- controller가 소유할 상태와 presentational component가 받을 값·callback을 명확히 구분해야 한다.
+- controller가 소유할 상태와 presentational component가 받을 값 / callback을 명확히 구분해야 한다.
 - 분리 작업 중 기능 개선이나 새로운 UX를 함께 넣지 않는다.
 
 ### 권장 경계
@@ -273,7 +273,7 @@ CSS 제약 때문에 DOM 계층이 문제일 때
 ```
 
 접근 2와 접근 3을 한 PR에서 동시에 수행하지 않는다.
-각 단계는 앞 단계의 기능·시각 기준을 회귀 검증 기준으로 사용한다.
+각 단계는 앞 단계의 기능 / 시각 기준을 회귀 검증 기준으로 사용한다.
 
 ## 7. 이번 작업 범위
 

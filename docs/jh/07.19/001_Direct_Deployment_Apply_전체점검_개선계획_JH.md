@@ -12,7 +12,7 @@
 - `terraform apply -target` 같은 부분 Apply를 도입하지 않는다.
 - Direct Deployment와 Git/CI/CD Deployment Path를 하나의 실행 상태로 합치지 않는다.
 - 프런트엔드에서 Terraform CLI나 AWS SDK를 실행하지 않는다.
-- 실제 AWS Apply/Destroy를 자동 검증에 포함하지 않는다. live 검증은 별도 승인과 cleanup 계획이 있을 때만 수행한다.
+- 실제 AWS Apply/Destroy를 자동 검증에 포함하지 않는다. live 검증은 별도 승인과 cleanup 계획이 있을 때만 실행한다.
 
 ## 2. 점검 결론
 
@@ -23,14 +23,14 @@
 | 우선순위 | 문제 | 사용자 영향 |
 | --- | --- | --- |
 | P0 | 재배포 Plan과 Apply가 서로 다른 Terraform state를 사용할 수 있음 | 사용자가 본 Plan이 실제 변경 대상과 달라지거나 Apply가 stale plan으로 실패함 |
-| P0 | no-change `full_stack`이 release 결과와 lease fencing을 누락함 | 부분 실패·취소를 성공으로 기록하거나 stale worker가 AWS 변경을 계속할 수 있음 |
+| P0 | no-change `full_stack`이 release 결과와 lease fencing을 누락함 | 부분 실패 / 취소를 성공으로 기록하거나 stale worker가 AWS 변경을 계속할 수 있음 |
 | P1 | ECS worker 취소가 graceful abort 없이 worker를 종료함 | partial `terraform.tfstate`를 잃어 생성된 리소스를 자동 cleanup하기 어려움 |
 | P1 | Apply 성공 후 결과 저장 장애가 Deployment를 `FAILED`로 뒤집음 | AWS에는 리소스가 생성됐지만 성공 이력과 cleanup state가 사라질 수 있음 |
 | P2 | application release 실패를 `failureStage: "apply"`로 저장함 | 사용자가 Terraform 문제로 오인하고 잘못된 복구 절차를 수행함 |
 
 ## 3. 반드시 지켜야 할 실행 불변조건
 
-### 3.1 Plan과 Apply는 같은 state를 사용한다
+### 3.1 Plan과 Apply의 state 공유
 
 사용자가 확인한 Plan을 만든 Terraform state와 Apply 직전에 workspace에 복원한 state의 identity가 같아야 한다.
 
@@ -46,7 +46,7 @@
 
 하나라도 달라지면 Apply를 실행하지 않고 새 Plan을 요구한다. Terraform CLI의 stale plan 오류에만 의존하지 않고 서버가 AWS credential 준비와 Terraform 실행 전에 차단해야 한다.
 
-### 3.2 lease를 잃은 worker는 더 이상 AWS를 변경하거나 결과를 저장하지 않는다
+### 3.2 Lease 만료 후 AWS 변경과 결과 저장 금지
 
 Terraform Apply와 application release는 같은 `LeaseFence`와 lease heartbeat에서 파생된 `AbortSignal`을 사용한다. no-change 최적화도 이 규칙의 예외가 아니다.
 
@@ -57,7 +57,7 @@ lease heartbeat가 실패하면 다음 동작을 보장한다.
 3. 가능한 partial state와 release recovery evidence를 보존한다.
 4. 새 실행자가 같은 프로젝트 lease를 인수한 뒤 이전 worker가 AWS를 다시 변경하지 못하게 한다.
 
-### 3.3 AWS Apply 성공 사실은 후처리 장애가 뒤집지 않는다
+### 3.3 후처리 장애 시 Apply 성공 상태 보존
 
 `terraform apply tfplan`이 exit code `0`으로 끝난 시점부터 실제 cloud mutation은 성공한 것으로 본다. 이후 output 파싱, resource inventory 수집, state 업로드, 로그 기록 또는 일부 DB 저장이 실패해도 이를 Terraform Apply 실패로 기록하지 않는다.
 
@@ -68,7 +68,7 @@ lease heartbeat가 실패하면 다음 동작을 보장한다.
 
 DB 장애 때문에 성공 여부 자체를 저장할 수 없다면 `FAILED`로 추정하지 않는다. worker/job recovery가 실제 Apply 결과와 S3 evidence를 확인해 terminal 상태를 확정해야 한다.
 
-### 3.4 실패 단계는 실제 실패한 실행 주체를 가리킨다
+### 3.4 실행 주체별 실패 단계 표시
 
 - Terraform Apply 실패: `failureStage: "apply"`
 - application release 실패: `failureStage: "application_release"`

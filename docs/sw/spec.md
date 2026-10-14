@@ -49,8 +49,8 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 
 ### IaC
 
-- `infra/aws/terraform`을 ECS runtime 운영 인프라 source of truth로 유지한다.
-- `infra/aws/production`은 edge, persistent data, legacy rollback state와 import gate의 source of truth로 둔다.
+- `infra/aws/terraform`을 ECS runtime 운영 인프라 기준으로 유지한다.
+- `infra/aws/production`은 edge, persistent data, legacy rollback state와 import gate의 기준으로 둔다.
 - cutover 기간에는 EC2와 ECS를 병렬 운영했고, 완료 후 비용 절감을 위해 EC2/legacy ECS warm rollback을 제거한다.
 - Terraform 변수로 6개월 저비용 모드와 optional private runtime 모드를 모두 지원한다.
 
@@ -75,7 +75,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 - Phase 1에서는 nginx + web + api single ECS service를 사용한다.
 - EC2 운영 구조와 컨테이너 경계를 유지해 첫 전환 리스크를 줄인다.
 - Phase 8부터 API/web를 독립 ECS service로 운영하고 ALB path routing을 사용한다.
-- 실제 전환은 legacy nginx 100/API·web 0 warmup, target health와 direct smoke, API·web 100/legacy 0 split 순서를 지킨다.
+- 실제 전환은 legacy nginx 100/API / web 0 warmup, target health와 direct smoke, API / web 100/legacy 0 split 순서를 지킨다.
 
 ### RDS
 
@@ -86,7 +86,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 ### RunTask Worker
 
 - API inline 장기 실행이 아니라 Deployment job을 만들고 ECS `RunTask` one-off worker task가 Terraform/Trivy 실행과 artifact/status 기록을 담당한다.
-- DB lease가 job 실행권의 source of truth다.
+- DB lease가 job 실행권의 기준이다.
 - Redis Pub/Sub은 cancel 즉시 신호용이고, DB cancel flag가 최종 기준이다.
 - SQS FIFO, DLQ, plan/mutation queue, always-on worker service는 현재 범위에서 제외한다.
 - queue 기반 worker service가 필요해지면 ECS production 안정화와 RunTask 운영 증거를 확인한 뒤 별도 phase/issue로 결정한다.

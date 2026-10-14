@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Workspace를 Architecture 편집 레벨과 Deployment 실행 레벨로 분리하고, 기존 Resource·Terraform·AI·배포 기능과 사용자 승인 계약을 보존한 채 레퍼런스 문서의 시각 기준으로 고도화한다.
+Goal: Workspace를 Architecture 편집 레벨과 Deployment 실행 레벨로 분리하고, 기존 Resource / Terraform / AI / 배포 기능과 사용자 승인 계약을 보존한 채 레퍼런스 문서의 시각 기준으로 고도화한다.
 
-**Architecture:** Workspace 오른쪽은 `Resource`와 `Terraform`만 소유하는 Architecture Panel로 정리한다. `배포 시작`은 현재 Board와 Terraform을 불변 `DeploymentBaseline`으로 고정한 뒤 전체 화면 Deployment Wizard를 열며, 위자드는 `Preflight → Prepare → Plan → Approve → Route → Result` 순서를 강제한다. AI는 Architecture에서는 기존 chat dock을 시각적으로 정리해 보조하고, Deployment에서는 현재 단계의 설명만 제공하며 어떤 변경이나 실행도 자동 승인하지 않는다.
+Architecture: Workspace 오른쪽은 `Resource`와 `Terraform`만 소유하는 Architecture Panel로 정리한다. `배포 시작`은 현재 Board와 Terraform을 불변 `DeploymentBaseline`으로 고정한 뒤 전체 화면 Deployment Wizard를 열며, 위자드는 `Preflight → Prepare → Plan → Approve → Route → Result` 순서를 강제한다. AI는 Architecture에서는 기존 chat dock을 시각적으로 정리해 보조하고, Deployment에서는 현재 단계의 설명만 제공하며 어떤 변경이나 실행도 자동 승인하지 않는다.
 
-**Tech Stack:** Next.js 16, React 19, TypeScript, CSS Modules, React Flow, Node test runner, 기존 SketchCatch Web/API 계약
+Tech Stack: Next.js 16, React 19, TypeScript, CSS Modules, React Flow, Node test runner, 기존 SketchCatch Web/API 계약
 
 ## Global Constraints
 
 - 기존 버튼의 기능, API 호출 순서, 사용자 승인 조건을 임의로 바꾸지 않는다.
 - Board, Terraform, Deployment, Git/CI/CD 변경은 기존 명시적 사용자 승인 뒤에만 실행한다.
-- Terraform 편집과 Board 동기화는 Architecture 레벨에서만 수행한다.
+- Terraform 편집과 Board 동기화는 Architecture 레벨에서만 실행한다.
 - Deployment Wizard는 고정된 `DeploymentBaseline`만 읽고 Diagram이나 Terraform을 수정하지 않는다.
 - Direct Deployment와 Git/CI/CD는 승인된 같은 Plan snapshot에서 갈라진다.
 - `Cleanup`은 정상 배포 위자드의 마지막 단계가 아니라 Deployment History에서 시작하는 별도 위험 절차다.
@@ -88,7 +88,7 @@ Deployment Wizard
 
 ### Task 1: 현재 동작과 시각 계약 고정
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 - Modify: `apps/web/features/parameter-input/parameter-panel-source.test.ts`
 - Modify: `apps/web/features/diagram-editor/diagram-editor-layout.test.ts`
@@ -96,11 +96,11 @@ Deployment Wizard
 - Reference: `docs/gg/old/fix-gg-qa-followup/001_Workspace_오른쪽패널_현재디자인_롤백기준_gg.md`
 - Reference: `docs/gg/old/fix-gg-qa-followup/002_Workspace_시각개편_단계별접근_gg.md`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 현재 `WorkspaceRightPanel`, `DeploymentPanel`, `WorkspaceAiChatDock` source contract
-- Produces: 이후 task가 보존해야 하는 버튼·handler·승인·시각 기준 test
+- Produces: 이후 task가 보존해야 하는 버튼 / handler / 승인 / 시각 기준 test
 
-- [ ] **Step 1: 버튼과 승인 경계 source contract를 추가한다**
+- [ ] Step 1: 버튼과 승인 경계 source contract를 추가한다
 
 ```ts
 test("workspace modernization preserves action ownership", () => {
@@ -114,7 +114,7 @@ test("workspace modernization preserves action ownership", () => {
 });
 ```
 
-- [ ] **Step 2: 목표 시각 selector가 아직 없어 실패하는 test를 추가한다**
+- [ ] Step 2: 목표 시각 selector가 아직 없어 실패하는 test를 추가한다
 
 ```ts
 test("workspace modernization exposes one architecture surface and full-screen wizard", () => {
@@ -126,7 +126,7 @@ test("workspace modernization exposes one architecture surface and full-screen w
 });
 ```
 
-- [ ] **Step 3: 집중 test를 실행해 시각 계약만 실패하는지 확인한다**
+- [ ] Step 3: 집중 test를 실행해 시각 계약만 실패하는지 확인한다
 
 Run:
 
@@ -139,7 +139,7 @@ pnpm --dir apps/web exec tsx --test \
 
 Expected: 기존 기능 계약은 PASS, 새 시각 selector 계약은 FAIL
 
-- [ ] **Step 4: 기준선 결과를 commit한다**
+- [ ] Step 4: 기준선 결과를 commit한다
 
 ```bash
 git add apps/web/features/workspace/workspace-right-panel-layout.test.ts \
@@ -152,15 +152,15 @@ git commit -m "Test: Workspace 고도화 동작 계약 고정" -m "오른쪽 패
 
 ### Task 2: Workspace 공통 시각 token과 Desktop shell 정리
 
-**Files:**
+Files:
 - Modify: `apps/web/features/diagram-editor/diagram-editor.module.css`
 - Modify: `apps/web/features/workspace/workspace.module.css`
 
-**Interfaces:**
+Interfaces:
 - Consumes: Task 1의 시각 selector contract
 - Produces: `--workspace-panel-width`, `--workspace-control-height`, `--workspace-ai-launcher-size` CSS custom properties
 
-- [ ] **Step 1: Workspace shell token을 추가한다**
+- [ ] Step 1: Workspace shell token을 추가한다
 
 ```css
 /* Workspace architecture visual contract */
@@ -178,7 +178,7 @@ git commit -m "Test: Workspace 고도화 동작 계약 고정" -m "오른쪽 패
 
 `DiagramEditor` 최상위 shell이 이미 Workspace token을 소유하므로 실제 구현에서는 별도 DOM을 추가하지 않고 `.editorShell` 또는 `.rightPanelShell`에 같은 custom property를 선언한다.
 
-- [ ] **Step 2: Desktop rail과 panel 폭을 token에 맞춘다**
+- [ ] Step 2: Desktop rail과 panel 폭을 token에 맞춘다
 
 ```css
 .rightRail {
@@ -197,7 +197,7 @@ git commit -m "Test: Workspace 고도화 동작 계약 고정" -m "오른쪽 패
 }
 ```
 
-- [ ] **Step 3: button 크기와 focus를 통일한다**
+- [ ] Step 3: button 크기와 focus를 통일한다
 
 ```css
 .panelModeButton,
@@ -220,11 +220,11 @@ git commit -m "Test: Workspace 고도화 동작 계약 고정" -m "오른쪽 패
 }
 ```
 
-- [ ] **Step 4: Task 1 test를 실행한다**
+- [ ] Step 4: Task 1 test를 실행한다
 
 Expected: Workspace visual selector contract PASS, 기능 contract PASS
 
-- [ ] **Step 5: commit한다**
+- [ ] Step 5: commit한다
 
 ```bash
 git add apps/web/features/diagram-editor/diagram-editor.module.css \
@@ -236,15 +236,15 @@ git commit -m "UI: Workspace 공통 시각 기준 정리" -m "오른쪽 패널�
 
 ### Task 3: Resource Inspector의 카드 중첩 제거
 
-**Files:**
+Files:
 - Modify: `apps/web/features/parameter-input/ParameterInputPanel.module.css`
 - Test: `apps/web/features/parameter-input/parameter-panel-source.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 기존 `ParameterInputPanel.tsx` markup과 required/additional parameter 기능
 - Produces: 단일 Inspector surface, divider 기반 section hierarchy
 
-- [ ] **Step 1: 새 divider hierarchy test를 먼저 작성한다**
+- [ ] Step 1: 새 divider hierarchy test를 먼저 작성한다
 
 ```ts
 test("ParameterInputPanel uses one inspector surface without nested section cards", () => {
@@ -255,9 +255,9 @@ test("ParameterInputPanel uses one inspector surface without nested section card
 });
 ```
 
-- [ ] **Step 2: test가 기존 흰 card와 shadow 때문에 FAIL하는지 확인한다**
+- [ ] Step 2: test가 기존 흰 card와 shadow 때문에 FAIL하는지 확인한다
 
-- [ ] **Step 3: Inspector surface를 정리한다**
+- [ ] Step 3: Inspector surface를 정리한다
 
 ```css
 .panel {
@@ -281,7 +281,7 @@ test("ParameterInputPanel uses one inspector surface without nested section card
 }
 ```
 
-- [ ] **Step 4: Metadata와 parameter row는 정보 밀도를 유지한다**
+- [ ] Step 4: Metadata와 parameter row는 정보 밀도를 유지한다
 
 ```css
 .metadataGrid {
@@ -298,7 +298,7 @@ test("ParameterInputPanel uses one inspector surface without nested section card
 }
 ```
 
-- [ ] **Step 5: parameter source test를 실행하고 commit한다**
+- [ ] Step 5: parameter source test를 실행하고 commit한다
 
 ```bash
 git add apps/web/features/parameter-input/ParameterInputPanel.module.css \
@@ -310,7 +310,7 @@ git commit -m "UI: Resource Inspector 정보 계층 정리" -m "중첩 card를 �
 
 ### Task 4: 오른쪽 패널을 Architecture Panel로 고정
 
-**Files:**
+Files:
 - Modify: `apps/web/app/workspace/workspace-start-mode.ts`
 - Modify: `apps/web/app/workspace/workspace-start-mode.test.ts`
 - Modify: `apps/web/features/workspace/workspace-right-panel.types.ts`
@@ -318,11 +318,11 @@ git commit -m "UI: Resource Inspector 정보 계층 정리" -m "중첩 card를 �
 - Modify: `apps/web/features/workspace/workspace.module.css`
 - Test: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: `ResourceWorkspacePanel`, `TerraformCodePanel`, `TerraformIssuesPanel`, `openDeploymentConsole`
 - Produces: `WorkspaceArchitecturePanelView = "resource" | "terraform"`, 별도 Deployment Wizard 진입 행동
 
-- [ ] **Step 1: panel view에서 Deployment를 제외하는 실패 test를 작성한다**
+- [ ] Step 1: panel view에서 Deployment를 제외하는 실패 test를 작성한다
 
 ```ts
 test("architecture panel owns only Resource and Terraform", () => {
@@ -332,27 +332,27 @@ test("architecture panel owns only Resource and Terraform", () => {
 });
 ```
 
-- [ ] **Step 2: type을 Architecture 책임에 맞춘다**
+- [ ] Step 2: type을 Architecture 책임에 맞춘다
 
 ```ts
 export type WorkspaceArchitecturePanelView = "resource" | "terraform";
 export type WorkspaceRightPanelView = WorkspaceArchitecturePanelView;
 ```
 
-- [ ] **Step 3: Resource와 Terraform navigation만 panel view로 유지한다**
+- [ ] Step 3: Resource와 Terraform navigation만 panel view로 유지한다
 
 Deployment button은 삭제하지 않고 `openDeploymentConsole`을 호출하는 독립 행동으로 유지한다. `requestView("deployment")`와 `initialView === "deployment"` 분기만 제거한다.
 
 `resolveInitialWorkspaceRightPanelView`는 새 프로젝트 시작 mode로 Deployment를 열지 않는 현재 계약을 유지하되 반환 type을 `WorkspaceArchitecturePanelView | undefined`로 좁힌다.
 
-- [ ] **Step 4: Terraform 이탈 guard가 Deploy 진입에도 유지되는지 확인한다**
+- [ ] Step 4: Terraform 이탈 guard가 Deploy 진입에도 유지되는지 확인한다
 
 ```ts
 assert.match(rightPanelSource, /requestTerraformLeave\(\{ kind: "deployment-console" \}\)/);
 assert.match(rightPanelSource, /setIsDeploymentConsoleOpen\(true\)/);
 ```
 
-- [ ] **Step 5: 집중 test를 실행하고 commit한다**
+- [ ] Step 5: 집중 test를 실행하고 commit한다
 
 ```bash
 git add apps/web/features/workspace/workspace-right-panel.types.ts \
@@ -368,16 +368,16 @@ git commit -m "Refactor: Workspace 오른쪽 패널 책임 분리" -m "Resource�
 
 ### Task 5: AI Chat Dock 시각 구조 정리
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/workspace.module.css`
 - Test: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 - Test: `apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 기존 `WorkspaceAiChatDock.tsx`의 tab, transcript, suggestion, preview, apply/cancel, voice, submit handler
 - Produces: Desktop dock와 Mobile full-screen assistant
 
-- [ ] **Step 1: layout contract test를 작성한다**
+- [ ] Step 1: layout contract test를 작성한다
 
 ```ts
 test("AI chat keeps a fixed composer and scroll-only transcript", () => {
@@ -388,7 +388,7 @@ test("AI chat keeps a fixed composer and scroll-only transcript", () => {
 });
 ```
 
-- [ ] **Step 2: Desktop chat을 레퍼런스 수치로 정리한다**
+- [ ] Step 2: Desktop chat을 레퍼런스 수치로 정리한다
 
 ```css
 .aiChatLauncher {
@@ -415,7 +415,7 @@ test("AI chat keeps a fixed composer and scroll-only transcript", () => {
 }
 ```
 
-- [ ] **Step 3: textarea 최대 높이와 action 크기를 고정한다**
+- [ ] Step 3: textarea 최대 높이와 action 크기를 고정한다
 
 ```css
 .aiChatInput textarea {
@@ -430,7 +430,7 @@ test("AI chat keeps a fixed composer and scroll-only transcript", () => {
 }
 ```
 
-- [ ] **Step 4: Mobile assistant를 전체 화면으로 전환한다**
+- [ ] Step 4: Mobile assistant를 전체 화면으로 전환한다
 
 ```css
 @media (max-width: 768px) {
@@ -446,7 +446,7 @@ test("AI chat keeps a fixed composer and scroll-only transcript", () => {
 }
 ```
 
-- [ ] **Step 5: AI guardrail test와 layout test를 실행하고 commit한다**
+- [ ] Step 5: AI guardrail test와 layout test를 실행하고 commit한다
 
 ```bash
 git add apps/web/features/workspace/workspace.module.css \
@@ -459,17 +459,17 @@ git commit -m "UI: Workspace AI Chat Dock 레이아웃 정리" -m "Desktop에서
 
 ### Task 6: 불변 Deployment Baseline 경계 추가
 
-**Files:**
+Files:
 - Create: `apps/web/features/workspace/deployment-baseline.ts`
 - Create: `apps/web/features/workspace/deployment-baseline.test.ts`
 - Modify: `apps/web/features/workspace/WorkspaceRightPanel.tsx`
 - Modify: `apps/web/features/workspace/DeploymentPanel.tsx`
 
-**Interfaces:**
+Interfaces:
 - Consumes: `DiagramJson`, 현재 Terraform virtual files, Terraform current/dirty 상태
 - Produces: `DeploymentBaseline`, `createDeploymentBaseline(input)`
 
-- [ ] **Step 1: baseline 생성 조건의 실패 test를 작성한다**
+- [ ] Step 1: baseline 생성 조건의 실패 test를 작성한다
 
 ```ts
 test("deployment baseline rejects unsaved Terraform", () => {
@@ -494,7 +494,7 @@ test("deployment baseline clones Diagram and Terraform files", () => {
 });
 ```
 
-- [ ] **Step 2: immutable input type을 구현한다**
+- [ ] Step 2: immutable input type을 구현한다
 
 ```ts
 export type DeploymentBaseline = {
@@ -521,11 +521,11 @@ export function createDeploymentBaseline(input: {
 }
 ```
 
-- [ ] **Step 3: Deploy 진입 시 baseline을 만들고 modal에 전달한다**
+- [ ] Step 3: Deploy 진입 시 baseline을 만들고 modal에 전달한다
 
 `DeploymentPanel`이 `context.diagram`과 Terraform ref를 다시 읽지 않도록 `baseline` prop을 추가한다. 기존 API 호출은 baseline의 Diagram과 files를 사용하되 호출 순서는 유지한다.
 
-- [ ] **Step 4: baseline test와 기존 deployment artifact test를 실행한다**
+- [ ] Step 4: baseline test와 기존 deployment artifact test를 실행한다
 
 ```bash
 pnpm --dir apps/web exec tsx --test \
@@ -533,7 +533,7 @@ pnpm --dir apps/web exec tsx --test \
   features/workspace/workspace-deployment-artifacts.test.ts
 ```
 
-- [ ] **Step 5: commit한다**
+- [ ] Step 5: commit한다
 
 ```bash
 git add apps/web/features/workspace/deployment-baseline.ts \
@@ -547,16 +547,16 @@ git commit -m "Refactor: Workspace Deployment Baseline 고정" -m "사용자가 
 
 ### Task 7: Deployment Wizard 상태 계산기 구현
 
-**Files:**
+Files:
 - Create: `apps/web/features/workspace/deployment-wizard-state.ts`
 - Create: `apps/web/features/workspace/deployment-wizard-state.test.ts`
 - Modify: `apps/web/features/workspace/deployment-console-state.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 기존 `getDirectDeploymentFlow`, Preflight 상태, Deployment, 승인 상태, 실행 route
 - Produces: `DeploymentWizardStepId`, `DeploymentExecutionRoute`, `getDeploymentWizardState(input)`
 
-- [ ] **Step 1: 고정 단계와 잠금 규칙 test를 작성한다**
+- [ ] Step 1: 고정 단계와 잠금 규칙 test를 작성한다
 
 ```ts
 test("wizard stops at Preflight when findings block deployment", () => {
@@ -572,7 +572,7 @@ test("wizard branches only after approved Plan", () => {
 });
 ```
 
-- [ ] **Step 2: 상태 계약을 구현한다**
+- [ ] Step 2: 상태 계약을 구현한다
 
 ```ts
 export type DeploymentWizardStepId =
@@ -589,7 +589,7 @@ export type DeploymentWizardStepState = "active" | "complete" | "locked" | "erro
 
 `getDeploymentWizardState`는 기존 Direct flow를 호환 입력으로 사용하되 미래 단계의 실행 가능 여부를 한곳에서 계산한다.
 
-- [ ] **Step 3: 기존 Direct step test를 새 상태 계산기와 함께 통과시킨다**
+- [ ] Step 3: 기존 Direct step test를 새 상태 계산기와 함께 통과시킨다
 
 Run:
 
@@ -599,7 +599,7 @@ pnpm --dir apps/web exec tsx --test \
   features/workspace/deployment-wizard-state.test.ts
 ```
 
-- [ ] **Step 4: commit한다**
+- [ ] Step 4: commit한다
 
 ```bash
 git add apps/web/features/workspace/deployment-console-state.ts \
@@ -612,18 +612,18 @@ git commit -m "Feat: Deployment Wizard 단계 상태 추가" -m "검사, Plan, �
 
 ### Task 8: Deployment Wizard shell과 반응형 layout 구현
 
-**Files:**
+Files:
 - Create: `apps/web/features/workspace/DeploymentWizard.tsx`
 - Create: `apps/web/features/workspace/deployment-wizard.module.css`
 - Modify: `apps/web/features/workspace/WorkspaceRightPanel.tsx`
 - Modify: `apps/web/features/workspace/DeploymentPanel.tsx`
 - Test: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: `DeploymentBaseline`, `DeploymentWizardState`, 기존 `DeploymentPanel` render section
 - Produces: `DeploymentWizard` dialog shell, step rail, current step body
 
-- [ ] **Step 1: modal ownership test를 작성한다**
+- [ ] Step 1: modal ownership test를 작성한다
 
 ```ts
 test("Deploy opens one modal wizard outside the Architecture Panel", () => {
@@ -633,7 +633,7 @@ test("Deploy opens one modal wizard outside the Architecture Panel", () => {
 });
 ```
 
-- [ ] **Step 2: Wizard shell을 구현한다**
+- [ ] Step 2: Wizard shell을 구현한다
 
 ```tsx
 export function DeploymentWizard({
@@ -654,7 +654,7 @@ export function DeploymentWizard({
 }
 ```
 
-- [ ] **Step 3: Desktop visual contract를 구현한다**
+- [ ] Step 3: Desktop visual contract를 구현한다
 
 ```css
 /* Deployment wizard visual contract */
@@ -683,7 +683,7 @@ export function DeploymentWizard({
 }
 ```
 
-- [ ] **Step 4: Mobile full-screen contract를 구현한다**
+- [ ] Step 4: Mobile full-screen contract를 구현한다
 
 ```css
 @media (max-width: 768px) {
@@ -699,7 +699,7 @@ export function DeploymentWizard({
 }
 ```
 
-- [ ] **Step 5: modal test와 typecheck를 실행하고 commit한다**
+- [ ] Step 5: modal test와 typecheck를 실행하고 commit한다
 
 ```bash
 git add apps/web/features/workspace/DeploymentWizard.tsx \
@@ -714,18 +714,18 @@ git commit -m "Feat: Deployment Wizard 화면 구조 추가" -m "Desktop inset c
 
 ### Task 9: Direct Deployment 단계를 Wizard에 연결
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/DeploymentPanel.tsx`
 - Modify: `apps/web/features/workspace/DeploymentWizard.tsx`
 - Modify: `apps/web/features/workspace/deployment-wizard-state.ts`
 - Test: `apps/web/features/workspace/deployment-console-state.test.ts`
 - Test: `apps/web/features/workspace/deployment-panel-apply-confirmation.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 기존 Preflight, artifact 저장, create Deployment, Plan, approve, Apply API handler
 - Produces: 현재 단계 하나에만 기존 행동을 노출하는 Direct wizard flow
 
-- [ ] **Step 1: 순서를 건너뛰지 못하는 test를 추가한다**
+- [ ] Step 1: 순서를 건너뛰지 못하는 test를 추가한다
 
 ```ts
 test("Apply remains unavailable before the exact Plan is approved", () => {
@@ -735,7 +735,7 @@ test("Apply remains unavailable before the exact Plan is approved", () => {
 });
 ```
 
-- [ ] **Step 2: 기존 section을 단계별 view로 연결한다**
+- [ ] Step 2: 기존 section을 단계별 view로 연결한다
 
 ```text
 preflight → renderPreDeploymentCheckSection()
@@ -746,11 +746,11 @@ route     → Direct / Git/CI/CD 선택 UI
 result    → logs, outputs, resources, 실패 설명
 ```
 
-- [ ] **Step 3: Apply confirmation dialog와 acknowledgement를 그대로 유지한다**
+- [ ] Step 3: Apply confirmation dialog와 acknowledgement를 그대로 유지한다
 
 기존 `showApplyConfirmation`, `approveCurrentPlan`, `runDeploymentApply` handler를 이동만 하고 이름, disabled 조건, API 인자를 바꾸지 않는다.
 
-- [ ] **Step 4: Direct deployment 집중 test를 실행한다**
+- [ ] Step 4: Direct deployment 집중 test를 실행한다
 
 ```bash
 pnpm --dir apps/web exec tsx --test \
@@ -759,7 +759,7 @@ pnpm --dir apps/web exec tsx --test \
   features/workspace/deployment-wizard-state.test.ts
 ```
 
-- [ ] **Step 5: commit한다**
+- [ ] Step 5: commit한다
 
 ```bash
 git add apps/web/features/workspace/DeploymentPanel.tsx \
@@ -774,18 +774,18 @@ git commit -m "Refactor: Direct Deployment를 Wizard 단계에 연결" -m "기�
 
 ### Task 10: Git/CI/CD 분기와 Result 화면 연결
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/DeploymentPanel.tsx`
 - Modify: `apps/web/features/workspace/DeploymentWizard.tsx`
 - Modify: `apps/web/features/workspace/deployment-wizard-state.ts`
 - Test: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 - Test: `apps/web/features/workspace/deployment-actions.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 승인된 Plan artifact, 기존 `createGitCicdHandoff`, pipeline 상태, Deployment log/output/resource
 - Produces: `route` 선택과 공통 `result` 화면
 
-- [ ] **Step 1: Git/CI/CD가 Direct Apply 성공을 요구하지 않는 test를 작성한다**
+- [ ] Step 1: Git/CI/CD가 Direct Apply 성공을 요구하지 않는 test를 작성한다
 
 ```ts
 test("approved Plan can choose Git CI/CD without a Direct Apply result", () => {
@@ -798,11 +798,11 @@ test("approved Plan can choose Git CI/CD without a Direct Apply result", () => {
 });
 ```
 
-- [ ] **Step 2: Route 단계에 기존 두 경로를 배치한다**
+- [ ] Step 2: Route 단계에 기존 두 경로를 배치한다
 
 Direct와 Git/CI/CD button은 승인 완료 뒤에만 활성화한다. Repository 연결은 Project Settings 책임으로 유지하고 Wizard 안에서 GitHub App 연결 로직을 새로 만들지 않는다.
 
-- [ ] **Step 3: Result가 경로별 결과를 구분한다**
+- [ ] Step 3: Result가 경로별 결과를 구분한다
 
 ```text
 Direct result
@@ -819,11 +819,11 @@ Git/CI/CD result
 └─ 실패 설명 또는 다시 조회
 ```
 
-- [ ] **Step 4: History와 Cleanup 경계를 유지한다**
+- [ ] Step 4: History와 Cleanup 경계를 유지한다
 
 History는 Result의 이동 링크로 제공한다. Cleanup/Destroy는 선택한 Deployment record에서 기존 별도 확인 dialog를 거쳐 시작하며 Wizard 정상 단계에 추가하지 않는다.
 
-- [ ] **Step 5: 관련 test를 실행하고 commit한다**
+- [ ] Step 5: 관련 test를 실행하고 commit한다
 
 ```bash
 pnpm --dir apps/web exec tsx --test \
@@ -841,20 +841,20 @@ git commit -m "Feat: Deployment Wizard 실행 분기와 결과 연결" -m "승�
 
 ---
 
-### Task 11: Wizard 종료·오류·AI 설명 경계 정리
+### Task 11: Wizard 종료 / 오류 / AI 설명 경계 정리
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/DeploymentWizard.tsx`
 - Modify: `apps/web/features/workspace/DeploymentPanel.tsx`
 - Modify: `apps/web/features/workspace/WorkspaceAiChatDock.tsx`
 - Test: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 - Test: `apps/web/features/workspace/workspace-ai-guardrail-warning.test.ts`
 
-**Interfaces:**
+Interfaces:
 - Consumes: 기존 error message, cancellation, failure explanation, AI explanation result
-- Produces: 명확한 종료·복구 행동과 단계 문맥 AI 설명
+- Produces: 명확한 종료 / 복구 행동과 단계 문맥 AI 설명
 
-- [ ] **Step 1: 실행 중 닫기와 Baseline 폐기 규칙 test를 작성한다**
+- [ ] Step 1: 실행 중 닫기와 Baseline 폐기 규칙 test를 작성한다
 
 ```ts
 test("wizard does not silently discard a running deployment", () => {
@@ -864,7 +864,7 @@ test("wizard does not silently discard a running deployment", () => {
 });
 ```
 
-- [ ] **Step 2: 닫기 결과를 세 가지로 구분한다**
+- [ ] Step 2: 닫기 결과를 세 가지로 구분한다
 
 ```text
 실행 전  → Baseline 폐기 후 Architecture로 복귀
@@ -872,15 +872,15 @@ test("wizard does not silently discard a running deployment", () => {
 실행 후  → record를 유지하고 Architecture 또는 History로 이동
 ```
 
-- [ ] **Step 3: AI의 역할을 설명으로 제한한다**
+- [ ] Step 3: AI의 역할을 설명으로 제한한다
 
 Architecture AI는 Board/Terraform preview와 기존 승인 버튼을 유지한다. Deployment Wizard에서는 Preflight finding, Plan 위험, 실패 원인을 설명할 수 있지만 `approveCurrentPlan`, `runDeploymentApply`, `createGitCicdHandoff`를 직접 호출하지 않는다.
 
-- [ ] **Step 4: error와 blocked 상태를 색 외 정보로 표시한다**
+- [ ] Step 4: error와 blocked 상태를 색 외 정보로 표시한다
 
 각 상태는 icon, 제목, 설명, 가능한 다음 행동을 포함한다. `aria-live="polite"`는 loading과 완료 알림에, `role="alert"`는 사용자가 조치해야 하는 실패에만 사용한다.
 
-- [ ] **Step 5: AI guardrail test를 실행하고 commit한다**
+- [ ] Step 5: AI guardrail test를 실행하고 commit한다
 
 ```bash
 git add apps/web/features/workspace/DeploymentWizard.tsx \
@@ -893,9 +893,9 @@ git commit -m "Fix: Deployment Wizard 종료와 AI 승인 경계 정리" -m "실
 
 ---
 
-### Task 12: Desktop·Tablet·Mobile 최종 QA와 legacy style 정리
+### Task 12: Desktop / Tablet / Mobile 최종 QA와 legacy style 정리
 
-**Files:**
+Files:
 - Modify: `apps/web/features/workspace/workspace.module.css`
 - Modify: `apps/web/features/diagram-editor/diagram-editor.module.css`
 - Modify: `apps/web/features/parameter-input/ParameterInputPanel.module.css`
@@ -903,11 +903,11 @@ git commit -m "Fix: Deployment Wizard 종료와 AI 승인 경계 정리" -m "실
 - Modify: `apps/web/features/parameter-input/parameter-panel-source.test.ts`
 - Modify: `docs/gg/fix-gg-qa-followup/003_Workspace_배포위자드_통합고도화계획_gg.md`
 
-**Interfaces:**
+Interfaces:
 - Consumes: Tasks 1~11의 화면과 동작 contract
 - Produces: 중복 selector가 정리된 최종 responsive UI와 검증 기록
 
-- [ ] **Step 1: viewport별 source contract를 확인한다**
+- [ ] Step 1: viewport별 source contract를 확인한다
 
 ```ts
 test("workspace panels switch to full-screen sheets at 768px", () => {
@@ -917,11 +917,11 @@ test("workspace panels switch to full-screen sheets at 768px", () => {
 });
 ```
 
-- [ ] **Step 2: legacy Blueprint/중복 override를 제거한다**
+- [ ] Step 2: legacy Blueprint/중복 override를 제거한다
 
 같은 selector의 마지막 선언만 남기되 Task 1의 기능 selector는 제거하지 않는다. `--bp-*` token과 현재 `--workspace-*` token이 같은 component에 중복 적용되는 부분을 `--workspace-*` 기준으로 통합한다.
 
-- [ ] **Step 3: 수동 시각 QA를 수행한다**
+- [ ] Step 3: 수동 시각 QA를 실행한다
 
 ```text
 375 × 812
@@ -940,7 +940,7 @@ test("workspace panels switch to full-screen sheets at 768px", () => {
 - Step rail과 current body가 동시에 읽힘
 ```
 
-- [ ] **Step 4: 기능 회귀 QA를 수행한다**
+- [ ] Step 4: 기능 회귀 QA를 실행한다
 
 ```text
 Resource 선택 → 필수/추가 parameter 수정
@@ -954,7 +954,7 @@ AI Draft/patch Preview → 취소 또는 명시적 적용
 Cleanup → 별도 확인 dialog
 ```
 
-- [ ] **Step 5: 최소 자동 검증을 실행한다**
+- [ ] Step 5: 최소 자동 검증을 실행한다
 
 ```bash
 pnpm --dir apps/web exec tsx --test \
@@ -972,7 +972,7 @@ pnpm harness:check
 
 Expected: 모든 집중 test, Web typecheck, Web lint, harness check PASS
 
-- [ ] **Step 6: 계획 문서에 실제 검증 결과를 기록하고 commit한다**
+- [ ] Step 6: 계획 문서에 실제 검증 결과를 기록하고 commit한다
 
 ```bash
 git add apps/web/features/workspace/workspace.module.css \
@@ -993,10 +993,10 @@ git commit -m "Refactor: Workspace와 Deployment Wizard 고도화 마감" -m "De
 | M1 | 1~3 | 동작 계약, 공통 시각 token, Resource Inspector | `UI: Workspace Architecture 시각 기반 정리` |
 | M2 | 4~5 | Architecture Panel 책임과 AI Chat 반응형 | `Refactor: Workspace Architecture Panel 완성` |
 | M3 | 6~8 | 불변 Baseline, Wizard 상태와 shell | `Feat: Deployment Wizard 기반 추가` |
-| M4 | 9~11 | Direct·Git/CI/CD 실행과 결과·AI 경계 | `Feat: Deployment Wizard 실행 흐름 연결` |
+| M4 | 9~11 | Direct / Git/CI/CD 실행과 결과 / AI 경계 | `Feat: Deployment Wizard 실행 흐름 연결` |
 | M5 | 12 | 반응형 QA와 legacy style 정리 | `Refactor: Workspace Deployment UI 마감` |
 
-한 PR에서 M1~M5를 모두 합치지 않는다. 각 PR은 앞 Milestone의 test를 기준선으로 받아야 하며, API·DB·실제 인프라 변경이 필요하면 별도 담당 작업으로 분리한다.
+한 PR에서 M1~M5를 모두 합치지 않는다. 각 PR은 앞 Milestone의 test를 기준선으로 받아야 하며, API / DB / 실제 인프라 변경이 필요하면 별도 담당 작업으로 분리한다.
 
 ## 3. 완료 정의
 

@@ -11,13 +11,13 @@
 
 이 기능은 첫 번째 사용자 앱 빌드에서 생성한 Docker layer를 프로젝트 전용 ECR Repository에 저장하고, 다음 commit 빌드에서 변경되지 않은 layer를 재사용한다. 사용자가 GitHub에 새 commit을 push해도 전체 Docker image를 처음부터 다시 만들지 않게 하여 CodeBuild의 API image build 시간을 줄인다.
 
-캐시는 배포 결과가 아니다. 캐시 tag를 ECS Task Definition에 넣지 않으며, 실제 배포는 현재와 동일하게 SketchCatch 내부 Artifact S3에서 검증한 immutable candidate를 trusted worker가 사용자 배포용 ECR에 게시한 뒤 수행한다.
+캐시는 배포 결과가 아니다. 캐시 tag를 ECS Task Definition에 넣지 않으며, 실제 배포는 현재와 동일하게 SketchCatch 내부 Artifact S3에서 검증한 immutable candidate를 trusted worker가 사용자 배포용 ECR에 게시한 뒤 실행한다.
 
 ## 3. 범위
 
 ### 포함
 
-- 프로젝트별 ECR build cache Repository 생성·검증·삭제
+- 프로젝트별 ECR build cache Repository 생성 / 검증 / 삭제
 - CodeBuild build-only role의 캐시 전용 최소 권한
 - CloudFormation이 생성하는 shared permissions boundary의 캐시 상한 권한
 - server-generated preflight buildspec의 BuildKit registry cache import/export
@@ -65,7 +65,7 @@ SketchCatch는 이름만 같다는 이유로 기존 Repository를 수정하거�
 
 ### 5.1 SketchCatch Terraform Execution Role
 
-AWS 연결 CloudFormation이 만드는 `SketchCatchTerraformExecutionRole-*`은 기존 `ecr:*` 범위 안에서 cache Repository를 생성·조회·태그·lifecycle 설정·삭제한다.
+AWS 연결 CloudFormation이 만드는 `SketchCatchTerraformExecutionRole-*`은 기존 `ecr:*` 범위 안에서 cache Repository를 생성 / 조회 / 태그 / lifecycle 설정 / 삭제한다.
 
 ### 5.2 CodeBuild build-only role
 
@@ -101,7 +101,7 @@ AWS 연결 CloudFormation의 `SketchCatchCodeBuildBoundary-*`에는 다음 상�
 1. 사용자가 `빌드 환경 준비`를 실행한다.
 2. API가 프로젝트별 cache Repository를 생성하거나 ownership과 설정을 검증한다.
 3. API가 cache Repository만 사용할 수 있는 build-only role과 permissions boundary를 검증한다.
-4. API가 CodeBuild project를 생성·갱신한다. CodeBuild 자체 `cache.type`은 `NO_CACHE`를 유지한다. 실제 캐시는 server-generated buildspec의 BuildKit registry cache가 담당한다.
+4. API가 CodeBuild project를 생성 / 갱신한다. CodeBuild 자체 `cache.type`은 `NO_CACHE`를 유지한다. 실제 캐시는 server-generated buildspec의 BuildKit registry cache가 담당한다.
 5. Application Release가 exact commit으로 CodeBuild를 시작하면서 cache Repository 이름과 URI를 server-generated environment override로 전달한다.
 6. buildspec은 ECR login과 `docker buildx` 준비를 시도한다.
 7. 캐시 사용이 가능하면 다음 인자를 사용한다.
@@ -114,7 +114,7 @@ AWS 연결 CloudFormation의 `SketchCatchCodeBuildBoundary-*`에는 다음 상�
 
 8. 첫 빌드는 전체 layer를 만들고 cache manifest를 저장한다.
 9. 다음 빌드는 Dockerfile instruction과 입력이 동일한 layer를 재사용한다.
-10. build 결과는 기존과 동일하게 local image로 load한 뒤 health check, OCI archive 생성, frontend build, signed upload, digest 검증을 수행한다.
+10. build 결과는 기존과 동일하게 local image로 load한 뒤 health check, OCI archive 생성, frontend build, signed upload, digest 검증을 실행한다.
 
 Docker cache는 변경된 파일만 임의로 골라 실행하는 기능이 아니다. Dockerfile의 layer 경계를 기준으로 앞 단계가 같을 때만 재사용한다. 따라서 Dockerfile이 dependency manifest copy/install을 application source copy보다 앞에 두어야 효과가 크다.
 
@@ -123,7 +123,7 @@ Docker cache는 변경된 파일만 임의로 골라 실행하는 기능이 아�
 - cache Repository가 아직 비어 있음: 정상적인 cold build로 계속한다.
 - `cache-from` manifest 없음 또는 손상: 경고를 남기고 cache 인자 없이 전체 build로 한 번 재시도한다.
 - `cache-to` export 실패: `ignore-error=true`로 현재 release는 계속하고 다음 실행이 cold build가 될 수 있음을 log에 남긴다.
-- ECR login 실패: 캐시 없이 전체 build로 계속한다. candidate 생성·검증 실패로 오인하지 않는다.
+- ECR login 실패: 캐시 없이 전체 build로 계속한다. candidate 생성 / 검증 실패로 오인하지 않는다.
 - Repository 설정 또는 ownership 불일치: 빌드 환경 준비를 실패시키고 관리되지 않는 Resource를 수정하지 않는다.
 - 기존 permissions boundary: `AWS 연결을 다시 생성한 뒤 빌드 환경을 준비해 주세요`라는 사용자용 오류로 분리한다.
 - cleanup 실패: 프로젝트 또는 AWS 연결 삭제를 완료 처리하지 않고 재시도 가능한 cleanup 실패로 남긴다.
@@ -149,7 +149,7 @@ Docker cache는 변경된 파일만 임의로 골라 실행하는 기능이 아�
 - `apps/api/src/aws-connections/aws-connection-service.ts`
   - CloudFormation permissions boundary에 cache 전용 ECR 상한 추가
 - `apps/api/src/build-environments/project-build-environment-service.ts`
-  - cache Repository 이름·ARN·URI를 desired environment와 runtime fingerprint에 포함
+  - cache Repository 이름 / ARN / URI를 desired environment와 runtime fingerprint에 포함
 - `apps/api/src/build-environments/aws-project-build-environment-gateway.ts`
   - ECR Repository create/update/verify/remove와 build-only policy 갱신
 - `apps/api/src/releases/preflight-buildspec.ts`
@@ -157,7 +157,7 @@ Docker cache는 변경된 파일만 임의로 골라 실행하는 기능이 아�
 - `apps/api/src/deployments/aws-codebuild-direct-application-release-gateway.ts`
   - server-generated cache environment override 전달
 - `apps/api/src/aws-connections/aws-connection-managed-cleanup.ts`
-  - AWS 연결 및 프로젝트 삭제 시 cache Repository ownership 검증·삭제
+  - AWS 연결 및 프로젝트 삭제 시 cache Repository ownership 검증 / 삭제
 - `docs/deployment.md`
   - 사용자 앱이 cache 전용 ECR만 사용한다는 운영 계약으로 기존 설명 수정
 - `feature_list.json`
@@ -169,7 +169,7 @@ Docker cache는 변경된 파일만 임의로 골라 실행하는 기능이 아�
 
 ### 자동 검증
 
-- cache Repository 이름·ARN·runtime fingerprint 결정성
+- cache Repository 이름 / ARN / runtime fingerprint 결정성
 - 새 CloudFormation boundary가 cache action만 허용하고 ECS/S3/CloudFront를 허용하지 않음
 - build-only inline policy가 정확한 프로젝트 cache ARN만 허용함
 - ECR Repository create/update/verify, ownership 거부, 부분 생성 보상 정리

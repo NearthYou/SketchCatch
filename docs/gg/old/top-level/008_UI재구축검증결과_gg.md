@@ -18,10 +18,10 @@
 | 5. AI 시작 | 완료 | 대화, 음성 입력, 초안 생성, PREVIEW, 사용자 적용 |
 | 6. Reverse Engineering | 완료 | AWS 스캔, 후보, 미리보기, UNKNOWN, 프로젝트 생성 |
 | 7. Terraform Preview | 완료 | 코드 생성, Validate, 설계 진단, Board 변경 제안 |
-| 8. Safety / Cost | 완료 | 비용·보안 검사, Architecture 오류 차단, checklist |
+| 8. Safety / Cost | 완료 | 비용 / 보안 검사, Architecture 오류 차단, checklist |
 | 9. Deployment Console | 완료 | 저장, 검사, Plan, 승인, Apply, 실시간 log |
 | 10. History / Cleanup | 완료 | 배포 이력, 결과 Resource, output, 실패 설명, Cleanup 승인 |
-| 11. Template / GitHub | 완료 | Template 탐색·적용, Repository 연결·분석·PREVIEW |
+| 11. Template / GitHub | 완료 | Template 탐색 / 적용, Repository 연결 / 분석 / PREVIEW |
 | 12. E2E Visual QA | 완료 | 375px부터 1920px까지 실제 브라우저 확인 |
 
 ## 이번 최종 점검에서 고친 문제
@@ -239,7 +239,7 @@ API 전체 test에는 기존 Deployment Init test의 기대값 1건이 남아 �
 - 다중 Terraform 파일과 AI 수정안 비교
 - Git/CI/CD 승인 산출물과 AWS Role 명시적 승인
 - 다중 Terraform bundle 저장, 작업 폴더 복원, Git PR 파일 복원
-- 오래된 AI Board 미리보기 응답·적용 차단
+- 오래된 AI Board 미리보기 응답 / 적용 차단
 - 실제 Terraform 파일명과 내용을 유지한 Safety 검사
 - Destroy Plan의 일반 Git handoff 재사용 차단
 - Terraform bundle 파일 경계와 공백 hash 충돌 차단

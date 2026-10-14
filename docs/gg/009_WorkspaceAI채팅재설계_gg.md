@@ -2,7 +2,7 @@
 
 ## 1. 한 줄 목표
 
-Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, **AI가 사용자의 확인 없이 Board나 Terraform을 바꾸지 못하게 한다.**
+Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, AI가 사용자의 확인 없이 Board나 Terraform을 바꾸지 못하게 한다.
 
 ## 2. 재설계 시작 당시 상태와 문제
 
@@ -30,7 +30,7 @@ Workspace AI Chat은 하나의 대화를 기능별로 필터링하지 않는다.
 
 이 세 이름을 사용자 화면과 AI Chat 전용 문서의 기준 용어로 사용한다. `초안 제안`, `AI 오류`, `Preview 설명`은 이전 명칭으로 취급한다.
 
-독립 범위에는 대화 내역뿐 아니라 입력 중인 문장, 요청 처리 상태, 오류, 승인 대기 상태가 포함된다. 한 대화에서 생긴 요청이나 미완성 입력이 다른 대화의 화면·입력창·상태를 덮어쓰면 안 된다.
+독립 범위에는 대화 내역뿐 아니라 입력 중인 문장, 요청 처리 상태, 오류, 승인 대기 상태가 포함된다. 한 대화에서 생긴 요청이나 미완성 입력이 다른 대화의 화면 / 입력창 / 상태를 덮어쓰면 안 된다.
 
 일반 `AI 채팅 열기` 런처는 사용자가 마지막으로 보던 대화를 다시 연다. 다만 Terraform Issue에서 시작한 요청은 `오류 분석`을, Terraform Preview에서 시작한 요청은 `에이전트 리뷰`를 즉시 연다.
 
@@ -74,7 +74,7 @@ Board 또는 Terraform이 바뀌어 설계 제안의 기준이 오래되면 제�
 - 프로젝트가 없으면 disabled 처리하고 이유를 tooltip으로 알림
 - glow, gradient, bounce animation은 사용하지 않음
 
-위치는 Board 오른쪽 아래를 기준으로 하되 Inspector와 작업 패널이 열리면 그 왼쪽으로 이동한다. React Flow 확대·축소 버튼과 minimap 영역을 가리지 않는다.
+위치는 Board 오른쪽 아래를 기준으로 하되 Inspector와 작업 패널이 열리면 그 왼쪽으로 이동한다. React Flow 확대 / 축소 버튼과 minimap 영역을 가리지 않는다.
 
 ## 5. 열린 AI 패널
 
@@ -84,10 +84,10 @@ Board 또는 Terraform이 바뀌어 설계 제안의 기준이 오래되면 제�
 - 폭: `clamp(360px, 31vw, 420px)`
 - Board와 panel 사이에 1px divider
 - Inspector가 열려 있으면 Inspector 왼쪽에 위치
-- Terraform·검사·배포 작업 패널과 동시에 펼치지 않음
+- Terraform / 검사 / 배포 작업 패널과 동시에 펼치지 않음
 - header: `AI Assistant`, 현재 문맥, 닫기 버튼
 - 본문: 대화와 미리보기
-- 하단: 입력창과 전송·중지·음성 버튼
+- 하단: 입력창과 전송 / 중지 / 음성 버튼
 - 입력창은 하단에 고정하고 대화만 스크롤
 
 ### Tablet과 Mobile
@@ -100,7 +100,7 @@ Board 또는 Terraform이 바뀌어 설계 제안의 기준이 오래되면 제�
 
 ## 6. Board와 다른 패널의 관계
 
-- AI와 Terraform·검사·배포 panel 중 하나만 크게 열 수 있다.
+- AI와 Terraform / 검사 / 배포 panel 중 하나만 크게 열 수 있다.
 - AI panel이 열려도 왼쪽 Resource panel은 그대로 사용할 수 있다.
 - Inspector가 열리면 AI panel과 런처를 Inspector 왼쪽으로 이동한다.
 - AI panel은 React Flow 내부가 아니라 Board 바깥 floating layer에 둔다.
@@ -167,7 +167,7 @@ Board 또는 Terraform이 바뀌어 설계 제안의 기준이 오래되면 제�
 
 1. 현재 구조와 레퍼런스 조사, 이 문서 작성
 2. 새 런처와 tooltip, 충돌 없는 위치 구현
-3. desktop AI dock과 실제 대화·미리보기 연결
+3. desktop AI dock과 실제 대화 / 미리보기 연결
 4. mobile 전체 화면, focus, keyboard 처리
 5. Empty, loading, error, approval 상태 연결
 6. test, typecheck, lint, build, 실제 route 브라우저 QA
@@ -198,7 +198,7 @@ Board 또는 Terraform이 바뀌어 설계 제안의 기준이 오래되면 제�
 - desktop AI panel 폭을 360~420px로 제한함
 - 768px 이하에서 전체 폭 assistant로 전환함
 - AI를 열면 Inspector와 작업 panel을 접어 Board 폭을 확보함
-- Terraform·검사·배포 panel과 AI panel이 동시에 펼쳐지지 않게 함
+- Terraform / 검사 / 배포 panel과 AI panel이 동시에 펼쳐지지 않게 함
 - 자연어 Architecture 생성과 현재 Board 수정 미리보기를 연결함
 - 추가 질문의 일반 선택지와 Resource ID 선택을 구분함
 - Terraform Preview와 Terraform 오류 설명을 연결함
@@ -233,7 +233,7 @@ AI panel 열기
 
 - 375 x 812: 전체 폭 assistant, 입력창과 닫기 버튼 표시, 가로 잘림 없음
 - 768 x 1024: 전체 폭 assistant, 긴 대화 scroll과 하단 입력창 표시
-- 1280px 이상: 오른쪽 dock, Board 하단 확대·축소 도구 표시
+- 1280px 이상: 오른쪽 dock, Board 하단 확대 / 축소 도구 표시
 - `Escape`로 닫은 뒤 focus가 AI 런처로 돌아옴
 - AI panel을 열면 Terraform 작업 panel이 닫힘
 - Terraform 작업 panel을 열면 AI panel이 닫힘

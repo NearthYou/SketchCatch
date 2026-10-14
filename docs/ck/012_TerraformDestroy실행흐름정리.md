@@ -386,7 +386,7 @@ Destroy plan 저장이 끝나면 아래처럼 terminal status를 정한다.
 
 ### 9.2 Terraform artifact 안전 검사
 
-workspace에 Terraform artifact를 복원한 뒤 아래 검사를 다시 수행한다.
+workspace에 Terraform artifact를 복원한 뒤 아래 검사를 다시 실행한다.
 
 ```text
 assertTerraformArtifactIsSafe(terraformArtifactContent)

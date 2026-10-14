@@ -11,73 +11,73 @@
 - [제품 방향](../product.md)
 - `packages/types/src/index.ts`
 
-## 선택할 것
+## 선택 항목
 
 ### 1. 프로젝트 목록에서 AI 요약 표시
 
-**A. MVP에서는 프로젝트 상세/작업 화면에서만 AI 요약을 보여주고 목록은 후순위로 둔다. (추천)**
+A. MVP에서는 프로젝트 상세/작업 화면에서만 AI 요약을 보여주고 목록은 후순위로 둔다. (추천)
 
 - 장점: 목록 API와 AI 분석 저장 정책이 얽히지 않는다.
 - gg AI 파트 영향: 우선 stateless 분석 응답에 집중한다.
 
-**B. 프로젝트 목록에 최소 AI summary를 표시한다.**
+B. 프로젝트 목록에 최소 AI summary를 표시한다.
 
 - 예: `highestSeverity`, `findingCount`, `estimatedMonthlyCost`
 - 장점: 사용자가 위험한 프로젝트를 빠르게 볼 수 있다.
 - 위험: AI 분석 결과 저장 또는 캐싱 정책이 필요하다.
 
-**C. 프로젝트 목록에서 비용/위험 상세까지 보여준다.**
+C. 프로젝트 목록에서 비용/위험 상세까지 보여준다.
 
 - 장점: 정보량이 많다.
 - 위험: 목록 화면이 무거워지고 MVP 범위가 커진다.
 
 ### 2. 최근 작업 목록과 AI 이벤트
 
-**A. AI 분석 실행 자체는 최근 작업에 남기지 않는다. (추천)**
+A. AI 분석 실행 자체는 최근 작업에 남기지 않는다. (추천)
 
 - 장점: Activity 모델이 안정되기 전까지 노이즈를 줄인다.
 - gg AI 파트 영향: AI endpoint는 activity 생성 책임을 지지 않는다.
 
-**B. Architecture Draft 생성과 Pre-Deployment Check만 최근 작업에 남긴다.**
+B. Architecture Draft 생성과 Pre-Deployment Check만 최근 작업에 남긴다.
 
 - 장점: 사용자가 중요한 AI 작업을 추적할 수 있다.
 - 위험: activity schema와 event naming 합의가 필요하다.
 
-**C. 모든 AI 요청을 최근 작업에 남긴다.**
+C. 모든 AI 요청을 최근 작업에 남긴다.
 
 - 장점: 감사 추적에는 좋다.
 - 위험: 로그/토큰/개인정보 관리 부담이 커진다.
 
 ### 3. 알림 연동
 
-**A. MVP에서는 알림을 직접 만들지 않고 화면 내 warning으로 표시한다. (추천)**
+A. MVP에서는 알림을 직접 만들지 않고 화면 내 warning으로 표시한다. (추천)
 
 - 장점: 알림 시스템과 AI 분석 저장 정책을 분리한다.
 - gg AI 파트 영향: `findings`와 `checklist`만 제공한다.
 
-**B. high severity finding만 알림으로 만든다.**
+B. high severity finding만 알림으로 만든다.
 
 - 장점: 중요한 위험을 놓치지 않는다.
 - 위험: 알림 생성 주체와 중복 방지 기준이 필요하다.
 
-**C. 비용 초과, 보안 위험, 배포 실패를 모두 알림으로 만든다.**
+C. 비용 초과, 보안 위험, 배포 실패를 모두 알림으로 만든다.
 
 - 장점: 플랫폼 완성도가 높다.
 - 위험: MVP 범위를 넓힌다.
 
 ### 4. 인증/프로젝트 소유자 기준
 
-**A. 로그인 사용자 기준으로만 AI 기능을 연다. (확정)**
+A. 로그인 사용자 기준으로만 AI 기능을 연다. (확정)
 
 - 장점: 프로젝트, AI 결과, 활동 내역의 소유자가 `userId` 하나로 정리된다.
 - gg AI 파트 영향: request payload에 user secret이나 AWS credential을 요구하지 않는다.
 - 기준: `Authorization: Bearer <accessToken>`이 없는 요청은 프로젝트/AI 기능을 사용할 수 없다.
 
-**B. `AnonymousWorkspace` 기준으로 AI 결과를 연결한다. (제외)**
+B. `AnonymousWorkspace` 기준으로 AI 결과를 연결한다. (제외)
 
 - 제외 이유: 익명 작업 공간을 도입하지 않기로 결정했으므로 프로젝트 소유권 기준이 분리된다.
 
-**C. 익명/로그인 둘 다 지원한다. (제외)**
+C. 익명/로그인 둘 다 지원한다. (제외)
 
 - 제외 이유: `workspaceId`와 `userId`를 동시에 지원하면 API 권한 검증과 DB 설계가 불필요하게 복잡해진다.
 

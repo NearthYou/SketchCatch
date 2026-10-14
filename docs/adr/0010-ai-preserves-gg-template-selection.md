@@ -4,7 +4,7 @@ gg는 Repository Analysis로 지원 Template 하나를 확정하거나 Template 
 
 이 결정은 [0003](./0003-gg-template-selection-ai-handoff.md)에 남아 있던 AI의 Template 교체 가능성 미결정 상태를 대체한다.
 
-**고려한 대안**
+고려한 대안
 
 - AI가 후보를 다시 비교: Template Selection 책임이 gg와 AI 사이에 섞인다.
 - AI가 다른 Template로 자동 교체: 사용자가 본 선택 근거와 Architecture Draft의 기반이 달라진다.

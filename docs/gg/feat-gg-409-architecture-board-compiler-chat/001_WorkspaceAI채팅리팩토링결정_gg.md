@@ -6,7 +6,7 @@
 - 범위: Workspace 진입 이후 AI 작업 경험
 - 기준 문서: 이 문서, `docs/adr/0012-workspace-ai-chat-통합.md`, 같은 폴더의 `000_아키텍처보드컴파일러설계_gg.md`
 
-이 문서는 AI가 Architecture Board와 Terraform을 분석하고 변경안을 제시한 뒤, 사용자 승인으로 적용하는 화면 계약을 정의한다. 기존 AI 채팅의 레이아웃·스타일·컴포넌트 구조는 재사용하지 않고 기능·데이터·API 계약만 유지한다.
+이 문서는 AI가 Architecture Board와 Terraform을 분석하고 변경안을 제시한 뒤, 사용자 승인으로 적용하는 화면 계약을 정의한다. 기존 AI 채팅의 레이아웃 / 스타일 / 컴포넌트 구조는 재사용하지 않고 기능 / 데이터 / API 계약만 유지한다.
 
 ## 2. 화면 구조
 
@@ -48,7 +48,7 @@
 - preview와 승인 대기 상태에서는 원본 Board와 Terraform을 변경하지 않는다.
 - Board revision 또는 fingerprint가 달라진 제안은 `오래된 제안`으로 남기되 적용을 막고 다시 생성만 허용한다.
 - 오류 수정은 현재 fingerprint에 맞는 안전한 수정만 제공한다. 여러 수정의 일괄 적용은 원자적으로 처리한다.
-- 적용 시 정확한 파일 코드와 revision을 검증하고, 성공 후 Terraform 갱신·검증·저장을 수행한다.
+- 적용 시 정확한 파일 코드와 revision을 검증하고, 성공 후 Terraform 갱신 / 검증 / 저장을 실행한다.
 - 요청 중에는 상태와 `요청 중지`를 표시하고 실제 요청을 취소한다. 취소 뒤 늦게 도착한 응답은 반영하지 않는다.
 - 기존 Draft/Patch, Terraform 오류 분석, Preview 리뷰 API와 프로젝트별 history 저장 계약을 유지한다.
 
@@ -68,7 +68,7 @@
 - mobile에서 전체 화면, focus trap, safe area, 키보드 입력이 동작한다.
 - 처리 중, 오류, 결과, 미리보기, 승인 대기, 오래된 제안 상태가 실제 상태와 일치한다.
 - 사용자 승인 전에는 Board와 Terraform이 바뀌지 않는다.
-- `Escape`, focus 이동·복원, 탭 키보드 이동, 요청 취소가 동작한다.
+- `Escape`, focus 이동 / 복원, 탭 키보드 이동, 요청 취소가 동작한다.
 - `375px`, `768px`, `1280px` 이상에서 가로 overflow와 주요 UI 겹침이 없다.
 - 관련 테스트, lint, typecheck와 production build가 통과한다.
 
@@ -89,5 +89,5 @@
 - Workspace AI 관련 테스트 `100/100`, Terraform provider chain 테스트 `8/8` 통과
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build` 통과
 - Chrome `375px`, `768px`, `1024px`, `1920px` 확인: 가로 overflow 없음, mobile modal/focus 순환 정상, desktop 비모달 정상
-- 오류 분석 전·오래된 결과에는 적용 버튼이 노출되지 않고, 읽던 transcript 위치는 분석 상태가 바뀌어도 아래로 강제 이동하지 않음
+- 오류 분석 전 / 오래된 결과에는 적용 버튼이 노출되지 않고, 읽던 transcript 위치는 분석 상태가 바뀌어도 아래로 강제 이동하지 않음
 - Browser console 새 오류 없음, 최종 코드 리뷰 Critical/Important/Minor 모두 없음

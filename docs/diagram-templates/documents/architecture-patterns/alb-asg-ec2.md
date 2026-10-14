@@ -88,7 +88,7 @@ EC2 3대를 private subnet 2개에 배치할 때 한 subnet에 2대, 다른 subn
 | private app subnet A/B | ASG가 생성하는 EC2 |
 | VPC 외부 regional/global | Route 53, ACM, CloudWatch, S3 artifact |
 
-ALB security group은 HTTPS(443)를 허용하고, EC2 security group은 **ALB security group을 source로 한 애플리케이션 포트만** 허용한다. SSH 22번 public ingress 대신 SSM Session Manager를 사용한다.
+ALB security group은 HTTPS(443)를 허용하고, EC2 security group은 ALB security group을 source로 한 애플리케이션 포트만 허용한다. SSH 22번 public ingress 대신 SSM Session Manager를 사용한다.
 
 ## Terraform 필수 파라미터
 

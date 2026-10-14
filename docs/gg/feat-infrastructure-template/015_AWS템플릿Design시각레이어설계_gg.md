@@ -2,7 +2,7 @@
 
 ## 목적
 
-여섯 AWS/Kubernetes Template의 기존 배포 리소스 103개와 Terraform 의미를 그대로 보존하면서, 실제 왼쪽 Resource Panel의 Design 항목으로 사용자·인터넷·Region·AZ·Group 같은 시각 맥락을 보강한다.
+여섯 AWS/Kubernetes Template의 기존 배포 리소스 103개와 Terraform 의미를 그대로 보존하면서, 실제 왼쪽 Resource Panel의 Design 항목으로 사용자 / 인터넷 / Region / AZ / Group 같은 시각 맥락을 보강한다.
 
 이번 변경은 Architecture의 배포 의미를 늘리는 작업이 아니다. Design 노드와 Design edge는 보드를 읽기 쉽게 만드는 presentation 전용 정보이며 Terraform graph, Architecture semantic graph, AI resource relationship에 들어가지 않는다.
 
@@ -23,7 +23,7 @@
 | 3-Tier Web App | 30 |
 | ECS Fargate Container App | 20 |
 | EKS Container App | 19 |
-| **합계** | **103** |
+| 합계 | 103 |
 
 다음 값은 presentation 작업 전후가 완전히 같아야 한다.
 
@@ -84,7 +84,7 @@ type TemplateDefinition = {
 - 검색과 drag 지원
 - Template 전용 가짜 항목 금지
 
-Region/AZ의 기존 수동 drag 동작은 호환성을 위해 바꾸지 않는다. Template presentation materializer가 해당 실제 Catalog item의 icon·label·size만 재사용하고, 결과 node를 비배포 Design container로 만드는 안전한 경계를 둔다.
+Region/AZ의 기존 수동 drag 동작은 호환성을 위해 바꾸지 않는다. Template presentation materializer가 해당 실제 Catalog item의 icon / label / size만 재사용하고, 결과 node를 비배포 Design container로 만드는 안전한 경계를 둔다.
 
 ## Template별 시각 구조
 
@@ -186,4 +186,4 @@ Region/AZ의 기존 수동 drag 동작은 호환성을 위해 바꾸지 않는�
 9. sibling node/caption 충돌 0건
 10. child footprint parent containment
 11. visible edge node/caption crossing 0건
-12. compact viewport와 행·열 정렬
+12. compact viewport와 행 / 열 정렬

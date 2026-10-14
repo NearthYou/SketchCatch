@@ -26,7 +26,7 @@ Terraform 코드 오류를 사용자가 놓치지 않게 Issues 탭 중심으로
 9. AI 메시지는 원인, 영향, Well-Architected 6개 관점, 최종 권고, 적용 가능 여부를 보여준다.
 10. 사용자가 `적용`을 클릭한 경우에만 Terraform 코드가 바뀐다.
 11. 적용 가능한 자동 수정은 `terraform.trailing_comma`, `terraform.quoted_reference`로 제한한다.
-12. 적용 클릭 후에는 코드 수정, 재검증, 저장/다이어그램 동기화까지 한 번의 User-Accepted Change로 수행한다.
+12. 적용 클릭 후에는 코드 수정, 재검증, 저장/다이어그램 동기화까지 한 번의 User-Accepted Change로 실행한다.
 
 ## 4. 범위
 

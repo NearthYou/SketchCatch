@@ -4,7 +4,7 @@ These scripts validate and normalize the committed Brainboard capture evidence w
 
 ## Safety boundary
 
-Never click or invoke Brainboard **Plan**, **Apply**, or **Deploy** while collecting or checking this evidence. Capture stops after `Use template` → `Create architecture`, the Design SVG, and the Code pane. A failed clone stays failed evidence; do not invent a graph or Terraform source from its preview.
+Never click or invoke Brainboard Plan, Apply, or Deploy while collecting or checking this evidence. Capture stops after `Use template` → `Create architecture`, the Design SVG, and the Code pane. A failed clone stays failed evidence; do not invent a graph or Terraform source from its preview.
 
 The JSON files under `brainboard-captures/` are immutable inputs. Both CLIs are read-only for that directory, and generated-output options reject a path inside it. The capture index stores the SHA-256 of every raw file.
 

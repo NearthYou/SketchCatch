@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: 각 이슈 구현 전 `superpowers:executing-plans`를 사용하고, 이슈 단위로 TDD·검증·리뷰·커밋을 완료한다.
 
-**Goal:** `docs/sw/spec2.md`의 프로젝트 단위 배포 운영 계약을 우선순위와 의존성에 따라 독립적으로 검증 가능한 수직 슬라이스로 구현한다.
+Goal: `docs/sw/spec2.md`의 프로젝트 단위 배포 운영 계약을 우선순위와 의존성에 따라 독립적으로 검증 가능한 수직 슬라이스로 구현한다.
 
-**Architecture:** 프로젝트 단일 배포 타깃과 공통 릴리즈 원장을 중심에 두고 Direct Deployment와 GitOps runtime adapter를 연결한다. Live Observation, CI 로그, 알림은 Deployment/ApplicationRelease terminal evidence를 소비하며, AWS 구현은 provider-neutral 계약 뒤에 둔다.
+Architecture: 프로젝트 단일 배포 타깃과 공통 릴리즈 원장을 중심에 두고 Direct Deployment와 GitOps runtime adapter를 연결한다. Live Observation, CI 로그, 알림은 Deployment/ApplicationRelease terminal evidence를 소비하며, AWS 구현은 provider-neutral 계약 뒤에 둔다.
 
-**Tech Stack:** TypeScript, Next.js, Fastify, Zod, PostgreSQL/RDS, Redis, Terraform, AWS ECS/Fargate, Lambda, CodeDeploy, S3/CloudFront, CloudWatch, GitHub Actions.
+Tech Stack: TypeScript, Next.js, Fastify, Zod, PostgreSQL/RDS, Redis, Terraform, AWS ECS/Fargate, Lambda, CodeDeploy, S3/CloudFront, CloudWatch, GitHub Actions.
 
 ## 전역 제약
 
@@ -16,7 +16,7 @@
 - 현재 `LIVE-OBSERVATION-V2-001`을 먼저 종료한 뒤 다음 마일스톤으로 이동한다.
 - 모든 이슈는 schema/API/storage/UI/test가 연결된 수직 슬라이스로 끝낸다.
 - 일반 PR base는 `dev`이며 `main`, `dev`에 직접 push하지 않는다.
-- 실제 AWS/GitHub mutation은 명시 승인된 non-production sandbox에서만 수행한다.
+- 실제 AWS/GitHub mutation은 명시 승인된 non-production sandbox에서만 실행한다.
 
 ## 마일스톤 우선순위
 
@@ -112,7 +112,7 @@
 - `Ctrl+S`/`Command+S`가 diagram과 Terraform draft를 하나의 server flush로 저장하게 한다.
 - 저장 성공 뒤 prepare API를 호출하고 scope 자동 감지/수정을 제공한다.
 - infrastructure/application/full_stack의 validation/approval/deployment 상태를 정규화한다.
-- Deployment console을 summary-first로 축소하고 중복·demo 전용 텍스트를 제거한다.
+- Deployment console을 summary-first로 축소하고 중복 / demo 전용 텍스트를 제거한다.
 - Destroy와 History도 같은 세 단계와 공통 릴리즈 증거를 사용한다.
 
 완료 기준:
@@ -226,7 +226,7 @@
 - Branch: `feature/sw/377-durable-deployment-notifications`
 - PR title: `Feat: 배포 완료 알림을 영속 Inbox와 Web Push로 전환`
 - Blocked by: #371, #372, #373, #374, #375, #376
-- User story: 개발자는 화면을 떠나도 Direct/GitOps 배포 성공·실패 알림을 Inbox와 Web Push로 한 번만 받는다.
+- User story: 개발자는 화면을 떠나도 Direct/GitOps 배포 성공 / 실패 알림을 Inbox와 Web Push로 한 번만 받는다.
 
 완료 기준:
 
@@ -260,7 +260,7 @@
 
 1. Milestone은 위 순서대로 GitHub에 만든다.
 2. 이슈는 blocker가 적은 순서대로 만들고 `enhancement`, `ready-for-agent` label을 붙인다. Issue 9는 `ready-for-agent`만 사용해도 된다.
-3. 이 문서에 기록된 이슈 번호와 branch 이름을 source of truth로 사용한다.
+3. 이 문서에 기록된 이슈 번호와 branch 이름을 기준으로 사용한다.
 4. 모든 branch는 `gh issue develop <number> --base dev --name <branch>`로 Development에 연결되어 있다.
 5. 하나의 milestone/issue branch만 활성 workstream으로 checkout한다.
 6. 각 PR은 해당 issue를 닫고 다음 blocker issue가 시작 가능한지 tracker와 handoff에 기록한다.

@@ -98,7 +98,7 @@ deployments/{deploymentId}/terraform/.terraform.lock.hcl
 
 ## 8. 3차 해결
 
-3차에서는 Deployment 생성 직후 `/deployments/:deploymentId/init`을 호출하도록 했다. 이 init은 AWS 리소스를 생성하지 않는다. Terraform provider 준비와 lock file 생성만 수행한다.
+3차에서는 Deployment 생성 직후 `/deployments/:deploymentId/init`을 호출하도록 했다. 이 init은 AWS 리소스를 생성하지 않는다. Terraform provider 준비와 lock file 생성만 실행한다.
 
 prewarm은 best-effort로 동작하게 했다. Deployment 생성이 성공하면 init prewarm을 요청하고, 성공하면 lock file을 저장한다. 실패하더라도 Deployment 생성은 실패시키지 않았다.
 

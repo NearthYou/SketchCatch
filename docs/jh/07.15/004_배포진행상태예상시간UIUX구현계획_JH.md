@@ -1,4 +1,4 @@
-# 배포 진행 상태·예상 시간 UI/UX 구현 계획
+# 배포 진행 상태 / 예상 시간 UI/UX 구현 계획
 
 ## 문서 상태
 
@@ -11,7 +11,7 @@
 
 이 문서는 구현 순서와 계약 후보를 정리한 JH 참고 문서다. 공통 DTO와 DB 계약을 구현할 때는
 `docs/data-models.md`, 실행 경계는 `docs/architecture.md`, 운영 흐름은 `docs/deployment.md`를 함께
-갱신한다. 이 문서가 canonical 문서를 대체하지 않는다.
+갱신한다. 이 문서가 기준 문서를 대체하지 않는다.
 
 ## 1. 해결할 문제
 
@@ -78,7 +78,7 @@ demo · Plan 생성 중
 ### 4.2 우측 상세 패널
 
 상세 패널은 새로운 중첩 modal이 아니라 app shell 위에 올라오는 right drawer로 구현한다. 기존 배포 콘솔과
-같은 상태·용어를 사용한다.
+같은 상태 / 용어를 사용한다.
 
 상단 영역:
 
@@ -146,7 +146,7 @@ demo · Plan 생성 중
 | Phase key | 사용자 문구 | `infrastructure` | `application` | `full_stack` |
 | --- | --- | ---: | ---: | ---: |
 | `approval_recheck` | 승인 내용 재확인 | 사용 | 사용 | 사용 |
-| `terraform_apply` | 인프라 생성·변경 | 사용 | 건너뜀 | 사용 |
+| `terraform_apply` | 인프라 생성 / 변경 | 사용 | 건너뜀 | 사용 |
 | `terraform_evidence` | Terraform 결과 저장 | 사용 | 건너뜀 | 사용 |
 | `api_release` | API Image 배포 | 건너뜀 | 조건부 사용 | 조건부 사용 |
 | `frontend_release` | 웹 파일 배포 | 건너뜀 | 조건부 사용 | 조건부 사용 |
@@ -221,9 +221,9 @@ AWS 외 Provider Adapter도 자신의 기본 범위를 제공할 수 있어야 �
 | 빌드 환경 확인 | 10~60초 |
 | 코드 사전 검증 | 2~5분 |
 | Terraform 초기화 | 1~3분 |
-| Terraform Plan 생성·저장 | 30초~2분 |
+| Terraform Plan 생성 / 저장 | 30초~2분 |
 | Terraform Apply | 3~10분 |
-| API·웹 릴리즈와 Health Check | 3~10분 |
+| API / 웹 릴리즈와 Health Check | 3~10분 |
 | 결과 저장 | 10초~1분 |
 
 기본값은 보장 시간이 아니라 사용자 안내용 범위다. UI tooltip에 `최근 성공 기록 또는 기본 범위로 계산한
@@ -288,7 +288,7 @@ DB 필드:
 | `live_profile` | ETA 비교용 profile snapshot |
 | `current_phase_key` | 현재 phase |
 | `phases` | phase 목록과 timestamp JSONB |
-| `started_at`, `completed_at`, `updated_at` | 경과·ETA·정렬 근거 |
+| `started_at`, `completed_at`, `updated_at` | 경과 / ETA / 정렬 근거 |
 
 같은 Deployment에서 Plan과 Apply progress run은 별도 row로 보존한다. 재시도 역시 새 progress run을 만들고
 이전 실패 기록을 덮어쓰지 않는다. 한 Deployment에는 `queued` 또는 `running` progress run이 동시에 하나만
@@ -325,7 +325,7 @@ GET /api/deployment-activities/active
 
 terminal 결과 확인 여부는 서버 notification read 상태를 재사용한다. 성공한 Plan의 승인 대기 상태는
 `Deployment.currentPlanArtifactId`가 있고 `approvedAt`이 없는지를 기준으로 계산한다. 진행 UI만을 위한 별도
-브라우저 localStorage 상태를 source of truth로 사용하지 않는다.
+브라우저 localStorage 상태를 기준으로 사용하지 않는다.
 
 ### 8.2 단일 진행 snapshot
 
@@ -403,10 +403,10 @@ Terraform 실행, AWS SDK 호출, CodeBuild 실행은 이 service로 옮기지 �
 
 다음 기존 service가 실제 side effect 전후에 phase transition을 기록한다.
 
-- build environment prepare 진입·완료
-- direct application preflight CodeBuild 시작·terminal 확인
-- Terraform init 시작·완료
-- Terraform Plan 시작·결과 저장
+- build environment prepare 진입 / 완료
+- direct application preflight CodeBuild 시작 / terminal 확인
+- Terraform init 시작 / 완료
+- Terraform Plan 시작 / 결과 저장
 - approval snapshot 재검증
 - Terraform Apply와 evidence 저장
 - trusted application release step 전이
@@ -496,9 +496,9 @@ API 조회 실패만으로 실제 Deployment를 실패 처리하거나 cancel하
 10. 하단 dock 구현
 11. 우측 drawer, 단계 목록, 최신 로그 연결 구현
 12. Direct Deployment 실행 요청과 provider optimistic state 연결
-13. 완료·실패 notification/toast와 결과 이동 action 연결
+13. 완료 / 실패 notification/toast와 결과 이동 action 연결
 14. responsive, keyboard, reduced motion 검증
-15. 실제 ECS Fargate Plan과 Apply에서 단계·ETA·복원 QA
+15. 실제 ECS Fargate Plan과 Apply에서 단계 / ETA / 복원 QA
 
 ## 13. 테스트 계획
 
@@ -513,7 +513,7 @@ API 조회 실패만으로 실제 Deployment를 실패 처리하거나 cancel하
 - 표본 3건 이상에서 p50/p90 사용
 - timeout/failed/cancelled 표본 제외
 - 예상 상한 초과 시 `overExpectedRange: true`
-- active endpoint의 사용자·프로젝트 소유권 필터
+- active endpoint의 사용자 / 프로젝트 소유권 필터
 - log summary masking
 
 ### 13.2 Frontend 단위 테스트
@@ -545,7 +545,7 @@ API 조회 실패만으로 실제 Deployment를 실패 처리하거나 cancel하
 2. 하단 dock에 `코드 사전 검증`, `Terraform 초기화`, `Terraform Plan 생성` 전이 확인
 3. 모달을 닫고 Board/Settings를 이동해도 dock 유지 확인
 4. 새로고침 후 동일 deployment 복원 확인
-5. Plan 완료 후 생성·변경·삭제 요약으로 이동 확인
+5. Plan 완료 후 생성 / 변경 / 삭제 요약으로 이동 확인
 6. 승인 후 Apply 실행
 7. Terraform Apply, ECS release, S3/CloudFront release, Health Check 전이 확인
 8. 성공 후 CloudFront HTTPS Output URL과 실제 총 소요 시간 확인
@@ -558,7 +558,7 @@ API 조회 실패만으로 실제 Deployment를 실패 처리하거나 cancel하
 - 첫 실행은 기본 범위, 비교 가능한 성공 기록 3건부터 historical 범위를 사용한다.
 - 예상 상한을 넘겨도 가짜 완료율을 만들지 않는다.
 - 승인 대기 시간은 ETA에서 제외된다.
-- Plan, Apply, Destroy의 기존 승인·로그·cancel·recovery 안전 계약이 유지된다.
+- Plan, Apply, Destroy의 기존 승인 / 로그 / cancel / recovery 안전 계약이 유지된다.
 - frontend가 AWS SDK나 Terraform을 직접 호출하지 않는다.
 - 비밀값과 민감 output이 progress DTO, 로그 요약, 화면에 노출되지 않는다.
 - 모바일과 `prefers-reduced-motion` 환경에서도 상태를 읽고 조작할 수 있다.

@@ -2,7 +2,7 @@
 
 ## 작업 전 공통 규칙
 
-모든 phase 작업자는 `docs/sw/spec.md`, `docs/sw/plan.md`, `docs/sw/agents.md`를 먼저 읽고 시작한다. 범위와 계약이 충돌하면 canonical 문서인 `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `docs/deployment.md`를 우선한다.
+모든 phase 작업자는 `docs/sw/spec.md`, `docs/sw/plan.md`, `docs/sw/agents.md`를 먼저 읽고 시작한다. 범위와 계약이 충돌하면 기준 문서인 `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `docs/deployment.md`를 우선한다.
 
 우선순위 기준:
 

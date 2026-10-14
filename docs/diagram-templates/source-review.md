@@ -47,7 +47,7 @@ Archive된 저장소는 서비스 연결 방식의 보조 증거로만 사용했
 - provider와 module 버전을 허용 범위 안에서 고정하고, 업그레이드는 비운영 환경에서 검증한다.
 - state는 암호화, 접근 제어, 버전 관리가 적용된 원격 backend에 환경별로 분리한다.
 - 장기 AWS access key 대신 GitHub Actions OIDC 또는 AWS 서비스 역할의 임시 자격 증명을 사용한다.
-- `terraform fmt -check`, `terraform validate`, `tflint`, 보안 스캔, `terraform plan`을 apply 전에 수행한다.
+- `terraform fmt -check`, `terraform validate`, `tflint`, 보안 스캔, `terraform plan`을 apply 전에 실행한다.
 - 운영의 stateful resource에는 삭제 보호, 백업, 복구 검증을 적용한다.
 - AWS Samples는 교육용 예시이므로 실제 배포 전에 가용성, 보안, 비용, quota를 별도로 검증한다.
 

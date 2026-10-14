@@ -1,5 +1,7 @@
-# edge 관리 group
+# 도메인과 인증서 관리 그룹
 
-Route53 hosted zone/record와 ACM certificate를 위한 고위험 edge state입니다. Phase 9에서는 resource/import block을 의도적으로 두지 않습니다. 기존 runtime state의 `aws_route53_record.ecs_alias`는 동일 remote object를 중복 import하지 않고, 승인된 후속 작업에서 state move 또는 ownership handoff 계획을 먼저 검토합니다.
+Route 53 hosted zone과 record, ACM 인증서의 state를 관리하는 경로입니다. 현재 resource와 import block은 비어 있습니다.
 
-공통 backend와 승인 절차는 [상위 README](../README.md)를 따릅니다.
+기존 runtime state의 `aws_route53_record.ecs_alias`를 중복으로 가져오지 않습니다. 관리 위치를 바꾸려면 state 이동이나 관리 권한 이전 계획부터 검토합니다.
+
+전체 구성은 [운영 아키텍처](../../../../docs/architecture.md#운영-아키텍처), backend와 승인 절차는 [운영 인프라 문서](../README.md)에 있습니다.

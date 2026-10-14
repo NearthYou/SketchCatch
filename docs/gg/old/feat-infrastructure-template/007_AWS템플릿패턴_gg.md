@@ -16,14 +16,14 @@ Template은 Resource만 던지는 것이 아니라, 사용자가 바로 IaC Prev
 - domain, certificate, 기존 VPC처럼 사용자 소유 정보가 필요한 값은 optional로 두고, 없으면 기본 배포 경로가 동작해야 한다.
 - 기본값만으로도 Terraform plan/apply가 가능한 상태를 목표로 한다.
 
-## 구현·표현에 대한 확정 규칙
+## 구현 / 표현에 대한 확정 규칙
 
 ### 보드에 표시하는 노드의 정확한 이름
 
 이 문서에서 말하는 두 종류의 노드를 구분한다.
 
-1. **카탈로그 Resource 노드**: Architecture Board에 표시되는 정식 AWS/Kubernetes Resource다. 기존 Resource catalog의 `ResourceDefinition`, icon, label, style, parameter 계약을 통해 생성한다. 예를 들어 `VPC`, `ECS Cluster`, `Internet Gateway`처럼 사용자가 이해할 수 있는 실제 리소스 이름을 표시한다.
-2. **Raw Terraform Detail 노드**: Terraform `resource`/`data` block 주소와 내부 설정을 표현하는 구현용 단위다. `aws_s3_bucket.static_web_hosting_workspace`나 일반 `AWS` tile처럼 Terraform logical name을 그대로 표시하는 노드가 여기에 해당한다. 이 노드는 IaC Preview 내부에서만 허용하고 Architecture Board에는 표시하지 않는다.
+1. 카탈로그 Resource 노드: Architecture Board에 표시되는 정식 AWS/Kubernetes Resource다. 기존 Resource catalog의 `ResourceDefinition`, icon, label, style, parameter 계약을 통해 생성한다. 예를 들어 `VPC`, `ECS Cluster`, `Internet Gateway`처럼 사용자가 이해할 수 있는 실제 리소스 이름을 표시한다.
+2. Raw Terraform Detail 노드: Terraform `resource`/`data` block 주소와 내부 설정을 표현하는 구현용 단위다. `aws_s3_bucket.static_web_hosting_workspace`나 일반 `AWS` tile처럼 Terraform logical name을 그대로 표시하는 노드가 여기에 해당한다. 이 노드는 IaC Preview 내부에서만 허용하고 Architecture Board에는 표시하지 않는다.
 
 따라서 첫 번째 그림처럼 Terraform logical name을 보드의 노드 이름으로 노출하거나, 카탈로그에 없는 리소스를 임시 `AWS` 노드로 만들어 연결하는 방식은 사용하지 않는다. 두 번째 그림처럼 기존에 등록된 Resource catalog의 실제 리소스 노드를 끌어다 연결하는 방식만 허용한다.
 
@@ -835,7 +835,7 @@ AWS Resource와 Kubernetes Resource가 동시에 필요하고, Board에서 둘�
 | ECS Fargate Container App | partial | 실사용 가치가 높지만 ECS Task Definition nested config, ALB, Target Group, Service, IAM, Network 연결 지원 확인이 필요하다. |
 | EKS Container App | unsupported | EKS app Template은 AWS Resource와 Kubernetes Resource model을 함께 요구하므로 MVP에서는 별도 단계로 두는 것이 안전하다. |
 
-## 다음 구현 단계에서 확인할 것
+## 다음 구현 단계에서 확인사항
 
 - 현재 workspace resource definition 목록
 - ArchitectureJson 구조

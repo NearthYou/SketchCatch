@@ -50,7 +50,7 @@
 이 변경이 하는 일은 다음과 같다.
 
 - AWS 연결 목록을 직접 `useEffect`로 매번 조회하지 않고 React Query로 캐시한다.
-- 연결 생성, 검증, 재검증, 삭제 후 AWS 연결·Dashboard·Cost query를 함께 invalidate한다.
+- 연결 생성, 검증, 재검증, 삭제 후 AWS 연결 / Dashboard / Cost query를 함께 invalidate한다.
 - 화면 재방문 시 기존 데이터를 유지하면서 백그라운드로 갱신한다.
 
 현재 JH 설정 화면은 단순 연결 목록보다 더 많은 `AWS connection settings` 정보를 사용하므로 `dev` 파일을 그대로 선택할 수는 없다.
@@ -158,7 +158,7 @@ application-only Apply/Destroy 경로에도 동일한 방식이 필요하다. `w
 
 - React Query 기반 재방문 캐시
 - `keepPreviousData`를 사용한 백그라운드 갱신
-- 생성·검증·삭제 후 `invalidateAwsConnectionQueries()` 호출
+- 생성 / 검증 / 삭제 후 `invalidateAwsConnectionQueries()` 호출
 - AWS 연결 변경 후 Dashboard와 Cost query도 함께 갱신
 
 #### 권장 결합 결과
@@ -259,4 +259,4 @@ pnpm harness:check
 - Dashboard 변경은 조회 캐시와 mutation 후 데이터 일관성을 제공한다.
 - JH 변경은 CodeBuild/CodeConnections, 배포 실행 계약, 안전한 AWS cleanup, 개발자 오류 진단을 제공한다.
 
-따라서 권장 전략은 한쪽 파일을 선택하는 것이 아니라, JH 기능 위에 최신 `dev`의 보안·cleanup·캐시 계약을 이식하는 것이다.
+따라서 권장 전략은 한쪽 파일을 선택하는 것이 아니라, JH 기능 위에 최신 `dev`의 보안 / cleanup / 캐시 계약을 이식하는 것이다.

@@ -6,12 +6,12 @@
 
 ## 비교 기준
 
-첨부 파일의 번호와 이미지 제목 순서가 섞여 있었다. 아래처럼 **이미지 제목**을 기준으로 대응시킨다.
+첨부 파일의 번호와 이미지 제목 순서가 섞여 있었다. 아래처럼 이미지 제목을 기준으로 대응시킨다.
 
 | Template | 실제 PNG 파일 | 배치 기준 |
 | --- | --- | --- |
 | Static Web Hosting | `image-3.png` | CloudFront → S3 수평 요청 경로, 하단 보조 설정 |
-| Minimal Serverless API | `image-4.png` | API Gateway compact group → Lambda → DynamoDB, 상·하단 support |
+| Minimal Serverless API | `image-4.png` | API Gateway compact group → Lambda → DynamoDB, 상 / 하단 support |
 | Full Serverless Web App | `image-6.png` | Frontend / Identity / API / Compute / Data-Ops 기능 열 |
 | 3-Tier Web App | `image-2.png` | 2개 A/B 열, Public / App / DB 3개 행, 좌측 route rail |
 | ECS Fargate Container App | `image-1.png` | VPC 안 network + cluster workload, 오른쪽 Definition / Ops rail |
@@ -24,14 +24,14 @@
 - Resource ID, Resource 종류, Resource 수, label, parameter 값, Terraform reference, relationship ID/방향/label은 바꾸지 않는다.
 - 새 디자인 노드, 가짜 AWS 노드, raw Terraform logical name 노드를 만들지 않는다.
 - 모든 가시 노드는 기존 왼쪽 Resource catalog의 실제 resource type을 materialize한 아이콘/표현을 사용한다.
-- Template의 역할별 표시 label은 기존 Template 정의를 유지하되, node type·kind·icon은 반드시 해당 Catalog resource에서 생성한다. 즉, `Public Subnet A` 같은 역할 label은 Terraform logical name이나 임시 노드가 아니다.
+- Template의 역할별 표시 label은 기존 Template 정의를 유지하되, node type / kind / icon은 반드시 해당 Catalog resource에서 생성한다. 즉, `Public Subnet A` 같은 역할 label은 Terraform logical name이나 임시 노드가 아니다.
 - `contains`, `hosts` 관계는 기존처럼 group containment로 보이며, 별도 실행 의미 edge를 추가하지 않는다.
 - support rail에는 이미 존재하는 IAM, Policy, Permission, Logs, repository/definition 노드만 배치한다.
 - PNG에만 있고 현재 Template에 없는 Client, Route 53, ACM, AZ node, Private Subnet, Ingress, Pod, Container, ECR, CloudWatch node는 추가하지 않는다.
 
 ### AZ 제약
 
-3-Tier / ECS / EKS의 현재 정의에는 `aws_availability_zone` node가 0개다. 왼쪽 panel에는 AZ resource가 이미 있지만, 이를 추가하면 node 수 불변조건을 깨뜨린다. 따라서 이번 변경에서는 기존 `A` / `B` subnet을 **두 개의 AZ 세로 열을 나타내는 실제 resource container**로 정렬하고, AZ frame 자체는 새 node로 만들지 않는다.
+3-Tier / ECS / EKS의 현재 정의에는 `aws_availability_zone` node가 0개다. 왼쪽 panel에는 AZ resource가 이미 있지만, 이를 추가하면 node 수 불변조건을 깨뜨린다. 따라서 이번 변경에서는 기존 `A` / `B` subnet을 두 개의 AZ 세로 열을 나타내는 실제 resource container로 정렬하고, AZ frame 자체는 새 node로 만들지 않는다.
 
 ## 현재 실제 구성 기준
 
@@ -107,7 +107,7 @@ API Gateway는 실제 `aws_api_gateway_rest_api` node를 compact container로 �
 | `role` | IAM Role | 1,520, 840 | root | Compute support |
 | `role-policy` | IAM Role Policy | 1,760, 840 | root | Compute support |
 
-`viewport = { x: 0, y: 0, zoom: 0.48 }`. main runtime edge는 Frontend → API → Lambda → DynamoDB, Identity와 IAM edge는 상·하단 support 방향을 쓴다.
+`viewport = { x: 0, y: 0, zoom: 0.48 }`. main runtime edge는 Frontend → API → Lambda → DynamoDB, Identity와 IAM edge는 상 / 하단 support 방향을 쓴다.
 
 ### 04. 3-Tier Web App
 

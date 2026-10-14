@@ -2,11 +2,11 @@
 
 - 작성일: 2026-07-22
 - 상태: 구현
-- 대상: Workspace Delivery의 Git/CI/CD Phase 3·4
+- 대상: Workspace Delivery의 Git/CI/CD Phase 3 / 4
 
 ## 1. 해결할 문제
 
-이 기능은 사용자가 한 번 승인하면 현재 프로젝트에 필요한 GitHub 설정과 AWS 신뢰 정책을 확인·적용하고, 배포 설치 PR을 생성하거나 복구한다.
+이 기능은 사용자가 한 번 승인하면 현재 프로젝트에 필요한 GitHub 설정과 AWS 신뢰 정책을 확인 / 적용하고, 배포 설치 PR을 생성하거나 복구한다.
 
 기존 흐름은 PR을 만든 뒤 Repository 설정과 AWS 신뢰 정책을 따로 적용했다. 이 때문에 GitHub에 이전 프로젝트의 `SKETCHCATCH_PROJECT_ID`가 남아 있어도 Phase 3이 완료될 수 있었고, PR이나 Pipeline이 실패하면 Direct Deployment를 Destroy하고 처음부터 다시 해야 했다.
 
@@ -51,7 +51,7 @@ Repository와 AWS 단계는 provider 결과만 믿지 않는다. read-back 검�
 
 SketchCatch가 관리하는 Actions variable은 서버 preview의 값과 정확히 일치하도록 수렴시킨다.
 
-- 값이 있으면 현재 값을 먼저 읽고 다른 경우에만 생성·갱신한다.
+- 값이 있으면 현재 값을 먼저 읽고 다른 경우에만 생성 / 갱신한다.
 - 값이 비어 있으면 해당 managed variable을 삭제하고 실제로 없어진 것을 확인한다.
 - 관리 대상이 아닌 Repository variable은 변경하지 않는다.
 - `SKETCHCATCH_PROJECT_ID`와 `SKETCHCATCH_RELEASE_API_URL`이 현재 handoff와 일치해야 한다.
@@ -80,13 +80,13 @@ PR provider는 SketchCatch가 소유한 변경만 갱신한다.
 - 이미 병합되었고 target branch 파일이 기대값과 같으면 성공으로 재사용한다.
 - retry suffix는 중첩하지 않고 다음 안전한 번호를 선택한다.
 
-`pipeline_failed` 또는 `cancelled` 재개에서는 실패 run identity로 안정적인 retry token을 만든다. 이 경우에만 `sketchcatch/<project>/ci-cd/retry.json`을 추가·갱신한다. ECS App workflow는 이 exact path를 다시 포함하므로 retry PR이 병합되면 앱 Pipeline이 다시 시작한다. 최초 설치 PR에는 retry file을 만들지 않는다.
+`pipeline_failed` 또는 `cancelled` 재개에서는 실패 run identity로 안정적인 retry token을 만든다. 이 경우에만 `sketchcatch/<project>/ci-cd/retry.json`을 추가 / 갱신한다. ECS App workflow는 이 exact path를 다시 포함하므로 retry PR이 병합되면 앱 Pipeline이 다시 시작한다. 최초 설치 PR에는 retry file을 만들지 않는다.
 
 ## 7. Workflow 안전장치
 
 생성 workflow는 AWS credential이나 SketchCatch 실행 API를 사용하기 전에 Repository variable의 `SKETCHCATCH_PROJECT_ID`와 생성 당시 project ID를 비교한다. 값이 없거나 다르면 외부 작업 없이 실패한다.
 
-SketchCatch API 호출은 `curl --fail-with-body`를 사용해 HTTP 오류 상태와 응답 본문을 함께 남긴다. 이 검사는 잘못된 프로젝트 ID로 다른 프로젝트의 release·infra·destroy API를 호출하는 것을 막는다.
+SketchCatch API 호출은 `curl --fail-with-body`를 사용해 HTTP 오류 상태와 응답 본문을 함께 남긴다. 이 검사는 잘못된 프로젝트 ID로 다른 프로젝트의 release / infra / destroy API를 호출하는 것을 막는다.
 
 ## 8. 완료 판정
 
@@ -102,7 +102,7 @@ Pipeline 실패는 Phase 3 설정 미완료로 되돌리지 않는다. Phase 4�
 
 ## 9. 승인 경계
 
-한 번의 통합 설정 승인은 GitHub Repository 설정, GitHub Environment branch policy, AWS Role trust와 PR 파일 생성·갱신까지 포함한다.
+한 번의 통합 설정 승인은 GitHub Repository 설정, GitHub Environment branch policy, AWS Role trust와 PR 파일 생성 / 갱신까지 포함한다.
 
 다음 동작은 포함하지 않는다.
 
@@ -119,7 +119,7 @@ Pipeline 실패는 Phase 3 설정 미완료로 되돌리지 않는다. Phase 4�
 구현 단계에서는 provider 경계를 mock으로 검증한다.
 
 - 단계 실행 순서와 `draft` 선저장
-- Repository variable 생성·수정·삭제와 exact read-back
+- Repository variable 생성 / 수정 / 삭제와 exact read-back
 - Environment exact branch policy와 no-op 재실행
 - AWS scoped statement 보존, legacy migration, no-op과 증거 저장 실패
 - 열린 PR 사용자 변경 보존, 닫힌/병합 PR과 retry branch

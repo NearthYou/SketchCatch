@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Keep the existing Live Observation traffic animation unchanged and add a small, evidence-based lower dashboard that helps a user decide whether to investigate further.
+Goal: Keep the existing Live Observation traffic animation unchanged and add a small, evidence-based lower dashboard that helps a user decide whether to investigate further.
 
-**Architecture:** `LiveObservationModal` remains the owner of session, query, SSE, abort, retry, and focus behavior. A new pure presentation model converts the latest provider-neutral snapshot into status, at most three deterministic signals, evidence groups, and only safe existing actions. Separate React components render that model below `LiveObservationFocusedFlow` with an isolated CSS Module.
+Architecture: `LiveObservationModal` remains the owner of session, query, SSE, abort, retry, and focus behavior. A new pure presentation model converts the latest provider-neutral snapshot into status, at most three deterministic signals, evidence groups, and only safe existing actions. Separate React components render that model below `LiveObservationFocusedFlow` with an isolated CSS Module.
 
-**Tech Stack:** React 19, TypeScript, `node:test`, `renderToStaticMarkup`, lucide-react, CSS Modules.
+Tech Stack: React 19, TypeScript, `node:test`, `renderToStaticMarkup`, lucide-react, CSS Modules.
 
 ## Global Constraints
 
@@ -20,12 +20,12 @@
 
 ### Task 1: Define the provider-neutral dashboard model
 
-**Files:**
+Files:
 
 - Create: `apps/web/features/workspace/live-observation-signal-dashboard.ts`
 - Test: `apps/web/features/workspace/live-observation-signal-dashboard.test.ts`
 
-**Interfaces:**
+Interfaces:
 
 - Consumes: `LiveObservationV2Snapshot | null` and optional current time.
 - Produces: `createLiveObservationSignalDashboardModel(input)` with status summary, up to three signals, grouped masked logs, fact/possibility/unknown evidence, and safe action descriptors.
@@ -37,14 +37,14 @@
 
 ### Task 2: Add bounded session-history and log grouping helpers
 
-**Files:**
+Files:
 
 - Create: `apps/web/features/workspace/live-observation-session-history.ts`
 - Create: `apps/web/features/workspace/live-observation-log-groups.ts`
 - Test: `apps/web/features/workspace/live-observation-session-history.test.ts`
 - Test: `apps/web/features/workspace/live-observation-log-groups.test.ts`
 
-**Interfaces:**
+Interfaces:
 
 - Produces: a per-session capped history with at most 120 samples inside 15 minutes; an opaque fingerprint for each normalized, already-masked log group. The current Web contract does not expose source or level.
 
@@ -55,14 +55,14 @@
 
 ### Task 3: Render the new lower dashboard
 
-**Files:**
+Files:
 
 - Create: `apps/web/features/workspace/LiveObservationSignalDashboard.tsx`
 - Create: `apps/web/features/workspace/live-observation-signal-dashboard.module.css`
 - Test: `apps/web/features/workspace/LiveObservationSignalDashboard.test.tsx`
 - Modify: `apps/web/features/workspace/LiveObservationModal.tsx`
 
-**Interfaces:**
+Interfaces:
 
 - `LiveObservationSignalDashboard` receives the selected snapshot and optional Deployment metadata. It does not draw Resource chips until the provider snapshot contains actual Resource IDs.
 - `LiveObservationModal` renders it immediately after `LiveObservationFocusedFlow` without changing traffic-flow props or session behavior.
@@ -74,7 +74,7 @@
 
 ### Task 4: Document the decision and verify it end to end
 
-**Files:**
+Files:
 
 - Create: `docs/adr/0017-live-observation-ai-signal-dashboard.md`
 - Modify: `docs/adr/README.md`

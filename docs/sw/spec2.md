@@ -13,7 +13,7 @@ SketchCatch의 부분 구현된 배포 기능을 데모 중심 흐름에서 실�
 - 배포 단위는 환경이 아니라 프로젝트다. 한 프로젝트는 한 시점에 하나의 활성 배포 타깃을 가진다.
 - `staging`, `production` 같은 다중 환경 모델은 이번 범위에서 만들지 않는다.
 - 초기 전체 배포와 이후 앱만 재배포를 모두 지원한다.
-- 모든 변경과 실행은 사용자 저장, 검증 결과 확인, 명시적 승인 뒤에 수행한다.
+- 모든 변경과 실행은 사용자 저장, 검증 결과 확인, 명시적 승인 뒤에 실행한다.
 - 실제 cloud mutation은 Deployment 또는 승인된 Git/CI/CD 경로에서만 실행한다.
 - UI는 운영 판단에 필요한 정보만 먼저 보여주고 원문 로그와 상세 근거는 접힌 영역으로 제공한다.
 
@@ -133,7 +133,7 @@ Direct Deployment와 Git/CI/CD가 공유하는 릴리즈 원장이다.
 - `notifications`: 사용자별 영속 알림과 읽음 상태
 - `notification_outbox`: terminal event의 idempotent 전달 큐
 - `web_push_subscriptions`: 사용자별 암호화된 Push subscription
-- Live Observation manifest/capability의 source of truth는 서버 저장소와 Runtime Cache 계약으로 유지
+- Live Observation manifest/capability의 기준은 서버 저장소와 Runtime Cache 계약으로 유지
 
 `liveProfile`은 `demo_web_service | demo_web_service_with_rds` non-null 계약을 사용한다.
 `0054_remove_practice_live_profile.sql`은 기존 `practice` 행을 `demo_web_service`로
@@ -218,7 +218,7 @@ AWS connection bootstrap에 격리된 CodeBuild, 암호화 S3 artifact store, li
 ### Static
 
 - versioned S3 release prefix에 artifact를 업로드한다.
-- 활성 release pointer를 교체하고 CloudFront invalidation을 수행한다.
+- 활성 release pointer를 교체하고 CloudFront invalidation을 실행한다.
 - 실제 객체 digest와 Output URL 응답을 확인한다.
 
 ## Architecture Board 저장 계약
@@ -307,7 +307,7 @@ artifact가 준비된 immediate replacement 기준 목표 시간은 다음과 �
 - 배포 UI가 다섯 단계가 아니라 세 단계로 동작한다.
 - 저장하지 않은 Board로 배포할 수 없다.
 - 프로젝트 단일 타깃과 세 scope가 Direct/GitOps에서 같은 의미를 가진다.
-- 네 AWS 주요 runtime이 실제 artifact 기반 GitOps 릴리즈를 수행한다.
+- 네 AWS 주요 runtime이 실제 artifact 기반 GitOps 릴리즈를 실행한다.
 - CI/CD와 Direct 로그가 운영 진단에 충분한 stage와 원문을 제공한다.
 - 완료 화면과 History에서 version, SHA, digest, Output URL을 확인할 수 있다.
 - QR 요청, CloudWatch 관측, 영속 알림이 demo flag 없이 승인된 sandbox에서 동작한다.

@@ -1,8 +1,8 @@
 # SW 문서 인덱스
 
-이 폴더는 SketchCatch의 Terraform 변환, IaC Preview, Deployment, Git/CI/CD, Runtime Cache 관련 실행 참고 문서를 둔다.
+Terraform 변환과 배포 실행, Git/CI/CD, 상태 캐시의 구현 참고 문서입니다.
 
-범위와 계약이 충돌하면 `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `docs/deployment.md`를 우선한다. `docs/sw`는 source of truth가 아니라 현재 남은 작업과 구현 참고 자료를 빠르게 찾기 위한 보조 인덱스다.
+기능 범위와 데이터 형식은 [제품 문서](../product.md)와 [데이터 모델](../data-models.md)을 따릅니다. 운영 구성은 [아키텍처](../architecture.md#운영-아키텍처), 실제 배포 절차는 [배포 문서](../deployment.md)에서 확인합니다.
 
 ## 현재 실행 기준
 
@@ -22,7 +22,7 @@
 
 ## 구현 참고 가이드
 
-아래 문서는 구현 배경을 이해하기 위한 참고 자료다. 새 작업의 최종 계약은 canonical 문서, shared type, API schema에서 다시 확인한다.
+아래 문서는 구현 배경을 이해하기 위한 참고 자료다. 새 작업의 최종 계약은 기준 문서, shared type, API schema에서 다시 확인한다.
 
 | 문서 | 책임 |
 | --- | --- |

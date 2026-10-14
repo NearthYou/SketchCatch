@@ -2,7 +2,7 @@
 
 ## 1. 한 줄 목표
 
-기존 AI 버튼과 채팅 화면을 전부 지우고, Architecture Board 작업을 방해하지 않는 **새 AI 작업 패널**을 만든다.
+기존 AI 버튼과 채팅 화면을 전부 지우고, Architecture Board 작업을 방해하지 않는 새 AI 작업 패널을 만든다.
 
 AI는 설명과 변경안을 만들 수 있지만, 사용자가 직접 적용하기 전에는 Board, Terraform, Deployment를 바꾸지 못한다.
 
@@ -50,7 +50,7 @@ AI는 설명과 변경안을 만들 수 있지만, 사용자가 직접 적용하
 AI가 열릴 때는 다음 순서로 충돌을 막는다.
 
 1. 저장하지 않은 Terraform 변경이 있으면 기존 확인 규칙을 먼저 지킨다.
-2. Terraform·검사·배포 작업 패널을 닫는다.
+2. Terraform / 검사 / 배포 작업 패널을 닫는다.
 3. 오른쪽 Inspector를 닫는다.
 4. AI panel만 연다.
 
@@ -82,7 +82,7 @@ AI Chat 내부에는 다음 세 개의 독립 대화가 있다.
 - Cloudscape chat은 사용자가 아래를 보고 있을 때만 새 메시지를 따라간다.
 - Cloudscape prompt input은 최대 6줄까지만 자란다.
 - React Flow의 Controls와 MiniMap은 Board 안쪽 overlay이므로 AI 런처와 같은 모서리에 겹치면 안 된다.
-- shadcn sheet는 모바일에서 화면 전체를 덮는 별도 surface와 닫기·focus 흐름을 사용한다.
+- shadcn sheet는 모바일에서 화면 전체를 덮는 별도 surface와 닫기 / focus 흐름을 사용한다.
 
 공개 저장소는 각 저장소의 라이선스를 그대로 따른다. 코드를 복사하지 않고 구조와 상호작용 원칙만 참고한다.
 
@@ -112,7 +112,7 @@ Brainboard, Figma, Miro, CloudMaker의 문구, HTML, 이미지, 로고는 복사
 - focus: 2px outline과 3px offset
 - unread: 오른쪽 위 8px 상태점 하나
 - disabled: native disabled 대신 `aria-disabled`를 사용해 keyboard focus와 이유 tooltip을 유지
-- motion: 눌렀을 때 1px 이동만 허용, glow·gradient·bounce 금지
+- motion: 눌렀을 때 1px 이동만 허용, glow / gradient / bounce 금지
 
 ## 7. 새 열린 panel
 
@@ -140,9 +140,9 @@ Brainboard, Figma, Miro, CloudMaker의 문구, HTML, 이미지, 로고는 복사
 
 ## 8. Board와 다른 도구의 관계
 
-- AI와 Terraform·검사·배포 panel은 동시에 열리지 않는다.
+- AI와 Terraform / 검사 / 배포 panel은 동시에 열리지 않는다.
 - AI를 열면 Inspector를 닫는다.
-- Terraform·검사·배포 panel이 열린 넓은 화면에서는 런처를 그 panel 왼쪽으로 옮긴다.
+- Terraform / 검사 / 배포 panel이 열린 넓은 화면에서는 런처를 그 panel 왼쪽으로 옮긴다.
 - 900px 이하에서는 작업 panel이 화면 대부분을 차지하므로, 작업 panel을 닫을 때까지 AI 런처를 숨긴다.
 - 닫힌 런처는 가운데 하단 React Flow toolbar를 가리지 않는다.
 - 현재 Board에는 MiniMap이 없지만, 나중에 MiniMap이 오른쪽 아래에 추가되면 런처 위치를 MiniMap 왼쪽으로 옮긴다.

@@ -59,6 +59,6 @@ sw Terraform: EC2 id를 ec2-1이라고 기대함
 | ys | A / B / A / C | AI 결과를 목록에 강제하지 않고, 중요한 이벤트만 활동에 남기기 |
 | 팀장 | C / A / B / C / A | shared type은 `packages/types`, Pre-Deployment Analysis는 저장 가능성 고려 |
 
-## 한 줄 요약
+## 요약
 
 이 폴더는 "각 팀원 Codex에게 물어볼 질문지"다.

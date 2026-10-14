@@ -13,7 +13,7 @@ Brainboard의 `Amazon Web Services` 필터 결과 중 작성자가 `Chafik Belha
 - 각 신규 Template은 원본의 node DOM 순서, 좌표, 크기, containment, z-order, viewport, edge path와 연결 방향을 source fixture에 보존한다.
 - 원본에 없는 자동 배치 결과를 최종 layout으로 사용하지 않는다.
 - Brainboard에서 `Plan`과 `Deploy`를 실행하지 않는다.
-- 하나의 원본을 읽거나 변환하는 데 실패해도 다음 Template을 계속 처리하고, 마지막에 완료·실패 목록과 이유를 남긴다.
+- 하나의 원본을 읽거나 변환하는 데 실패해도 다음 Template을 계속 처리하고, 마지막에 완료 / 실패 목록과 이유를 남긴다.
 
 현재 코드에서 내장 Template은 여섯 개다. 이번 완료 기준은 기존 여섯 개와 신규 24개를 합친 Template gallery 30개이며, 별도 `빈 보드로 시작` action은 범위와 합계에서 제외한다.
 
@@ -106,7 +106,7 @@ type BrainboardTemplateSource = {
 };
 ```
 
-`BrainboardSourceNode`는 원본 DOM 순서, source node ID, resource type, Terraform address, label, absolute position, width, height, parent source ID, presentation 여부를 가진다. `BrainboardSourceEdge`는 원본 DOM 순서, source/target source ID, 시작·끝 port, SVG path, waypoint, arrow 방향을 가진다.
+`BrainboardSourceNode`는 원본 DOM 순서, source node ID, resource type, Terraform address, label, absolute position, width, height, parent source ID, presentation 여부를 가진다. `BrainboardSourceEdge`는 원본 DOM 순서, source/target source ID, 시작 / 끝 port, SVG path, waypoint, arrow 방향을 가진다.
 
 Brainboard clone board의 `terraform.tfvars`에 들어가는 clone architecture UUID는 Template 의미가 아니므로 신규 board마다 고정값으로 복사하지 않는다. 반대로 원본 Template의 default variable, resource tag, Terraform logical name에 포함된 값은 source 의미이므로 fixture와 생성 결과에서 보존한다.
 
@@ -152,7 +152,7 @@ Brainboard clone board의 `terraform.tfvars`에 들어가는 clone architecture 
 - `verified`: Terraform semantic contract와 visual contract 통과
 - `failed`: 실패 단계와 이유, 마지막 확보 증거 기록
 
-한 Template의 unsupported resource나 malformed source가 다른 Template 등록을 막지 않도록 fixture와 test를 개별 파일·개별 case로 분리한다. Gallery에는 `verified` Template만 기본 노출하고, 전체 24개 완료 전에는 registry count test를 완료로 바꾸지 않는다.
+한 Template의 unsupported resource나 malformed source가 다른 Template 등록을 막지 않도록 fixture와 test를 개별 파일 / 개별 case로 분리한다. Gallery에는 `verified` Template만 기본 노출하고, 전체 24개 완료 전에는 registry count test를 완료로 바꾸지 않는다.
 
 ## 8. 검증 설계
 

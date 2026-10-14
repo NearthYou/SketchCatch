@@ -47,7 +47,7 @@
 → Deployment History / Cleanup
 ```
 
-## 3. `DESIGN.md`가 최종 기준이다
+## 3. 최종 기준 문서: `DESIGN.md`
 
 레퍼런스는 화면 구조를 배우는 자료다. 최종 시각 언어는 항상 `DESIGN.md`를 따른다.
 
@@ -201,7 +201,7 @@ success / warning / error / stopped / info
 
 `Docs: UI 재구축 계약 정리`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 화면 파일과 기능 파일을 이름만 보고 판단하지 말고 import graph를 확인한다.
 
@@ -262,7 +262,7 @@ Landing에서 제품을 한 문장으로 보여주고, 로그인과 회원가입
 
 `Ui: Landing과 인증 화면 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 인증 화면에서 제품 기능을 길게 설명하지 않는다.
 
@@ -341,7 +341,7 @@ SketchCatch 적용:
 
 `Ui: Dashboard Shell 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 Dashboard 전체를 dark theme으로 만들지 않는다.
 
@@ -407,7 +407,7 @@ Dashboard 전체를 dark theme으로 만들지 않는다.
 
 `Ui: 새 프로젝트 시작 흐름 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 선택 화면에서 기능 전체를 설명하지 않는다.
 
@@ -493,7 +493,7 @@ Architecture Board를 가장 넓게 쓰면서 Resource 탐색, 선택, 수정, �
 
 큰 작업은 `Ui: Workspace Shell 재구축`, `Ui: Architecture Board 조작 연결`, `Ui: Resource Inspector 연결`로 나눈다.
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 Board가 panel보다 작아지는 구성을 허용하지 않는다.
 
@@ -559,7 +559,7 @@ Board가 panel보다 작아지는 구성을 허용하지 않는다.
 
 `Ui: AI 시작 화면 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 AI 설명이 실제 결과보다 더 큰 면적을 차지하지 않는다.
 
@@ -635,7 +635,7 @@ Board만 24px 격자를 쓰고 주변 panel은 흰색을 쓴다. warning은 `#ab
 
 `Ui: Reverse Engineering 화면 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 “전체”라는 표현을 쓸 때 실제 발견하지 못한 범위를 숨기지 않는다.
 
@@ -702,7 +702,7 @@ code와 diagnostic 집중 영역만 dark surface를 쓴다. 일반 toolbar와 �
 
 `Ui: Terraform Preview 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 validate와 실제 Plan을 같은 결과처럼 표현하지 않는다.
 
@@ -771,7 +771,7 @@ metric card는 12px radius와 hairline border를 쓴다. severity는 색에만 �
 
 `Ui: Safety와 Cost Check 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 AI 설명이 finding 원본을 대신하지 않는다.
 
@@ -841,7 +841,7 @@ log만 dark surface를 사용한다. Plan과 승인 panel은 흰색이다. 위�
 
 `Ui: Deployment Console 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 “배포” 버튼 한 번으로 Plan과 Apply를 동시에 실행하지 않는다.
 
@@ -908,7 +908,7 @@ History table은 흰 바탕과 hairline border를 사용한다. Cleanup은 일�
 
 `Ui: Deployment History와 Cleanup 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 Cleanup을 일반 secondary action처럼 가볍게 보이게 하지 않는다.
 
@@ -968,7 +968,7 @@ Template item은 12px card로 만들 수 있지만 card 안에 card를 넣지 �
 
 `Ui: Template과 Repository 시작 흐름 재구축`
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 Template과 GitHub가 별도 Board 형식을 만들지 않는다.
 
@@ -1047,7 +1047,7 @@ clone한 저장소의 responsive 구현과 공개 화면 조사 캡처를 비교
 
 화면별 수정은 나누고 마지막 검증 근거만 `Test: UI E2E 검증 보강`으로 커밋한다.
 
-### 다음 마일스톤으로 넘어가기 전 확인할 것
+### 다음 마일스톤으로 넘어가기 전 확인사항
 
 문서의 완료 조건 중 실제로 확인하지 않은 항목을 완료로 표시하지 않는다.
 

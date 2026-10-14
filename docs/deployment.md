@@ -1,6 +1,6 @@
 # 배포 운영 문서
 
-SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Fargate의 API와 web service를 병렬 배포합니다. ALB가 path routing을 담당하며 Docker Compose와 ECS nginx를 사용하지 않습니다. 기존 EC2/SSM/docker run/nginx, EC2 ALB와 legacy ECS service는 제거되었으며 cold rollback artifact만 보관합니다.
+SketchCatch 운영 환경에서는 Docker image를 ECR에 push하고 ECS/Fargate의 API와 web service를 병렬 배포합니다. ALB가 path routing을 담당하며 Docker Compose와 ECS nginx를 사용하지 않습니다. 기존 EC2/SSM/docker run/nginx, EC2 ALB와 legacy ECS service는 제거되었으며 cold rollback artifact만 보관합니다.
 
 이 문서는 SketchCatch 운영 배포와 사용자가 만든 IaC를 실행하는 경로를 구분합니다.
 
@@ -34,7 +34,7 @@ SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Far
 
 ALB는 API의 장시간 연결을 고려해 API 60초, web 30초의 deregistration delay를 사용합니다. 두 target group은 10초 간격으로 2회 성공하면 healthy가 됩니다. API health check grace period는 runtime 준비를 위해 60초를 유지하고 web은 30초를 사용합니다. `minimumHealthyPercent=100`, `maximumPercent=200`, circuit breaker rollback은 변경하지 않습니다.
 
-SketchCatch가 사용자 Source Repository에 생성하는 ECS/Fargate CodeBuild는 프로젝트 전용 ECR build cache만 읽고 씁니다. build-only role은 `sketchcatch-<projectSuffix>-build-cache` Repository의 layer action으로 제한되며 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront 권한을 갖지 않습니다. 서버가 생성한 buildspec은 첫 API image build의 BuildKit layer를 cache tag에 저장하고 다음 commit에서 재사용하며, cache login·import·export가 실패하면 배포를 중단하지 않고 cold build로 전환합니다. cache tag는 ECS에 배포하지 않습니다. API image와 frontend는 SketchCatch 내부 Artifact S3에 immutable candidate로 저장되고, API는 multipart complete 전에 실제 part 크기를 확인하고 압축 해제 파일 수·개별 파일·전체 크기를 제한합니다. 내부 Artifact bucket은 Public Access Block, 기본 암호화, TLS-only policy를 사용합니다. 현재 Vite demo frontend는 `VITE_API_BASE_URL=/`로 빌드해 CloudFront same-origin `/api/*`를 사용합니다. 검증된 candidate의 ECR publish와 ECS/S3/CloudFront activation은 승인 뒤 trusted worker가 별도 exact-resource 세션으로 수행합니다.
+SketchCatch가 사용자 Source Repository에 생성하는 ECS/Fargate CodeBuild는 프로젝트 전용 ECR build cache만 읽고 씁니다. build-only role은 `sketchcatch-<projectSuffix>-build-cache` Repository의 layer action으로 제한되며 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront 권한을 갖지 않습니다. 서버가 생성한 buildspec은 첫 API image build의 BuildKit layer를 cache tag에 저장하고 다음 commit에서 재사용하며, cache login / import / export가 실패하면 배포를 중단하지 않고 cold build로 전환합니다. cache tag는 ECS에 배포하지 않습니다. API image와 frontend는 SketchCatch 내부 Artifact S3에 immutable candidate로 저장되고, API는 multipart complete 전에 실제 part 크기를 확인하고 압축 해제 파일 수 / 개별 파일 / 전체 크기를 제한합니다. 내부 Artifact bucket은 Public Access Block, 기본 암호화, TLS-only policy를 사용합니다. 현재 Vite demo frontend는 `VITE_API_BASE_URL=/`로 빌드해 CloudFront same-origin `/api/*`를 사용합니다. 검증된 candidate의 ECR publish와 ECS/S3/CloudFront activation은 승인 뒤 trusted worker가 별도 exact-resource 세션으로 실행합니다.
 
 ## 핵심 서비스 실행 기준
 
@@ -149,7 +149,7 @@ artifact provider 검증, Deployment History 기록은 생략하지 않는다. r
 retention도 유지하며 active artifact나 active static prefix를 먼저 삭제하지 않는다.
 
 - 프론트엔드는 AWS SDK나 Terraform CLI를 직접 실행하지 않습니다.
-- 실제 Terraform 실행은 로컬 분리 worker 또는 운영 ECS worker에서만 수행합니다.
+- 실제 Terraform 실행은 로컬 분리 worker 또는 운영 ECS worker에서만 실행합니다.
 - `terraform plan` 없이 `terraform apply`를 실행하지 않습니다.
 - 사용자가 승인한 `tfplan`만 `apply`합니다.
 - 승인 시점의 Terraform artifact hash, `tfplan` hash, AWS account/region이 Apply 직전 값과 다르면 실행하지 않습니다.
@@ -169,12 +169,12 @@ retention도 유지하며 active artifact나 active static prefix를 먼저 삭�
 - 공유 provider plugin cache와 기존 `.terraform.lock.hcl`을 재사용합니다. state가 있으면 Plan workspace에 복원하고 lineage/serial을 identity에 포함합니다. lock, target, state, Terraform content가 바뀌면 반드시 새 Plan을 실행합니다.
 - Plan 전 artifact, connection, architecture, current Plan, workspace 준비는 병렬화합니다. 정적 Terraform 안전 검사를 통과한 뒤에만 credential을 준비하며, credential/lock/state 준비도 서로 독립적으로 병렬화합니다.
 - 동일 Deployment의 동시 Plan 요청은 single-flight로 합칩니다. pending apply Plan은 실제 `tfplan` hash, S3 optimization evidence v1, Plan summary hash, Pre-Deployment result hash, target/state identity, drift TTL이 모두 일치할 때만 재사용합니다. 기본 drift TTL은 5분입니다.
-- cache lookup, sidecar schema/hash/scope, TTL 검증이 실패하면 배포를 실패시키지 않고 `fallback_execute/cache_validation_failed`로 기록한 뒤 정상 Plan을 실행합니다. evidence 생성·저장 실패도 기존 Plan 저장과 승인을 손상시키지 않습니다.
+- cache lookup, sidecar schema/hash/scope, TTL 검증이 실패하면 배포를 실패시키지 않고 `fallback_execute/cache_validation_failed`로 기록한 뒤 정상 Plan을 실행합니다. evidence 생성 / 저장 실패도 기존 Plan 저장과 승인을 손상시키지 않습니다.
 - Terraform Plan이 실제 resource mutation 0건임을 증명할 때만 `no_change/terraform_plan_no_changes`로 기록합니다. Apply 직전에도 사용자 승인, artifact/tfplan hash, account/region, sidecar/summary/TTL을 다시 검증하며, 검증된 no-change만 Terraform Apply를 생략합니다. application/full-stack release 작업은 자체 계약에 따라 계속 실행합니다.
-- `execute`, `reuse`, `no_change`, `fallback_execute`, `unsupported`와 제한된 reason enum만 저장합니다. duration, lock/state hit·miss, 정규화된 resource address별 action은 로그에 남기고 credential, token, 변수 값, raw Terraform JSON, 자유 형식 metadata는 남기지 않습니다.
+- `execute`, `reuse`, `no_change`, `fallback_execute`, `unsupported`와 제한된 reason enum만 저장합니다. duration, lock/state hit / miss, 정규화된 resource address별 action은 로그에 남기고 credential, token, 변수 값, raw Terraform JSON, 자유 형식 metadata는 남기지 않습니다.
 - no-change는 코드 fingerprint만으로 판단하지 않고 state와 drift evidence를 요구합니다. 부분 최적화를 위해 `terraform apply -target`을 사용하지 않으며 Plan/Apply/Destroy의 기존 전체 그래프와 승인 경계를 유지합니다.
 - ApplicationArtifact fingerprint는 repository identity, exact commit, 정규화한 build config, build contract/buildspec version, target OS/architecture, secret-free build input identity만 포함합니다. runner, worker 수, queue, retry 같은 artifact byte 비영향 orchestrator/capacity 값은 제외합니다.
-- 같은 project/fingerprint의 build는 RDS claim/lease로 하나만 소유하고 build 동안 heartbeat로 lease를 갱신합니다. active lease가 있으면 중복 build를 시작하지 않고, 만료 lease만 새 claim이 인수합니다. Redis Runtime Cache는 이 결정의 source of truth가 아닙니다.
+- 같은 project/fingerprint의 build는 RDS claim/lease로 하나만 소유하고 build 동안 heartbeat로 lease를 갱신합니다. active lease가 있으면 중복 build를 시작하지 않고, 만료 lease만 새 claim이 인수합니다. Redis Runtime Cache는 이 결정의 기준이 아닙니다.
 - 재사용 직전 provider adapter가 존재 여부, exact SHA-256 digest, account, region, 승인된 namespace/reference, project ownership scope를 read-only로 검증합니다. S3 custom metadata는 digest 증거로 신뢰하지 않고 provider checksum 또는 실제 object stream을 확인합니다. 실패하면 DB row를 신뢰하지 않고 cache miss로 처리해 정상 build를 실행합니다.
 - RDS에는 identity, digest, provider location metadata, 상태만 저장합니다. 실제 사용자 image/zip/bundle은 사용자 ECR/S3 또는 provider storage에 두며 SketchCatch production ECR/S3에 복사하지 않습니다.
 - GitOps release evidence v1은 계속 허용합니다. v2 `artifact` extension은 canonical fingerprint, build contract, digest, provider location을 strict validation하며 malformed v2를 v1로 downgrade하지 않습니다. 실제 AWS mutation이나 real credential 없이 test double과 read-only adapter 계약으로 검증합니다.
@@ -187,7 +187,7 @@ Git/CI/CD Deployment Path는 운영 배포와 팀 리뷰를 위한 경로입니�
 - Source Repository token, deploy key, CI secret 원문은 응답, 로그, DB에 저장하지 않습니다.
 - PR에는 IaC Preview, Plan 요약, Pre-Deployment Check 결과, Cost Analysis 요약을 연결합니다.
 - 운영 apply는 외부 pipeline의 승인 job이나 조직 정책을 따를 수 있지만, SketchCatch는 승인 없는 apply를 권장하거나 자동 실행하지 않습니다.
-- 최초 Direct Deployment와 설치 PR은 Terraform·Workflow·Repository/AWS 설정을 준비합니다. 이후 App은 target branch push로, Infra는 사용자가 직접 실행한 `gh workflow run sketchcatch-infra.yml --ref main`으로 따로 배포합니다.
+- 최초 Direct Deployment와 설치 PR은 Terraform / Workflow / Repository/AWS 설정을 준비합니다. 이후 App은 target branch push로, Infra는 사용자가 직접 실행한 `gh workflow run sketchcatch-infra.yml --ref main`으로 따로 배포합니다.
 - Infra 명령 실행은 Terraform Plan 후 같은 job의 같은 `tfplan`을 Apply하는 명시적 승인입니다. 이 흐름에 별도 PR, merge, GitHub Environment reviewer 승인을 추가하지 않습니다.
 - Direct Deployment Path와 Git/CI/CD Deployment Path는 서로 경쟁하는 선택지가 아니라 사용 맥락이 다른 실행 경로입니다.
 - Git/CI/CD 상태 polling과 long-running workflow status는 Redis Runtime Cache를 사용할 수 있지만, 최종 기록은 RDS/S3에 남깁니다.
@@ -200,7 +200,7 @@ CI/CD console은 active run이 있으면 5초, active run이 없으면 30초마�
 
 같은 commit의 App `push`와 Infra `workflow_dispatch`는 GitHub run ID와 attempt가 다른 독립 Pipeline Run으로 저장하고 서로 덮어쓰지 않습니다. GitHub가 `skipped` job의 log를 생성하지 않은 경우에는 log를 요청하지 않고 stage 상태만 저장하며, 오래된 개별 job log가 404 등으로 없어졌다면 해당 stage에 비민감 warning을 남기고 다른 stage와 run 상태의 영속화를 계속합니다. release evidence를 읽지 못한 경우에는 ApplicationRelease를 만들지 않습니다.
 
-Direct Deployment와 Pipeline Run의 성공·실패·취소는 PostgreSQL terminal trigger가 같은 transaction에서
+Direct Deployment와 Pipeline Run의 성공 / 실패 / 취소는 PostgreSQL terminal trigger가 같은 transaction에서
 `notifications`와 `notification_outbox`에 기록합니다. 같은 `source:sourceId:status`는 unique key로 한 번만
 생성되며 GitOps source Deployment는 Pipeline Run 알림과 중복 생성하지 않습니다. 전역 Inbox는 RDS의
 읽음 상태를 사용하고 인증 SSE로 새 항목을 받습니다. browser Notification은 사용자가
@@ -225,7 +225,7 @@ backoff로 재시도합니다. HTTP 400/404/410, 만료, 복호화 실패 subscr
 provider 응답 body는 로그에 남기지 않습니다. Inbox와 비활성 subscription은 90일 retention job으로
 정리합니다.
 
-Pipeline Run의 workflow run ID·attempt·execution kind, commit, branch, status, stage, start/end time, 조건부 Web/API URL과 마스킹된 ordered log는 RDS에 남습니다. Project discovery는 enabled/valid target을 모두 처리하고 GitHub Actions 조회를 target branch 최대 2 page와 최근 10 workflow run으로 제한하며, 특정 run refresh는 workflow run ID와 attempt로 고정합니다. Web/API URL의 source는 Terraform artifact output이 아니라 같은 Source Repository와 monitoring target branch에서 가장 최근에 생성된 non-draft/non-cancelled handoff의 user-accepted `staticSiteUrl`/`apiBaseUrl` 설정입니다. 생성 workflow는 이에 대응하는 repository variable을 검증합니다. API는 username/password, query, fragment가 없는 절대 HTTP(S) URL만 허용하며 path와 port는 보존합니다. `handoffId`/`appUrl`/`apiUrl`은 atomic provenance tuple이므로 적용 가능한 handoff가 없을 때만 기존 tuple 전체를 보존하고, handoff가 있으면 null URL을 포함한 새 tuple 전체로 교체합니다. 거부된 URL은 handoff 생성이나 Pipeline Run에 저장하지 않습니다. Runtime Cache는 짧은 pipeline/handoff status 조회를 보조할 뿐 원천 기록이 아닙니다. GitHub provider refresh는 read-only이며 repository commit, workflow, Environment, Actions variable 또는 AWS Resource를 변경하지 않습니다. repository settings와 AWS role diff apply는 각각 기존 user-accepted action과 permission gate를 통과해야 합니다.
+Pipeline Run의 workflow run ID / attempt / execution kind, commit, branch, status, stage, start/end time, 조건부 Web/API URL과 마스킹된 ordered log는 RDS에 남습니다. Project discovery는 enabled/valid target을 모두 처리하고 GitHub Actions 조회를 target branch 최대 2 page와 최근 10 workflow run으로 제한하며, 특정 run refresh는 workflow run ID와 attempt로 고정합니다. Web/API URL의 source는 Terraform artifact output이 아니라 같은 Source Repository와 monitoring target branch에서 가장 최근에 생성된 non-draft/non-cancelled handoff의 user-accepted `staticSiteUrl`/`apiBaseUrl` 설정입니다. 생성 workflow는 이에 대응하는 repository variable을 검증합니다. API는 username/password, query, fragment가 없는 절대 HTTP(S) URL만 허용하며 path와 port는 보존합니다. `handoffId`/`appUrl`/`apiUrl`은 atomic provenance tuple이므로 적용 가능한 handoff가 없을 때만 기존 tuple 전체를 보존하고, handoff가 있으면 null URL을 포함한 새 tuple 전체로 교체합니다. 거부된 URL은 handoff 생성이나 Pipeline Run에 저장하지 않습니다. Runtime Cache는 짧은 pipeline/handoff status 조회를 보조할 뿐 원천 기록이 아닙니다. GitHub provider refresh는 read-only이며 repository commit, workflow, Environment, Actions variable 또는 AWS Resource를 변경하지 않습니다. repository settings와 AWS role diff apply는 각각 기존 user-accepted action과 permission gate를 통과해야 합니다.
 
 적용 가능한 handoff가 없는 run의 upsert는 provenance tuple 필드를 update 대상에서 제외해 기존 accepted provenance를 보존합니다. nullable parameter를 PostgreSQL의 untyped `CASE WHEN $n IS NULL`로 전달하지 않으므로 신규 프로젝트나 취소된 handoff 이후의 첫 refresh도 commit/status/stage/log를 정상적으로 기록합니다.
 
@@ -262,7 +262,7 @@ ReleaseCandidate와 frontend failure stage를 다시 확인하고 `retry_fronten
 Lambda GitOps handoff는 프로젝트 target이 `lambda`이고 현재 저장소 분석 revision에서
 `template.yaml|yml`이 하나만 확인되며, 저장된 `samTemplatePath`와 monitoring app path가 일치할 때만
 생성한다. App workflow는 upstream Infra workflow의 정확한 `head_sha`를 checkout하고 `sam validate`와
-`sam build`를 수행한다. 저장된 SAM logical ID의 build directory만 ZIP으로 만들고 SHA-256 digest를
+`sam build`를 실행한다. 저장된 SAM logical ID의 build directory만 ZIP으로 만들고 SHA-256 digest를
 계산한 뒤 commit/digest 기반 S3 key에 업로드한다.
 
 workflow는 기존 alias version을 읽고 ZIP digest와 Lambda `CodeSha256`이 같은 새 immutable version을
@@ -294,10 +294,10 @@ Auto Scaling group, `DEPLOYMENT_FAILURE` automatic rollback을 사용하는지 �
 revision으로 새 rollback deployment를 명시적으로 실행한다.
 
 완료 시 workflow는 active deployment의 모든 target instance가 `Succeeded`인지 비교하고 Output URL health를
-다시 확인한다. API는 verified connection으로 원본·활성 CodeDeploy revision, deployment group 정책, S3
-`ChecksumSHA256`/`VersionId`, 현재 ASG의 `Healthy`·`InService` instance 집합을 재조회한다. 전체 집합과 digest,
+다시 확인한다. API는 verified connection으로 원본 / 활성 CodeDeploy revision, deployment group 정책, S3
+`ChecksumSHA256`/`VersionId`, 현재 ASG의 `Healthy` / `InService` instance 집합을 재조회한다. 전체 집합과 digest,
 revision이 일치해야만 공통 release ledger에 `codedeploy_deployment` provider revision과 health/rollback evidence를
-기록한다. 실제 sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 #378에서 수행한다.
+기록한다. 실제 sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 #378에서 실행한다.
 
 ### Static S3/CloudFront GitOps 릴리즈
 
@@ -320,15 +320,15 @@ workflow는 bounded static release evidence만 로그 marker로 남긴다. API�
 VersionId/checksum/body, prefix의 정확한 object 집합, CloudFront ETag/status/origin path/domain/alias와 invalidation
 status를 다시 조회한다. commit, digest, file count, active pointer, Output URL host가 모두 일치할 때만 공통
 `ApplicationRelease` 원장에 `cloudfront_distribution` revision과 health/rollback evidence를 upsert한다. 실제
-sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 #378에서 수행한다.
+sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 #378에서 실행한다.
 
 ### Git/CI/CD 자동 배포 PR 산출물
 
-Git/CI/CD 설치 PR은 인프라·앱 최초 Direct Deployment의 승인 Plan에서 생성한다. PR 생성 전에는 승인 Plan, active Source Repository, valid monitoring config, verified AWS connection, confirmed build config, runtime coordinates, 안전한 ECS HTTPS Output URL을 모두 재검증한다. Workspace의 기본 동작은 handoff를 `draft`로 먼저 저장하고 Repository 설정 → AWS Role trust → PR 순서로 한 번에 처리한다.
+Git/CI/CD 설치 PR은 인프라 / 앱 최초 Direct Deployment의 승인 Plan에서 생성한다. PR 생성 전에는 승인 Plan, active Source Repository, valid monitoring config, verified AWS connection, confirmed build config, runtime coordinates, 안전한 ECS HTTPS Output URL을 모두 재검증한다. Workspace의 기본 동작은 handoff를 `draft`로 먼저 저장하고 Repository 설정 → AWS Role trust → PR 순서로 한 번에 처리한다.
 
 - `POST /api/git-cicd-handoffs/:handoffId/setup`: 중간 실패나 닫힌 PR이 있는 동일 handoff를 재개한다. 열린 PR은 저장된 head SHA와 handoff manifest ownership이 일치할 때만 갱신하고, 사용자 변경이 있거나 닫힌 PR이면 기존 branch를 보존한 채 새 retry branch와 PR로 복구한다. 이전 Pipeline이 실패했거나 PR이 닫혔다면 안정적인 실패 식별값을 담은 retry-only file을 추가해, retry PR merge가 ECS App workflow를 실제로 다시 시작하게 한다. 최초 설치 PR에는 이 file을 만들지 않는다.
 - Repository 설정: GitHub Environment, target branch 전용 custom deployment branch policy와 Actions variables를 GitHub App installation token으로 수렴시킨 뒤 exact read-back을 통과해야 완료된다. 이미 일치하는 값은 write를 생략한다. 빈 managed variable은 삭제하고 absence를 확인해 과거 Static Site URL/API Base URL이 남지 않게 한다.
-- AWS Role trust: Repository/Environment별 scoped Sid의 GitHub OIDC statement만 추가·교체하고, 같은 Role의 다른 statement를 보존한다. exact 상태면 IAM write를 생략하고, 변경 시 다시 읽어 검증한다. 검증 증거가 handoff에 저장되지 않으면 PR 단계로 진행하지 않는다. 통합 설정 버튼에 대한 한 번의 사용자 승인이 Repository와 AWS 변경 전체의 승인 경계다.
+- AWS Role trust: Repository/Environment별 scoped Sid의 GitHub OIDC statement만 추가 / 교체하고, 같은 Role의 다른 statement를 보존한다. exact 상태면 IAM write를 생략하고, 변경 시 다시 읽어 검증한다. 검증 증거가 handoff에 저장되지 않으면 PR 단계로 진행하지 않는다. 통합 설정 버튼에 대한 한 번의 사용자 승인이 Repository와 AWS 변경 전체의 승인 경계다.
 - 과거 `pipeline_running`/`pipeline_success` handoff에 새 검증 증거가 없으면 setup endpoint가 Repository/AWS 증거만 보완하고 기존 PR/Pipeline 상태는 유지한다. `pipeline_failed`는 Phase 4의 retry action으로 같은 endpoint를 다시 호출한다.
 - 생성 workflow는 AWS credential 또는 SketchCatch 실행 API를 사용하기 전에 `SKETCHCATCH_PROJECT_ID`가 생성 당시 project ID와 같은지 검사하고, API 호출은 `curl --fail-with-body`로 오류 본문을 남긴다.
 - `scripts/smoke/git-cicd-auto-deploy.ps1`은 위 두 apply 단계, pipeline status, static URL marker 확인을 report JSON으로 남긴다.
@@ -346,11 +346,11 @@ Git/CI/CD 설치 PR은 인프라·앱 최초 Direct Deployment의 승인 Plan에
 
 `sketchcatch-infra.yml`은 push로 실행되지 않고 `workflow_dispatch`만 허용한다. 사용자가 `gh workflow run sketchcatch-infra.yml --ref main`을 실행하면 GitHub SHA로 checkout한 단일 job에서 Terraform backend를 준비하고 `terraform plan -out=tfplan`과 `terraform apply -auto-approve tfplan`을 순서대로 실행한다. 명령 실행 외의 별도 Environment approval은 없다. ECS/Fargate용 `sketchcatch-app.yml`은 application 경로의 target branch push에서만 SketchCatch release-run API를 호출하고 AWS를 직접 변경하지 않는다. ECS/Fargate의 실제 순서는 CodeBuild preflight → immutable candidate → trusted worker ECR/ECS → frontend S3/CloudFront → HTTPS health입니다. Lambda, EC2/ASG, static site의 기존 runtime adapter 계약은 별도 경로를 유지합니다. `sketchcatch-destroy.yml`은 수동 실행과 Environment approval 뒤 같은 S3 backend로 `terraform destroy`를 실행합니다.
 
-Infra Workflow는 Terraform 실행 전 OIDC로 Infra Run API에 repository, ref, commit SHA, workflow run ID·attempt를 등록한다. Plan·Apply 동안 heartbeat를 유지하고 terminal result를 complete API로 보고한다. Direct·App·Infra 중 다른 실행이 project lease를 소유하면 인프라 실행을 대기시키지 않고 즉시 실패시킨다.
+Infra Workflow는 Terraform 실행 전 OIDC로 Infra Run API에 repository, ref, commit SHA, workflow run ID / attempt를 등록한다. Plan / Apply 동안 heartbeat를 유지하고 terminal result를 complete API로 보고한다. Direct / App / Infra 중 다른 실행이 project lease를 소유하면 인프라 실행을 대기시키지 않고 즉시 실패시킨다.
 
 Infra와 Destroy workflow는 Terraform root에 backend 선언이 없으면 임시 `backend "s3"` 선언을 추가합니다. 이미 선언이 있으면 `s3`인지 검증하고 다른 backend는 중복 선언이나 local state fallback 없이 실패시킵니다.
 
-Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App installation 권한, 통합 설정에 대한 user-accepted change, secret masking을 통과한 server mutation path에서만 수행합니다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않습니다. PR merge와 workflow 실행은 이 통합 승인에 포함되지 않습니다.
+Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App installation 권한, 통합 설정에 대한 user-accepted change, secret masking을 통과한 server mutation path에서만 실행합니다. 로그인용 GitHub OAuth token은 Repository 변경에 사용하지 않습니다. PR merge와 workflow 실행은 이 통합 승인에 포함되지 않습니다.
 
 ## 프로젝트 배포 non-production sandbox E2E
 
@@ -394,7 +394,7 @@ pnpm sandbox:e2e preflight
 
 최종 JSON report는 `scripts/smoke/deployment-sandbox-e2e.mjs`의 schema 검증을 통과해야 한다. 검증기는
 Direct 3개 scope와 GitOps 4개 runtime의 정확한 집합, commit/release/Output 정합성, runtime별 rollback,
-실측 관측·알림, Direct Destroy, 네 cleanup 범주의 `remainingCount: 0`, `productionMutation: false`를 모두
+실측 관측 / 알림, Direct Destroy, 네 cleanup 범주의 `remainingCount: 0`, `productionMutation: false`를 모두
 요구한다. credential-bearing URL이나 token 형태가 포함된 report도 실패한다.
 
 ```powershell
@@ -410,8 +410,8 @@ preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_lis
 사용자에게 노출하는 흐름은 다음 세 단계다.
 
 1. `검증`: `Ctrl+S`/`Command+S` 또는 `저장하고 배포`로 Board와 Terraform working draft를 한 번의
-   ProjectDraft 저장으로 고정하고, Pre-Deployment Check와 Terraform Plan을 수행한다.
-2. `승인`: 배포 범위, 변경량, blocker, 비용·보안 경고를 확인하고 준비 snapshot과 Plan을 승인한다.
+   ProjectDraft 저장으로 고정하고, Pre-Deployment Check와 Terraform Plan을 실행한다.
+2. `승인`: 배포 범위, 변경량, blocker, 비용 / 보안 경고를 확인하고 준비 snapshot과 Plan을 승인한다.
 3. `배포`: 승인된 snapshot을 실행하고 상태, 릴리즈 버전, Output URL을 확인한다. Destroy도 같은
    `검증 → 승인 → 배포` 구조를 사용한다.
 
@@ -426,14 +426,14 @@ preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_lis
 
 | Scope | 검증 | 배포 |
 | --- | --- | --- |
-| `infrastructure` | Terraform init/plan/show와 안전·비용·보안 검사 | 승인된 tfplan apply, output/state 저장 |
-| `application` | build-only CodeBuild로 확인된 commit의 immutable candidate 준비와 approval manifest 저장 | trusted worker가 같은 candidate를 runtime에 활성화하고 AWS 상태·HTTPS health 재검증 |
+| `infrastructure` | Terraform init/plan/show와 안전 / 비용 / 보안 검사 | 승인된 tfplan apply, output/state 저장 |
+| `application` | build-only CodeBuild로 확인된 commit의 immutable candidate 준비와 approval manifest 저장 | trusted worker가 같은 candidate를 runtime에 활성화하고 AWS 상태 / HTTPS health 재검증 |
 | `full_stack` | build-only CodeBuild candidate 준비 후 Terraform plan과 공통 검사 | Terraform apply/output/state/resource 저장 후 trusted worker가 같은 candidate를 활성화 |
 
 `application`은 Terraform 명령을 실행하지 않는다. `full_stack` ECS는 검증 단계에서 Output URL이 아직 없어도
 immutable artifact를 준비할 수 있다. Apply 뒤 Terraform 결과를 먼저 저장하고, 비민감 HTTPS
 `api_base_url`과 준비 시점의 ECR/cluster/service/container/port 좌표가 일치할 때만 project target의 Output URL을 원자적으로 연결한 뒤
-runtime release를 시작한다. 승인된 Terraform state inventory가 증명하는 Task Definition, IAM role, ALB/Target Group, S3, CloudFront와 파생 URL 변경은 정상적인 Terraform 관리 전이로 저장하고 trusted worker가 실제 AWS 상태를 다시 검증한다. output 누락·안전성 위반·준비 좌표 불일치와 runtime release 검증 실패는
+runtime release를 시작한다. 승인된 Terraform state inventory가 증명하는 Task Definition, IAM role, ALB/Target Group, S3, CloudFront와 파생 URL 변경은 정상적인 Terraform 관리 전이로 저장하고 trusted worker가 실제 AWS 상태를 다시 검증한다. output 누락 / 안전성 위반 / 준비 좌표 불일치와 runtime release 검증 실패는
 전체 Deployment를 성공으로 표시하지 않으며, 이미 저장한 Terraform state/resource/output 증거는 보존한다.
 Direct release는 GitOps와 같은 `ApplicationRelease`에 version, commit SHA, API OCI와 frontend manifest를 묶은
 composite SHA-256, provider revision, frontend VersionId/invalidation, Output URL, health, rollback evidence를
@@ -448,7 +448,7 @@ Application Output reconciliation이 잠근 target과 준비된 `ApplicationRele
 writer나 일시적 저장 실패로 target만 새 Terraform Output을 가진 상태가 되어도, 같은 AWS account/region과
 stable ECS target임을 확인한 뒤 pending release를 원자적으로 복구할 수 있다. 과거 pending release에 URL
 snapshot이 없으면 다음 검증 단계에서 build artifact를 다시 만들지 않고 snapshot metadata만 보강한다.
-이 후처리는 RDS와 승인된 Plan artifact만 사용하며 AWS Resource를 생성·수정·삭제하지 않는다. 필수 Output이나
+이 후처리는 RDS와 승인된 Plan artifact만 사용하며 AWS Resource를 생성 / 수정 / 삭제하지 않는다. 필수 Output이나
 Repository 빌드 근거가 불완전하면 readiness가 해당 항목을 수동 action으로 표시한다. `infrastructure`의 일시적인
 metadata 동기화 오류는 Deployment log에 warning으로 남기되 이미 성공한 Terraform Apply를 `FAILED`로 되돌리지 않는다.
 
@@ -609,7 +609,7 @@ Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed 
 
 `Production Infrastructure Plan` workflow는 `workflow_dispatch`와 GitHub Environment `production-infra-plan` required reviewer를 사용합니다. group별 `<group>-review-only` 문자열, resource-read-only AWS plan role, 선택한 exact state/lock key 권한이 있어야 review-only Plan이 실행됩니다. Runtime Cache 복구 apply는 `runtime-cache-ingress` scope, 성공한 review-only run ID, exact head SHA, `runtime-cache-ingress-apply-<run-id>` 확인 문자열을 모두 검증합니다. 새 binary plan이 API/worker Redis ingress 두 건의 `create`만 포함할 때만 1일 retention artifact로 전달하고, `production` Environment 배포 역할로 해당 plan 파일을 apply한 뒤 artifact를 즉시 삭제합니다. `destroy`, `import`, `-auto-approve`는 허용하지 않습니다. runtime plan은 전체 production tfvars JSON이 없으면 실패합니다.
 
-전체 runtime Apply는 별도 승인 경로다. `apply-reviewed-runtime-complete`는 같은 review-only run ID와 exact head SHA, `runtime-complete-apply-<run-id>` 확인 문자열, repository owner dispatch, `production` Environment 승인을 모두 요구한다. 새 binary plan은 API/worker Task Definition 교체, web 서비스 안정화 값, ALB/Target Group, web metric filter, artifact bucket CORS, `ecs_task`·`ecs_worker_execution` inline policy만 정확히 포함해야 한다. API/worker image, 기존 Secret 연결, worker execution role의 기존 Secret 접근이 달라지거나 영구 리소스 삭제가 있으면 apply 전에 fail-closed로 중단한다.
+전체 runtime Apply는 별도 승인 경로다. `apply-reviewed-runtime-complete`는 같은 review-only run ID와 exact head SHA, `runtime-complete-apply-<run-id>` 확인 문자열, repository owner dispatch, `production` Environment 승인을 모두 요구한다. 새 binary plan은 API/worker Task Definition 교체, web 서비스 안정화 값, ALB/Target Group, web metric filter, artifact bucket CORS, `ecs_task` / `ecs_worker_execution` inline policy만 정확히 포함해야 한다. API/worker image, 기존 Secret 연결, worker execution role의 기존 Secret 접근이 달라지거나 영구 리소스 삭제가 있으면 apply 전에 fail-closed로 중단한다.
 
 apply를 승인하기 전에 `GitHubActionsDeployRole`에는 `infra/aws/iam/github-actions-deploy-policy.json`의 최신 정책이 연결되어 있어야 합니다. Runtime Cache 복구 권한은 `production/ecs-foundation/terraform.tfstate`와 그 `.tflock`, 현재 Runtime Cache 보안 그룹의 ingress 생성 및 결과 조회로 제한합니다. 보안 그룹 교체로 ARN이 바뀌면 정책 템플릿과 정적 검증을 함께 갱신하고 별도 IAM 변경 승인을 거쳐야 하며, workflow 자체는 IAM을 변경하지 않습니다.
 
@@ -655,7 +655,7 @@ LIVE_OBSERVATION_ENABLED=false
 
 `TF_PLUGIN_CACHE_DIR`과 `TRIVY_CACHE_DIR`은 ECS task의 ephemeral 경로입니다. worker는 one-off task이며 host volume cache에 의존하지 않습니다.
 
-API startup은 listen 전에 작은 Terraform 구성을 한 번 검사해 Trivy process와 policy loading을 미리 수행합니다. Warm-up이 실패하면 warning을 기록하고 API startup과 deterministic fallback 검사는 계속합니다.
+API startup은 listen 전에 작은 Terraform 구성을 한 번 검사해 Trivy process와 policy loading을 미리 실행합니다. Warm-up이 실패하면 warning을 기록하고 API startup과 deterministic fallback 검사는 계속합니다.
 
 동일 Terraform 파일 집합의 Trivy finding은 SHA-256 key로 process-local cache와 Redis Runtime Cache에 5분간 보관합니다. 같은 API process의 동일 key 검사는 진행 중인 scan 하나를 공유합니다. Key에는 Trivy version, checks bundle digest와 제외 rule 정책도 포함하며, cache read/write가 실패하면 cache를 우회해 실제 검사를 계속합니다.
 
@@ -684,12 +684,12 @@ GitHub ECS deploy/migration role은 ECS API/web/worker task family, service, wor
 
 승인된 Runtime Cache ingress Terraform apply를 수행할 때만 같은 role에 exact runtime state/lock 객체 접근, 현재 Runtime Cache 보안 그룹과 AWS가 생성 시 함께 평가하는 신규 `security-group-rule/*`에 대한 `ec2:AuthorizeSecurityGroupIngress`, 그리고 `ec2:DescribeSecurityGroupRules`/`ec2:DescribeSecurityGroups` 조회를 추가합니다. exact Cache 보안 그룹 승인을 동시에 요구하므로 다른 보안 그룹에는 적용할 수 없습니다. provider 기본 태그를 위한 `ec2:CreateTags`도 `ec2:CreateAction=AuthorizeSecurityGroupIngress` 조건에서 생성 시점에만 허용합니다. state 객체의 삭제와 security group ingress revoke 권한은 이 복구 경로에 포함하지 않습니다.
 
-사용자 AWS 계정 연결은 SketchCatch가 생성한 CloudFormation Quick Create URL로 connection-scoped IAM Role을 만드는 방식을 기본으로 합니다. 2026-07-07 기준 새 AWS 연결 Quick Create 템플릿은 사용자 계정에 `SketchCatchTerraformExecutionRole-<connection-prefix>` 형식의 Role을 생성합니다. 예전 고정 이름 `SketchCatchTerraformExecutionRole` Role이 사용자 AWS 계정에 남아 있어도 새 Stack 생성이 같은 `RoleName`으로 충돌하지 않도록 하기 위함입니다. 템플릿은 External ID가 포함된 trust policy와 MVP demo용 `AWS::IAM::Policy`를 함께 생성합니다. 정책 이름은 Stack 이름을 포함해 같은 Role에 고정 이름 inline policy를 다시 붙이는 충돌을 줄입니다. MVP demo 권한은 VPC, Subnet, Internet Gateway, Route Table, Security Group, EC2, S3 실습을 막힘 없이 검증하기 위해 `ec2:*`와 `s3:*`를 허용합니다. 사용자는 stack 생성 후 AWS account ID만 SketchCatch에 입력하고, API는 `arn:aws:iam::<accountId>:role/SketchCatchTerraformExecutionRole-<connection-prefix>`를 계산해 STS AssumeRole 검증을 수행합니다. 기존 고정 이름 Role은 하위 호환을 위해 검증/사용을 계속 허용합니다. SketchCatch 런타임 Role에는
+사용자 AWS 계정 연결은 SketchCatch가 생성한 CloudFormation Quick Create URL로 connection-scoped IAM Role을 만드는 방식을 기본으로 합니다. 2026-07-07 기준 새 AWS 연결 Quick Create 템플릿은 사용자 계정에 `SketchCatchTerraformExecutionRole-<connection-prefix>` 형식의 Role을 생성합니다. 예전 고정 이름 `SketchCatchTerraformExecutionRole` Role이 사용자 AWS 계정에 남아 있어도 새 Stack 생성이 같은 `RoleName`으로 충돌하지 않도록 하기 위함입니다. 템플릿은 External ID가 포함된 trust policy와 MVP demo용 `AWS::IAM::Policy`를 함께 생성합니다. 정책 이름은 Stack 이름을 포함해 같은 Role에 고정 이름 inline policy를 다시 붙이는 충돌을 줄입니다. MVP demo 권한은 VPC, Subnet, Internet Gateway, Route Table, Security Group, EC2, S3 실습을 막힘 없이 검증하기 위해 `ec2:*`와 `s3:*`를 허용합니다. 사용자는 stack 생성 후 AWS account ID만 SketchCatch에 입력하고, API는 `arn:aws:iam::<accountId>:role/SketchCatchTerraformExecutionRole-<connection-prefix>`를 계산해 STS AssumeRole 검증을 실행합니다. 기존 고정 이름 Role은 하위 호환을 위해 검증/사용을 계속 허용합니다. SketchCatch 런타임 Role에는
 `arn:aws:iam::*:role/SketchCatchTerraformExecutionRole`와
 `arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*` 양쪽에 대한 `sts:AssumeRole` 권한이
 필요합니다.
 
-Direct application release용 연결 Role은 CodeConnections 생성·조회·사용, 프로젝트 CodeBuild project와
+Direct application release용 연결 Role은 CodeConnections 생성 / 조회 / 사용, 프로젝트 CodeBuild project와
 build-only service role의 create/reconcile, `codebuild:BatchGetProjects`, `StartBuild`, `BatchGetBuilds`, `StopBuild`를
 허용합니다. 동적으로 생성하는 service role에는 SketchCatch 관리 permissions boundary를 반드시 연결합니다.
 CodeBuild service role에는 Repository checkout, log 전송, SketchCatch API가 발급한 presigned multipart upload와 프로젝트 전용 build-cache ECR layer read/write만
@@ -715,11 +715,11 @@ CodeConnections 생성은 RDS의 `CREATING` 예약이 AWS `CreateConnection`보�
 않고 claim을 해제해 다시 시도할 수 있습니다.
 
 GitHub 빌드 연결만 해제할 때도 사용자 확인 뒤 기존 managed cleanup으로 SketchCatch 소유 Resource만 정리합니다.
-CodeConnection을 `DELETING`으로 claim해 새 build 준비를 막고, 진행 중인 build·deployment가 없을 때만
+CodeConnection을 `DELETING`으로 claim해 새 build 준비를 막고, 진행 중인 build / deployment가 없을 때만
 CodeBuild project, 전용 Role, log group, build cache ECR, CodeConnection을 삭제합니다. AWS 계정 연결과
 배포된 application/runtime Resource는 삭제하지 않습니다. 상태 새로고침과 Direct/GitOps 실행은
 `DELETING` 상태를 사용할 수 없으며, 중단된 claim은 1시간 뒤 같은 정리를 재시도할 수 있습니다.
-재획득한 claim은 `updatedAt` fencing token으로 이전 worker의 늦은 성공·실패를 거부하며, 부분 정리 실패는
+재획득한 claim은 `updatedAt` fencing token으로 이전 worker의 늦은 성공 / 실패를 거부하며, 부분 정리 실패는
 일반 CodeConnection 상태 새로고침이 아니라 관리 리소스 정리 재시도로만 복구합니다.
 
 CodeConnections 생성 API는 현재 사용자에게 활성 GitHub App installation이 정확히 하나 있을 때만 AWS 요청을
@@ -794,7 +794,7 @@ Redis Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration �
 
 ## GitHub App 기반 Source Repository 연결
 
-Git/CI/CD Deployment Path의 운영 repository 연결은 GitHub App 설치 흐름을 기본 경로로 사용합니다. Web은 GitHub App state를 직접 만들지 않고 API가 발급한 install URL로 redirect만 수행합니다.
+Git/CI/CD Deployment Path의 운영 repository 연결은 GitHub App 설치 흐름을 기본 경로로 사용합니다. Web은 GitHub App state를 직접 만들지 않고 API가 발급한 install URL로 redirect만 실행합니다.
 
 API runtime 필수 환경 변수:
 
@@ -857,7 +857,7 @@ pnpm --filter @sketchcatch/api test -- runtime-cache
 
 ## Live Observation 운영 설정
 
-Live Observation은 verified manifest가 있는 성공 Deployment의 실제 Output URL, CloudWatch 측정값, ASG 또는 ECS/Fargate capacity, 최근 runtime log를 15분 동안 관측하는 opt-in 기능입니다. 상단 트래픽 흐름 아래에는 현재 상태, 사용자 영향, 근거가 있는 중요 신호 최대 3개만 표시합니다. 이 화면은 CloudWatch의 원시 지표·로그 검색을 복제하지 않으며, 관측값이 지연되거나 없으면 정상으로 바꾸지 않고 확인 중 또는 확인할 수 없음으로 안내합니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
+Live Observation은 verified manifest가 있는 성공 Deployment의 실제 Output URL, CloudWatch 측정값, ASG 또는 ECS/Fargate capacity, 최근 runtime log를 15분 동안 관측하는 opt-in 기능입니다. 상단 트래픽 흐름 아래에는 현재 상태, 사용자 영향, 근거가 있는 중요 신호 최대 3개만 표시합니다. 이 화면은 CloudWatch의 원시 지표 / 로그 검색을 복제하지 않으며, 관측값이 지연되거나 없으면 정상으로 바꾸지 않고 확인 중 또는 확인할 수 없음으로 안내합니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
 
 ```text
 LIVE_OBSERVATION_ENABLED=false
@@ -878,7 +878,7 @@ LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET=
 LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT=
 ```
 
-`CURRENT_KID`와 `CURRENT_SECRET`은 capability require 함수를 호출할 때 필수다. previous 3개 값은 rotation 동안에만 all-or-none으로 설정한다. secret은 승인된 secret manager의 cryptographic generator로 정확히 32-byte를 생성해 직접 주입하며 terminal/log에 출력하거나 저장소·평문 ECS environment에 기록하지 않는다.
+`CURRENT_KID`와 `CURRENT_SECRET`은 capability require 함수를 호출할 때 필수다. previous 3개 값은 rotation 동안에만 all-or-none으로 설정한다. secret은 승인된 secret manager의 cryptographic generator로 정확히 32-byte를 생성해 직접 주입하며 terminal/log에 출력하거나 저장소 / 평문 ECS environment에 기록하지 않는다.
 
 안전한 two-phase rotation runbook:
 
@@ -902,14 +902,14 @@ logs:FilterLogEvents
 ecs:DescribeServices
 ```
 
-Diagram-to-Terraform의 Live Observation v2 output은 Terraform reference와 provider-neutral graph edge로 하나의 일관된 runtime을 증명할 때만 생성합니다. HTTPS:443 listener가 정확한 ALB, Target Group, ACM certificate를 참조하고, `name`이 certificate `domainName`과 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이어야 합니다. Target Group은 정확히 하나의 ECS Service 또는 ASG에 연결되어야 하고, ECS Application Auto Scaling Target은 선택된 Service를 `resourceId`로 참조해야 합니다. 로그 group은 선택된 runtime에서 ECS Service→Task Definition→Log Group 또는 ASG→Launch Template→Instance Profile→Role/Policy→Log Group의 소유 방향으로만 추적하며, 공유 support resource에서 sibling runtime 방향으로 역탐색하지 않습니다. ASG request alarm은 정확히 하나의 `alarmActions`→`aws_autoscaling_policy`→`autoscalingGroupName` 체인과 선택된 ALB/Target Group `arn_suffix` dimension을 모두 요구합니다. 추가·미해결 action, sibling ASG dimension/edge, 다른 Target Group dimension은 전체 evidence를 무효화합니다. ECS request threshold도 선택된 scaling target과 ALB/Target Group을 가리키는 정책이 정확히 하나일 때만 출력하고 중복·상충 정책은 graph 순서와 무관하게 생략합니다. 여러 runtime이 붙거나, 연결되지 않은 여러 runtime 중 하나를 골라야 하거나, coherent target이 둘 이상이면 모든 Live Observation output을 생략합니다. reference가 없는 legacy graph는 LB, Target Group, runtime이 각각 하나뿐이고 다른 연결과 충돌하지 않을 때만 호환합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, 단일 capacity target, `scale_out_threshold`와 선택적인 `log_group_name`/`log_group_names`입니다. ASG와 ECS capacity output이 동시에 존재하면 materializer도 모호한 evidence로 거부합니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only·DNS 누락·certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
+Diagram-to-Terraform의 Live Observation v2 output은 Terraform reference와 provider-neutral graph edge로 하나의 일관된 runtime을 증명할 때만 생성합니다. HTTPS:443 listener가 정확한 ALB, Target Group, ACM certificate를 참조하고, `name`이 certificate `domainName`과 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이어야 합니다. Target Group은 정확히 하나의 ECS Service 또는 ASG에 연결되어야 하고, ECS Application Auto Scaling Target은 선택된 Service를 `resourceId`로 참조해야 합니다. 로그 group은 선택된 runtime에서 ECS Service→Task Definition→Log Group 또는 ASG→Launch Template→Instance Profile→Role/Policy→Log Group의 소유 방향으로만 추적하며, 공유 support resource에서 sibling runtime 방향으로 역탐색하지 않습니다. ASG request alarm은 정확히 하나의 `alarmActions`→`aws_autoscaling_policy`→`autoscalingGroupName` 체인과 선택된 ALB/Target Group `arn_suffix` dimension을 모두 요구합니다. 추가 / 미해결 action, sibling ASG dimension/edge, 다른 Target Group dimension은 전체 evidence를 무효화합니다. ECS request threshold도 선택된 scaling target과 ALB/Target Group을 가리키는 정책이 정확히 하나일 때만 출력하고 중복 / 상충 정책은 graph 순서와 무관하게 생략합니다. 여러 runtime이 붙거나, 연결되지 않은 여러 runtime 중 하나를 골라야 하거나, coherent target이 둘 이상이면 모든 Live Observation output을 생략합니다. reference가 없는 legacy graph는 LB, Target Group, runtime이 각각 하나뿐이고 다른 연결과 충돌하지 않을 때만 호환합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, 단일 capacity target, `scale_out_threshold`와 선택적인 `log_group_name`/`log_group_names`입니다. ASG와 ECS capacity output이 동시에 존재하면 materializer도 모호한 evidence로 거부합니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only / DNS 누락 / certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
 
 CloudWatch 관측은 선택된 동일 Target Group의 `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`를 합산해 request 수를 만들고, 같은 Target Group의 `TargetResponseTime` p95와 하나의 완료 60초 period로 정렬합니다. 각 query result가 유일한 `StatusCode=Complete`여야 하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable입니다. p95가 선택한 period는 response result의 최신 point만 비교하지 않고 전체 finite point에서 정확히 찾습니다. 같은 period에 하나 이상의 response class가 있어야 하며 status가 Complete인 sparse class만 0으로 취급합니다. 다른 period의 class를 합치거나 whole-ALB `RequestCount`를 분모로 사용하지 않습니다. ASG running은 `InService` instance, ECS/Fargate running은 service task count이며 healthy는 `DescribeTargetHealth`의 실제 healthy target 수를 사용합니다. STS와 AWS read는 5초 abort deadline을 공유합니다. metric이 60초보다 지연되거나 period가 어긋나거나 metric/capacity/log 조회가 실패하면 UI와 Store는 기존 숫자를 재사용하지 않고 정량 필드를 `null`로 표시합니다. CloudWatch Logs는 최근 5분 최대 50건만 읽고 credential-shaped 값은 저장 전 중앙 masker로 제거합니다.
 
 Live Observation 전용 자동 회귀 테스트는 현재 보호선에 포함되지 않습니다. 이 절의 동작은
 자동 검증된 것으로 간주하지 않습니다.
 
-실제 `scripts/smoke/live-demo-web-service.ps1` 실행은 AWS 비용 리소스를 생성하므로 명시적 승인과 verified AWS Connection이 있을 때만 수행합니다. smoke 또는 실제 acceptance를 마치면 관측 `stop`이 아니라 기존 Deployment Destroy 흐름으로 ALB, ASG, EC2, S3 리소스를 cleanup하고 결과를 기록해야 합니다.
+실제 `scripts/smoke/live-demo-web-service.ps1` 실행은 AWS 비용 리소스를 생성하므로 명시적 승인과 verified AWS Connection이 있을 때만 실행합니다. smoke 또는 실제 acceptance를 마치면 관측 `stop`이 아니라 기존 Deployment Destroy 흐름으로 ALB, ASG, EC2, S3 리소스를 cleanup하고 결과를 기록해야 합니다.
 
 ## Live S3 Deployment Smoke
 
@@ -1013,7 +1013,7 @@ curl -X POST https://sketchcatch.net/api/projects/<project-id>/assets/presigned-
 
 # ECS 런타임 설정과 secret 주입
 
-ECS production과 cold rollback 모두 generated `api.env`/`web.env` 파일 또는 S3 presigned env download를 runtime source of truth로 사용하지 않습니다. source of truth는 ECS task definition의 environment/secret mapping이며 cold restore도 같은 secret store에서 값을 주입합니다.
+ECS production과 cold rollback 모두 generated `api.env`/`web.env` 파일 또는 S3 presigned env download를 runtime 기준으로 사용하지 않습니다. 기준은 ECS task definition의 environment/secret mapping이며 cold restore도 같은 secret store에서 값을 주입합니다.
 
 ECS task definition의 책임은 다음처럼 나눕니다.
 
@@ -1085,7 +1085,7 @@ ECS_WORKER_ASSIGN_PUBLIC_IP=ENABLED
 `ECS_WORKER_COMMAND`는 JSON string array여야 하며, `ECS_WORKER_ENVIRONMENT`는 string 값만 가진 JSON object여야 합니다.
 API는 dispatch 시 `SKETCHCATCH_DEPLOYMENT_ID`, `SKETCHCATCH_DEPLOYMENT_JOB_ID`,
 `SKETCHCATCH_DEPLOYMENT_OPERATION`을 container override environment로 추가합니다. worker runtime은 operation과 access context의
-source of truth로 DB의 `deployment_jobs` row를 사용하며, override의 operation 값만 신뢰해 실행하지 않습니다.
+기준으로 DB의 `deployment_jobs` row를 사용하며, override의 operation 값만 신뢰해 실행하지 않습니다.
 
 현재 Phase 1 네트워크는 NAT Gateway 없이 public subnet을 사용하므로 worker도 같은 구성을 사용한다면
 `ECS_WORKER_ASSIGN_PUBLIC_IP=ENABLED`가 필요합니다. private subnet과 NAT Gateway 또는 필요한 VPC endpoint를 갖춘 뒤에만
@@ -1169,7 +1169,7 @@ API startup은 `DEPLOYMENT_WORKER_MODE`에 따라 `RUNNING` deployment를 복구
 | task ARN 없는 `QUEUED`/`DISPATCHING` job       | 5분 안에는 보호하고 이후에는 stale dispatch로 실패 처리합니다.                                                    |
 | task ARN 없는 `RUNNING` job                    | 유효하지 않은 실행 상태로 보고 job과 deployment를 실패 처리합니다.                                                |
 
-DB의 active `deployment_jobs`가 실행권의 source of truth입니다. ECS 조회 오류만으로 job을 terminal 처리하지 않습니다. startup log에는
+DB의 active `deployment_jobs`가 실행권의 기준입니다. ECS 조회 오류만으로 job을 terminal 처리하지 않습니다. startup log에는
 `activeDeploymentCount`, `deferredInspectionCount`, `failedJobCount`, `recoveryRetryCount`, `recoveredDeploymentCount`만 기록하며 secret이나 원문 오류를 남기지 않습니다.
 최근 `QUEUED`/`DISPATCHING`, `MISSING`, 일시적인 조회 오류가 있으면 API는 5분 간격으로 reconciliation을 반복합니다.
 retryable 상태가 없어지면 중단하며 timer는 `unref` 처리되어 process 종료를 막지 않습니다.
@@ -1247,16 +1247,16 @@ cold rollback은 ECS ALB나 cluster를 정상적인 revision rollback으로 복�
 4. 생성 대상이 임시 EC2, ALB, target group, listener와 scoped security group뿐이며 Route53 변경이 없는지 확인한 뒤 apply합니다.
 5. Secrets Manager/SSM 값을 임시 runtime에 주입하고 검증 SHA artifact를 실행합니다. AMI에 secret이 있다고 가정하지 않습니다.
 6. production Host와 TLS SNI로 임시 ALB의 `/`, `/health`, `/health/db`를 direct smoke하고 로그인과 대표 read path를 확인합니다.
-7. direct smoke가 모두 통과한 뒤에만 Route53 alias 변경을 별도 plan/승인으로 수행합니다.
+7. direct smoke가 모두 통과한 뒤에만 Route53 alias 변경을 별도 plan/승인으로 실행합니다.
 8. incident 종료 후 DNS를 ECS ALB로 복구하고 cold state를 destroy해 임시 EC2/ALB/security group rule을 제거합니다. retained AMI와 S3 artifact는 삭제하지 않습니다.
 
 ### RDS migration과 restore
 
 - RDS는 자동 백업 7일과 deletion protection을 유지합니다.
-- migration workflow는 실행 전 encrypted snapshot을 만들고 ECS worker one-off task로 migration을 수행합니다. 성공 후 `sketchcatch-production-pre-migration-*` snapshot은 최신 3개만 유지합니다.
+- migration workflow는 실행 전 encrypted snapshot을 만들고 ECS worker one-off task로 migration을 실행합니다. 성공 후 `sketchcatch-production-pre-migration-*` snapshot은 최신 3개만 유지합니다.
 - schema 변경은 expand, compatible code deploy, backfill, 최소 한 release 관찰, contract 순서를 지킵니다.
 - destructive contract migration은 `-- sketchcatch:contract-migration-after: vX.Y.Z` marker 없이는 CI에서 실패합니다.
-- migration journal은 append-only입니다. CI는 PR base의 기존 tag/timestamp 변경·삭제와 마지막 적용 시각보다 과거에 추가된 migration을 거부합니다.
+- migration journal은 append-only입니다. CI는 PR base의 기존 tag/timestamp 변경 / 삭제와 마지막 적용 시각보다 과거에 추가된 migration을 거부합니다.
 - runtime migrator는 운영 DB가 이미 `0045`/`0046`까지 적용해 `0044_github_codebuild_release_plane`을 timestamp 기준으로 건너뛴 이력만 hash와 `created_at`으로 확인해 원래 SQL과 Drizzle 이력을 먼저 복구합니다. 신규 DB와 이미 `0044`를 기록한 DB에는 이 복구를 실행하지 않습니다.
 - restore drill은 snapshot에서 새 DB instance로 복원하고 subnet/parameter/security group을 기존과 맞춘 뒤 `/health/db`와 대표 query를 검증합니다. 원본 DB를 덮어쓰지 않으며 검증 후 복구 instance cleanup을 별도 승인합니다.
 

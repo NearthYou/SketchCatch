@@ -4,7 +4,7 @@
 
 이 결정은 [0008](./0008-non-persistent-repository-analysis.md)의 분석 결과 비영속 결정을 대체한다. 원본 repository 파일과 installation repository 목록을 저장하지 않는 안전 경계는 유지한다.
 
-**고려한 대안**
+고려한 대안
 
 - 화면 메모리에만 유지: 새로고침하면 결과와 Template Selection 근거가 사라진다.
 - 원본 evidence 파일까지 저장: 재현성은 높지만 민감한 source와 저장 범위가 불필요하게 커진다.
