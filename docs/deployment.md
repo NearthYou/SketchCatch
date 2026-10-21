@@ -21,11 +21,11 @@ SketchCatch 운영 환경에서는 Docker image를 ECR에 push하고 ECS/Fargate
 - 실제 배포 전 read-only preflight가 API와 web의 desired/running count, pending task, primary rollout 상태를 확인하고 이전 API/web/worker task definition ARN을 rollback 기준으로 기록합니다.
 - 기준선은 최근 성공 4회 중앙값인 전체 7분 51초와 순차 build/push 81초입니다. 목표는 전체 5분 30초 이하, 병렬 image build critical path 60초 이하입니다.
 
-2026-07-14 production 실측에서는 동일 commit의 cache를 먼저 채운 뒤 `deploy=true`로 배포했습니다.
+2026-07-14 production 실측에서는 동일 commit의 cache를 먼저 채운 뒤 `deploy=true`로 배포했습니다. 기준선은 서로 다른 이전 커밋의 성공 4회 중앙값이며 개선 후는 캐시 준비 뒤 배포 1회입니다. [원본 시각과 측정 조건](../.eval/README.md#운영-배포-측정)을 함께 확인합니다.
 
 | 항목 | 기준선 | 실측 | 결과 |
 | --- | ---: | ---: | ---: |
-| 전체 workflow | 7분 51초 | 6분 9초 | 1분 42초, 21.7% 단축 |
+| 전체 workflow | 470.5초 | 369초 | 101.5초 감소, 약 21.6% |
 | image build/push critical path | 81초 | 7초 | 74초, 91.4% 단축 |
 | API ECS service 안정화 | 3분 43초 | 3분 13초 | 30초 단축 |
 | web ECS service 안정화 | 4분 50초 | 2분 56초 | 1분 54초 단축 |

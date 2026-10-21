@@ -4,6 +4,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- 2026-10-21: Refreshed README and published deployment evidence from main. README, offline evaluation and harness checks pass. Runtime and infrastructure unchanged.
+
 - 2026-10-15: Updated project documentation from origin/main without merging the divergent dev history. Replaced the operating architecture image with the supplied portfolio diagram, balanced the README technology summary, and revised prose and headings across project guides. Verified local links in the 21 primary README/reference documents, git diff whitespace, and the harness. Runtime code, dependency files, infrastructure definitions, and migrations are unchanged.
 
 - Public Repository Analysis no longer special-cases `chaekang/audience-live-check`; it resolves the current selected branch SHA and reads real repository evidence while general Fixed Template and authored demo flows remain available.

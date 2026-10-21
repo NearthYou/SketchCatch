@@ -1,0 +1,389 @@
+{
+  "schemaVersion": 1,
+  "measuredOn": "2026-07-14",
+  "baseline": {
+    "sampleCount": 4,
+    "medianElapsedSeconds": 470.5,
+    "runs": [
+      {
+        "id": 29139898746,
+        "url": "https://github.com/NearthYou/SketchCatch/actions/runs/29139898746",
+        "headSha": "a4e4095d6f795dcf9a9db2c634db9e5695da8b61",
+        "createdAt": "2026-07-11T04:37:10Z",
+        "updatedAt": "2026-07-11T04:44:32Z",
+        "conclusion": "success",
+        "elapsedSeconds": 442.0,
+        "jobs": [
+          {
+            "name": "build-and-push",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T04:37:15Z",
+            "completedAt": "2026-07-11T04:39:48Z",
+            "steps": [
+              {
+                "name": "Build and push ECS images",
+                "startedAt": "2026-07-11T04:38:22Z",
+                "completedAt": "2026-07-11T04:39:45Z"
+              }
+            ]
+          },
+          {
+            "name": "deploy-web",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T04:39:51Z",
+            "completedAt": "2026-07-11T04:44:25Z",
+            "steps": []
+          },
+          {
+            "name": "register-worker",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T04:39:53Z",
+            "completedAt": "2026-07-11T04:40:05Z",
+            "steps": []
+          },
+          {
+            "name": "deploy-api",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T04:40:09Z",
+            "completedAt": "2026-07-11T04:43:36Z",
+            "steps": []
+          },
+          {
+            "name": "deployment-summary",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T04:44:28Z",
+            "completedAt": "2026-07-11T04:44:31Z",
+            "steps": []
+          }
+        ]
+      },
+      {
+        "id": 29138432948,
+        "url": "https://github.com/NearthYou/SketchCatch/actions/runs/29138432948",
+        "headSha": "ca0971dc5cc3ced65d69cd1d3b2395088c95004b",
+        "createdAt": "2026-07-11T03:42:20Z",
+        "updatedAt": "2026-07-11T03:50:39Z",
+        "conclusion": "success",
+        "elapsedSeconds": 499.0,
+        "jobs": [
+          {
+            "name": "build-and-push",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:42:26Z",
+            "completedAt": "2026-07-11T03:45:01Z",
+            "steps": [
+              {
+                "name": "Build and push ECS images",
+                "startedAt": "2026-07-11T03:43:40Z",
+                "completedAt": "2026-07-11T03:44:57Z"
+              }
+            ]
+          },
+          {
+            "name": "register-worker",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:45:05Z",
+            "completedAt": "2026-07-11T03:45:13Z",
+            "steps": []
+          },
+          {
+            "name": "deploy-web",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:45:05Z",
+            "completedAt": "2026-07-11T03:50:30Z",
+            "steps": []
+          },
+          {
+            "name": "deploy-api",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:45:16Z",
+            "completedAt": "2026-07-11T03:49:35Z",
+            "steps": []
+          },
+          {
+            "name": "deployment-summary",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:50:34Z",
+            "completedAt": "2026-07-11T03:50:38Z",
+            "steps": []
+          }
+        ]
+      },
+      {
+        "id": 29138018837,
+        "url": "https://github.com/NearthYou/SketchCatch/actions/runs/29138018837",
+        "headSha": "fda48dc31c92424bc0b1865d0e10b2528a2bab39",
+        "createdAt": "2026-07-11T03:27:09Z",
+        "updatedAt": "2026-07-11T03:35:38Z",
+        "conclusion": "success",
+        "elapsedSeconds": 509.0,
+        "jobs": [
+          {
+            "name": "build-and-push",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:27:14Z",
+            "completedAt": "2026-07-11T03:29:51Z",
+            "steps": [
+              {
+                "name": "Build and push ECS images",
+                "startedAt": "2026-07-11T03:28:28Z",
+                "completedAt": "2026-07-11T03:29:47Z"
+              }
+            ]
+          },
+          {
+            "name": "deploy-web",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:29:55Z",
+            "completedAt": "2026-07-11T03:35:32Z",
+            "steps": []
+          },
+          {
+            "name": "register-worker",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:29:56Z",
+            "completedAt": "2026-07-11T03:30:07Z",
+            "steps": []
+          },
+          {
+            "name": "deploy-api",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:30:11Z",
+            "completedAt": "2026-07-11T03:35:26Z",
+            "steps": []
+          },
+          {
+            "name": "deployment-summary",
+            "conclusion": "success",
+            "startedAt": "2026-07-11T03:35:35Z",
+            "completedAt": "2026-07-11T03:35:38Z",
+            "steps": []
+          }
+        ]
+      },
+      {
+        "id": 29108064898,
+        "url": "https://github.com/NearthYou/SketchCatch/actions/runs/29108064898",
+        "headSha": "44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a",
+        "createdAt": "2026-07-10T16:37:55Z",
+        "updatedAt": "2026-07-10T16:44:09Z",
+        "conclusion": "success",
+        "elapsedSeconds": 374.0,
+        "jobs": [
+          {
+            "name": "build-and-push",
+            "conclusion": "success",
+            "startedAt": "2026-07-10T16:38:00Z",
+            "completedAt": "2026-07-10T16:40:42Z",
+            "steps": [
+              {
+                "name": "Build and push ECS images",
+                "startedAt": "2026-07-10T16:39:12Z",
+                "completedAt": "2026-07-10T16:40:40Z"
+              }
+            ]
+          },
+          {
+            "name": "deploy-web",
+            "conclusion": "success",
+            "startedAt": "2026-07-10T16:40:46Z",
+            "completedAt": "2026-07-10T16:44:00Z",
+            "steps": []
+          },
+          {
+            "name": "deploy-api",
+            "conclusion": "success",
+            "startedAt": "2026-07-10T16:40:46Z",
+            "completedAt": "2026-07-10T16:43:51Z",
+            "steps": []
+          },
+          {
+            "name": "deployment-summary",
+            "conclusion": "success",
+            "startedAt": "2026-07-10T16:44:04Z",
+            "completedAt": "2026-07-10T16:44:08Z",
+            "steps": []
+          }
+        ]
+      }
+    ]
+  },
+  "cachePreparation": {
+    "id": 29333603312,
+    "url": "https://github.com/NearthYou/SketchCatch/actions/runs/29333603312",
+    "headSha": "d073863a9ddea879562c1e918129037b55b6b054",
+    "createdAt": "2026-07-14T12:43:42Z",
+    "updatedAt": "2026-07-14T12:47:10Z",
+    "conclusion": "success",
+    "elapsedSeconds": 208.0,
+    "jobs": [
+      {
+        "name": "validate",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:43:48Z",
+        "completedAt": "2026-07-14T12:45:14Z",
+        "steps": []
+      },
+      {
+        "name": "build-web",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:45:18Z",
+        "completedAt": "2026-07-14T12:47:03Z",
+        "steps": [
+          {
+            "name": "Build and push web image",
+            "startedAt": "2026-07-14T12:45:34Z",
+            "completedAt": "2026-07-14T12:46:55Z"
+          }
+        ]
+      },
+      {
+        "name": "build-api",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:45:18Z",
+        "completedAt": "2026-07-14T12:46:46Z",
+        "steps": [
+          {
+            "name": "Build and push API image",
+            "startedAt": "2026-07-14T12:45:31Z",
+            "completedAt": "2026-07-14T12:46:38Z"
+          }
+        ]
+      },
+      {
+        "name": "build-summary",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:47:06Z",
+        "completedAt": "2026-07-14T12:47:10Z",
+        "steps": []
+      },
+      {
+        "name": "production-preflight",
+        "conclusion": "skipped",
+        "startedAt": "2026-07-14T12:47:04Z",
+        "completedAt": "2026-07-14T12:47:03Z",
+        "steps": []
+      },
+      {
+        "name": "register-worker",
+        "conclusion": "skipped",
+        "startedAt": "2026-07-14T12:47:04Z",
+        "completedAt": "2026-07-14T12:47:03Z",
+        "steps": []
+      },
+      {
+        "name": "deploy-api",
+        "conclusion": "skipped",
+        "startedAt": "2026-07-14T12:47:04Z",
+        "completedAt": "2026-07-14T12:47:04Z",
+        "steps": []
+      },
+      {
+        "name": "deploy-web",
+        "conclusion": "skipped",
+        "startedAt": "2026-07-14T12:47:04Z",
+        "completedAt": "2026-07-14T12:47:03Z",
+        "steps": []
+      },
+      {
+        "name": "deployment-summary",
+        "conclusion": "skipped",
+        "startedAt": "2026-07-14T12:47:04Z",
+        "completedAt": "2026-07-14T12:47:04Z",
+        "steps": []
+      }
+    ]
+  },
+  "warmCacheDeployment": {
+    "id": 29333857003,
+    "url": "https://github.com/NearthYou/SketchCatch/actions/runs/29333857003",
+    "headSha": "d073863a9ddea879562c1e918129037b55b6b054",
+    "createdAt": "2026-07-14T12:47:37Z",
+    "updatedAt": "2026-07-14T12:53:46Z",
+    "conclusion": "success",
+    "elapsedSeconds": 369.0,
+    "jobs": [
+      {
+        "name": "validate",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:47:43Z",
+        "completedAt": "2026-07-14T12:49:11Z",
+        "steps": []
+      },
+      {
+        "name": "build-api",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:49:15Z",
+        "completedAt": "2026-07-14T12:49:41Z",
+        "steps": [
+          {
+            "name": "Build and push API image",
+            "startedAt": "2026-07-14T12:49:28Z",
+            "completedAt": "2026-07-14T12:49:35Z"
+          }
+        ]
+      },
+      {
+        "name": "build-web",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:49:15Z",
+        "completedAt": "2026-07-14T12:49:42Z",
+        "steps": [
+          {
+            "name": "Build and push web image",
+            "startedAt": "2026-07-14T12:49:28Z",
+            "completedAt": "2026-07-14T12:49:34Z"
+          }
+        ]
+      },
+      {
+        "name": "build-summary",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:49:45Z",
+        "completedAt": "2026-07-14T12:49:48Z",
+        "steps": []
+      },
+      {
+        "name": "production-preflight",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:49:47Z",
+        "completedAt": "2026-07-14T12:49:59Z",
+        "steps": []
+      },
+      {
+        "name": "deploy-web",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:50:02Z",
+        "completedAt": "2026-07-14T12:53:07Z",
+        "steps": []
+      },
+      {
+        "name": "register-worker",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:50:02Z",
+        "completedAt": "2026-07-14T12:50:09Z",
+        "steps": []
+      },
+      {
+        "name": "deploy-api",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:50:14Z",
+        "completedAt": "2026-07-14T12:53:39Z",
+        "steps": []
+      },
+      {
+        "name": "deployment-summary",
+        "conclusion": "success",
+        "startedAt": "2026-07-14T12:53:42Z",
+        "completedAt": "2026-07-14T12:53:45Z",
+        "steps": []
+      }
+    ]
+  },
+  "comparison": {
+    "baselineMedianSeconds": 470.5,
+    "warmCacheRunSeconds": 369.0,
+    "observedReductionPercent": 21.6,
+    "comparisonScope": "Four historical successful deployments versus one warm-cache deployment. Different baseline commits."
+  }
+}
