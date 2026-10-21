@@ -1,156 +1,60 @@
 # SketchCatch
 
-<p align="center">
-  <img src="./apps/web/public/sketchcatch-logo.png" width="112" alt="SketchCatch 로고" />
-</p>
+클라우드 구성을 다이어그램으로 편집하고 Terraform 코드로 배포하는 서비스입니다. 요구사항을 입력해 설계 초안을 만들거나 기존 저장소와 AWS 자원을 불러올 수 있습니다. 배포 전에는 비용과 보안 위험을 확인하고 실제 변경 내용을 승인합니다.
 
-<h3 align="center">클라우드 인프라, 설계부터 검증과 배포까지 한 화면에서</h3>
+[서비스](https://sketchcatch.net) | [시연 영상](https://www.youtube.com/watch?v=a18RZGg8PyM) | [테스트와 배포 기록](./.eval/README.md) | [제품 문서](./docs/product.md) | [개발 가이드](./docs/development.md)
 
-<p align="center">
-  팀의 요구사항을 눈으로 검토할 수 있는 설계와 실행 가능한 Terraform으로 연결합니다.<br />
-  복잡한 콘솔 작업과 코드 작성 사이를 오가지 않고, 비용과 보안 위험을 확인한 뒤 승인된 변경만 배포할 수 있습니다.
-</p>
+`TypeScript` `Next.js` `Fastify` `Terraform` `ECS Fargate` `PostgreSQL`
 
-<p align="center">
-  <a href="https://sketchcatch.net"><strong>서비스 살펴보기</strong></a>
-  ·
-  <a href="./docs/product.md">제품 소개</a>
-  ·
-  <a href="./docs/development.md">개발 가이드</a>
-</p>
+![다이어그램과 Terraform 코드를 함께 편집하는 화면](assets/sketchcatch-editor.jpg)
 
-<p align="center">
-  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" />
-  <img alt="Terraform" src="https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white" />
-  <img alt="AWS" src="https://img.shields.io/badge/AWS-232F3E?logo=amazonwebservices&logoColor=white" />
-  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" />
-</p>
+## 사용 흐름
 
-![SketchCatch 핵심 기능 소개](./docs/assets/readme/product-overview.png)
+1. 필요한 구성을 입력하거나 기존 Terraform 코드와 AWS 자원을 불러옵니다.
+2. 다이어그램과 코드에서 자원과 연결 관계를 수정합니다.
+3. 예상 비용과 보안 문제, 실제 변경 내용을 확인합니다.
+4. 승인한 구성을 배포하고 진행 상태와 결과를 확인합니다. Git 저장소의 PR과 CI/CD로 전달할 수도 있습니다.
 
-## 인프라 업무의 끊어진 단계를 하나로 연결합니다
+## 구현과 검증
 
-클라우드 인프라를 만들려면 요구사항 정리, 구조 설계, 코드 작성, 위험 점검, 배포 승인을 여러 도구에서 반복해야 합니다. SketchCatch는 이 과정을 하나의 검토 가능한 흐름으로 묶어 팀의 소통 비용과 배포 실수를 줄입니다.
+### Terraform 변환 시 수정 내용 보존
 
-```mermaid
-flowchart LR
-    A["요구사항 입력<br/>텍스트 · 음성 · 저장소"] --> B["구조를 눈으로 설계"]
-    B --> C["Terraform 자동 생성"]
-    C --> D["비용 · 보안 · 설정 점검"]
-    D --> E{"담당자 승인"}
-    E --> F["바로 배포"]
-    E --> G["Git · CI/CD로 전달"]
-    F --> H["이력 · 상태 · 정리"]
-    G --> H
-```
+그림과 코드가 자원을 따로 저장하면 코드에서 고친 값이 다음 생성 때 지워질 수 있었습니다. 두 편집기가 [같은 자원과 연결 정보](./apps/api/src/services/terraform/infrastructure-graph.ts)를 읽고 수정하도록 맞췄습니다. 변환할 수 없는 코드 블록은 지우지 않고 남깁니다. [그림과 코드를 오가는 변환 테스트](./apps/web/features/architecture-board-compiler/authored-terraform-round-trip.test.ts)로 수정 내용과 미지원 블록이 유지되는지 확인합니다.
 
-## 무엇을 할 수 있나요?
+### API 재시작 후 작업 추적
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/readme/visual-workspace.png" alt="클라우드 구조를 시각적으로 편집하는 화면" />
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/readme/diagram-code-sync.png" alt="다이어그램과 Terraform 코드를 동기화하는 구조" />
-    </td>
-  </tr>
-  <tr>
-    <td valign="top">
-      <strong>1. 설명만으로 설계 초안 만들기</strong><br />
-      텍스트나 음성으로 원하는 서비스를 설명하거나 준비된 템플릿을 선택합니다. AI가 초안을 제안하고, 사용자는 화면에서 구성 요소와 연결 관계를 직접 확인하고 수정합니다.
-    </td>
-    <td valign="top">
-      <strong>2. 그림과 Terraform을 함께 관리하기</strong><br />
-      화면에서 바꾼 설계는 Terraform 코드에 반영되고, 가져온 Terraform도 다시 구조로 해석할 수 있습니다. 설계 문서와 실제 코드가 따로 노는 문제를 줄입니다.
-    </td>
-  </tr>
-</table>
+AWS에 배포 실행을 요청한 직후 API가 꺼지면 실행 식별자를 DB에 남기지 못할 수 있었습니다. 새 작업을 시작하면 이미 진행 중인 배포와 겹칠 위험이 있었습니다. [실행 요청](./apps/api/src/deployments/deployment-worker-dispatcher.ts)에 DB의 작업 번호를 함께 보내 같은 번호의 AWS 작업을 다시 찾도록 바꿨습니다. DB에서도 같은 배포의 진행 중인 작업을 하나로 제한합니다. [재시작과 중복 요청 테스트](./.eval/README.md#배포-작업-추적)에 확인 조건을 정리했습니다.
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/readme/reverse-board-candidates.png" alt="기존 클라우드 환경을 구조도로 불러온 화면" />
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/readme/isolated-deployment-workers.png" alt="배포 작업을 독립 실행 환경에서 처리하는 구조" />
-    </td>
-  </tr>
-  <tr>
-    <td valign="top">
-      <strong>3. 기존 클라우드 환경을 한눈에 파악하기</strong><br />
-      이미 운영 중인 클라우드 자원과 연결 관계를 읽어 구조도로 복원합니다. 전체 결과를 먼저 미리 보고, 필요한 설계에만 적용할 수 있습니다.
-    </td>
-    <td valign="top">
-      <strong>4. 검토와 승인 후 안전하게 배포하기</strong><br />
-      예상 비용, 공개 접근, 과도한 권한 같은 위험을 배포 전에 확인합니다. 승인된 작업은 독립된 실행 환경에서 처리하고 결과와 로그를 기록합니다.
-    </td>
-  </tr>
-</table>
+### 운영 배포 측정
 
-### 팀 운영까지 이어지는 핵심 기능
+API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 때까지 다음 작업이 기다려야 했습니다. 두 이미지를 병렬로 만들고 이전 빌드 결과를 재사용하도록 바꿨습니다. [보관한 배포 기록](./.eval/deployment-build-results.json)에서 이전 성공 4회의 전체 시간 중앙값은 470.5초였고 캐시를 준비한 뒤 배포한 1회는 369초였습니다. 서로 다른 커밋의 기록을 비교한 값이므로 [측정 조건](./.eval/README.md#운영-배포-측정)을 함께 확인할 수 있게 했습니다.
 
-| 필요한 일 | SketchCatch가 제공하는 방식 |
+## 아키텍처
+
+웹과 API는 AWS ECS Fargate에서 실행합니다. API는 승인된 배포마다 별도 Worker를 시작합니다. Worker는 사용자가 연결한 AWS 계정의 실행 권한으로 Terraform을 적용합니다.
+
+![웹과 API, 배포 Worker 및 사용자 AWS 환경의 연결 구조](assets/sketchcatch-production-architecture.png)
+
+프로젝트와 배포 상태는 PostgreSQL에 저장합니다. Terraform 파일과 실행 계획, 상태 파일은 S3에 보관합니다. Redis는 임시 진행 상태를 보조하며 배포 완료 여부의 기준은 DB와 AWS 조회 결과입니다. 서버 구성과 권한은 [아키텍처 문서](./docs/architecture.md)에 정리했습니다.
+
+| 용도 | 기술 |
 | --- | --- |
-| 빠르게 시작하기 | 자연어·음성 요구사항, 템플릿, 기존 소스 저장소에서 설계 초안을 만듭니다. |
-| 함께 검토하기 | 구성 요소, 네트워크 관계, 주요 설정을 시각적으로 확인하고 수정합니다. |
-| 코드로 전환하기 | 검토한 설계를 Terraform 파일과 실행 계획으로 바꿉니다. |
-| 배포 전 확인하기 | 비용 추정과 보안·설정 위험을 보여주고 실제 변경 내용을 미리 검토합니다. |
-| 팀 절차에 맞춰 배포하기 | 승인 후 바로 실행하거나 Git Pull Request와 CI/CD 파이프라인으로 전달합니다. |
-| 운영 결과 남기기 | 배포 상태, 로그, 출력값, 변경 이력을 기록하고 필요할 때 자원을 정리합니다. |
+| 설계 편집 화면 | TypeScript, React, Next.js, React Flow |
+| API와 배포 작업 처리 | TypeScript, Fastify, Terraform |
+| 데이터 저장 | PostgreSQL, Drizzle ORM, S3 |
+| 서비스 실행 | Docker, ECS Fargate, ALB |
+| 빌드와 배포 | GitHub Actions, ECR |
 
-## 서비스는 이렇게 구성됩니다
+## 배포 승인과 권한
 
-웹 화면, 업무 API, 배포 실행 환경을 분리했습니다. 사용자가 보는 화면은 클라우드 권한이나 Terraform 명령을 직접 다루지 않으며, 승인된 작업만 별도의 실행 환경으로 전달됩니다.
+설계를 수정하거나 AI 제안을 받아들이는 일과 AWS를 바꾸는 일은 분리했습니다. 배포 전 검사와 Terraform Plan으로 변경할 자원을 보여 주고 사용자가 승인한 계획을 Worker가 실행합니다. 승인 뒤 코드나 대상이 달라지면 같은 승인으로 실행할 수 없습니다.
 
-![SketchCatch 시스템 구성](./docs/assets/readme/system-architecture.png)
+사용자 저장소의 빌드 코드는 제한된 CodeBuild 역할에서 실행합니다. 실제 배포 권한은 Worker에 두고 빌드 결과의 대상과 내용을 다시 확인한 뒤 배포합니다. 자세한 권한 범위는 [빌드와 배포 권한 분리](docs/architecture.md#빌드와-배포-권한)에 있습니다.
 
-```mermaid
-flowchart LR
-    U["사용자"] --> W["웹 화면<br/>Next.js · React"]
-    W --> A["업무 API<br/>Fastify · TypeScript"]
-    A --> D[("프로젝트와 승인 기록<br/>PostgreSQL")]
-    A --> S[("설계·배포 파일<br/>Amazon S3")]
-    A --> R[("작업 상태 캐시<br/>Redis")]
-    A --> AI["AI 설계 지원<br/>OpenAI · AWS AI"]
-    A --> T["독립 실행 작업자<br/>Terraform"]
-    T --> C["고객 클라우드<br/>AWS 우선 지원"]
-    A --> G["소스 저장소 · CI/CD<br/>GitHub Actions"]
-```
-
-현재는 AWS와 Terraform을 우선 지원합니다. 설계 데이터와 클라우드 실행 부분을 분리해 두어, 같은 업무 흐름을 다른 클라우드로 확장할 수 있는 구조입니다.
-
-## 어떤 기술이 들어갔나요?
-
-기술 이름보다 각 기술이 맡은 역할을 중심으로 정리했습니다.
-
-| 영역 | 기술 | 하는 일 |
-| --- | --- | --- |
-| 사용자 화면 | Next.js, React, TypeScript | 설계 편집, 코드 미리보기, 검토와 승인 화면을 제공합니다. |
-| 업무 API | Fastify, TypeScript | 프로젝트, 설계, 배포 요청과 권한 경계를 관리합니다. |
-| 데이터 | PostgreSQL, Drizzle ORM | 프로젝트 상태, 승인, 배포 이력과 운영 기록을 저장합니다. |
-| 파일 보관 | Amazon S3 | Terraform 파일, 실행 계획, 상태 파일과 생성 결과물을 보관합니다. |
-| 인프라 자동화 | Terraform | 검토한 설계를 반복 실행 가능한 인프라 코드로 만듭니다. |
-| AI 지원 | OpenAI API, AWS Bedrock, Amazon Q | 요구사항 해석, 설계 제안, 설명과 위험 검토를 보조합니다. |
-| 실행 환경 | Docker, Amazon ECS/Fargate, ALB | 웹·API·배포 작업을 분리해 운영하고 트래픽을 전달합니다. |
-| 자동 배포 | GitHub Actions, Amazon ECR | 코드 검증, 컨테이너 이미지 생성과 서비스 배포를 자동화합니다. |
-| 상태와 관측 | Redis, Amazon CloudWatch | 긴 작업의 진행 상태를 빠르게 전달하고 실행 로그와 지표를 수집합니다. |
-
-## AI가 마음대로 배포하지 않습니다
-
-AI는 요구사항을 해석하고 설계와 수정 방향을 제안하는 역할만 합니다. 실제 변경은 정해진 검증과 사용자 승인을 통과해야 실행됩니다.
-
-- 설계와 Terraform의 구조 및 참조 관계를 규칙으로 검사합니다.
-- 공개 저장소, 전체 공개 SSH, 공개 데이터베이스, 과도한 권한을 배포 전에 찾습니다.
-- 승인 시점의 코드, 실행 계획, 대상 계정과 리전이 달라지면 실행하지 않습니다.
-- 클라우드 자격 증명과 민감한 출력값을 화면·응답·로그에 노출하지 않습니다.
-- 실패한 작업도 상태와 근거를 남겨 복구 또는 정리 여부를 판단할 수 있게 합니다.
-
-## 로컬에서 실행하기
+## 로컬 실행
 
 <details>
-<summary>개발 환경 실행 방법 보기</summary>
+<summary>개발 환경 설정</summary>
 
 Docker와 저장소에 지정된 pnpm 버전이 필요합니다.
 
@@ -166,7 +70,7 @@ pnpm dev
 </details>
 
 <details>
-<summary>검증 명령 보기</summary>
+<summary>검증 명령</summary>
 
 ```bash
 pnpm harness:check
@@ -178,7 +82,7 @@ pnpm test
 
 </details>
 
-## 더 알아보기
+## 관련 문서
 
 - [제품 범위와 로드맵](./docs/product.md)
 - [시스템 아키텍처](./docs/architecture.md)
@@ -186,21 +90,12 @@ pnpm test
 - [개발 가이드](./docs/development.md)
 - [배포와 안전 정책](./docs/deployment.md)
 
----
-
-<p align="center">
-  <strong>설계 문서가 실제 배포 코드와 어긋나지 않도록.</strong><br />
-  SketchCatch는 팀이 클라우드 변경을 더 쉽게 이해하고, 함께 검토하고, 안전하게 실행하도록 돕습니다.
-</p>
-
-## 팀 기여
-
-아래 내용은 로컬에서 접근 가능한 전체 Git ref의 non-merge 커밋과 변경 경로를 기준으로 요약했습니다.
+## 팀원별 담당
 
 | 팀원 | 주요 영역 | 핵심 기여 |
 | --- | --- | --- |
-| 송채강 | Frontend · Backend | managed deployment·Live Observation 흐름과 Architecture Board·Repository UX 구현 |
-| 시원 | Infrastructure · CI/CD · Backend | AWS ECS/Fargate·RDS·S3 기반과 배포·관측 안전 흐름 구축 |
-| 이경근 | Frontend · Backend · 공용 타입 | Architecture Board·Workspace AI, Reverse Engineering과 Terraform·Template 매핑 구현 |
-| 고윤서 | Frontend · Backend · Database | 로그인/JWT·회원·프로젝트 계정 흐름과 Settings·AWS 연결 UX 구현 |
-| 이정현 | Frontend · Backend · CI/CD | CI/CD handoff·readiness·setup 자동화와 Delivery UI·Project Draft 흐름 구현 |
+| 송채강 | Frontend, Backend | 관리형 배포와 실시간 관측, 설계 보드와 저장소 연결 화면 |
+| 이시원 | Backend, Infrastructure, CI/CD | 설계와 코드 동기화, 배포 실행과 재시작 추적, AWS 운영 환경 |
+| 이경근 | Frontend, Backend, 공용 타입 | 설계 보드와 Workspace AI, 기존 자원 조회와 Terraform 및 템플릿 매핑 |
+| 고윤서 | Frontend, Backend, Database | 로그인과 JWT, 회원과 프로젝트 계정 관리, 설정과 AWS 연결 화면 |
+| 이정현 | Frontend, Backend, CI/CD | CI/CD 전달과 준비 상태 점검, 설정 자동화와 배포 화면, 프로젝트 초안 관리 |

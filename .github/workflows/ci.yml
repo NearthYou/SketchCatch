@@ -41,6 +41,9 @@ jobs:
       - name: Check harness state
         run: pnpm harness:check
 
+      - name: Verify published deployment measurements
+        run: python3 .eval/verify_results.py
+
       - name: Test deployment and Git/CI/CD transitions
         run: |
           pnpm --dir apps/api exec tsx --test \

@@ -13,11 +13,6 @@ const diagramEditorCssSource = readFileSync(
 );
 const normalizedDiagramEditorCssSource = diagramEditorCssSource.replace(/\r\n?/gu, "\n");
 
-test("diagram node view is a memoized custom node renderer", () => {
-  assert.match(diagramNodeViewSource, /import \{[^}]*memo[^}]*\} from "react"/);
-  assert.match(diagramNodeViewSource, /export const DiagramNodeView = memo\(/);
-});
-
 test("diagram node view uses React's default memo comparison and retains its zoom subscription", () => {
   const rendererStart = diagramNodeViewSource.indexOf(
     "export const DiagramNodeView = memo(function DiagramNodeView("

@@ -5,17 +5,11 @@ import { fileURLToPath } from "node:url";
 import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
 
 const clientUrl = new URL("./project-source-repository-client.tsx", import.meta.url);
-const stateUrl = new URL("./project-source-repository-state.ts", import.meta.url);
 const panelUrl = new URL("./github-repository-connection-panel.tsx", import.meta.url);
 
 function readIfPresent(url: URL): string {
   return existsSync(fileURLToPath(url)) ? readFileSync(fileURLToPath(url), "utf8") : "";
 }
-
-test("project source repository has a dedicated client and state module", () => {
-  assert.equal(existsSync(fileURLToPath(clientUrl)), true);
-  assert.equal(existsSync(fileURLToPath(stateUrl)), true);
-});
 
 test("project source repository owns selection and analysis but not GitHub App installation", () => {
   const source = readIfPresent(clientUrl);

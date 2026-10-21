@@ -304,13 +304,13 @@ components:
 
 ## Overview
 
-Expo's marketing site reads like a quietly-confident React-Native developer platform. The base canvas is **pure white** (`{colors.canvas}` — #ffffff) with a soft **sky-blue gradient atmospheric wash** behind the hero band. Near-black ink `{colors.ink}` (#171717) carries body and display alike. The single brand voltage is **pure black** (`{colors.primary}` — #000000) for primary CTAs — minimal and editorial-feeling. A small blue text-link accent (`{colors.text-link}` — #0d74ce) is reserved for inline body links, never as a CTA.
+Expo's marketing site reads like a quietly-confident React-Native developer platform. The base canvas is pure white (`{colors.canvas}` — #ffffff) with a soft sky-blue gradient atmospheric wash behind the hero band. Near-black ink `{colors.ink}` (#171717) carries body and display alike. The single brand voltage is pure black (`{colors.primary}` — #000000) for primary CTAs — minimal and editorial-feeling. A small blue text-link accent (`{colors.text-link}` — #0d74ce) is reserved for inline body links, never as a CTA.
 
-Type runs **Pretendard** as the Korean-first primary family, with Noto Sans KR, Inter, and Geist only as clean fallback choices. A screen may use a **maximum two font families** total; the landing page should usually stay on one sans family, with Inter/Geist reserved only for compact technical samples when a second family is truly needed.
+Type runs Pretendard as the Korean-first primary family, with Noto Sans KR, Inter, and Geist only as clean fallback choices. A screen may use a maximum two font families total; the landing page should usually stay on one sans family, with Inter/Geist reserved only for compact technical samples when a second family is truly needed.
 
-The brand's strongest visual signature is the **device-mockup hero** — a centered MacBook + iPhone composite showing real Expo dev surfaces (Expo Studio, EAS Build dashboard, the Expo Go simulator) — over a sky-blue gradient atmospheric wash. The composite is the page's chrome instead of an illustration.
+The brand's strongest visual signature is the device-mockup hero — a centered MacBook + iPhone composite showing real Expo dev surfaces (Expo Studio, EAS Build dashboard, the Expo Go simulator) — over a sky-blue gradient atmospheric wash. The composite is the page's chrome instead of an illustration.
 
-**Key Characteristics:**
+Key Characteristics:
 - Pure white canvas with sky-blue gradient atmospheric backdrop in hero only.
 - Single primary CTA: pure black pill at `{rounded.md}` (8px) — compact developer-tool dialect.
 - Text-link blue (`{colors.text-link}`) for inline links only — never on a CTA.
@@ -326,48 +326,48 @@ The brand's strongest visual signature is the **device-mockup hero** — a cente
 ## Colors
 
 ### Brand & Accent
-- **Black** (`{colors.primary}` — #000000): Primary CTA fill. Used scarcely.
-- **Black Active** (`{colors.primary-active}` — #1a1a1a): Press state.
-- **Text Link Blue** (`{colors.text-link}` — #0d74ce): Inline body links inside long-form copy. Scoped narrowly — never on CTAs.
-- **Legal Link Blue** (`{colors.text-link-secondary}` — #476cff): Inline links inside legal copy footer.
-- **Bright Cyan** (`{colors.accent-link-bright}` — #47c2ff): Used very sparingly inside docs widget links.
+- Black (`{colors.primary}` — #000000): Primary CTA fill. Used scarcely.
+- Black Active (`{colors.primary-active}` — #1a1a1a): Press state.
+- Text Link Blue (`{colors.text-link}` — #0d74ce): Inline body links inside long-form copy. Scoped narrowly — never on CTAs.
+- Legal Link Blue (`{colors.text-link-secondary}` — #476cff): Inline links inside legal copy footer.
+- Bright Cyan (`{colors.accent-link-bright}` — #47c2ff): Used very sparingly inside docs widget links.
 
 ### Surface
-- **Canvas** (`{colors.canvas}` — #ffffff): Pure white page floor.
-- **Canvas Soft** (`{colors.canvas-soft}` — #fafafa): Subtle alternating band.
-- **Surface Card** (`{colors.surface-card}` — #ffffff): Pure white card.
-- **Surface Strong** (`{colors.surface-strong}` — #f0f0f3): Badges, ecosystem tiles, secondary buttons.
-- **Surface Dark** (`{colors.surface-dark}` — #171717): Dark feature cards, code blocks, IDE mockups, featured pricing.
-- **Surface Dark Elevated** (`{colors.surface-dark-elevated}` — #1a1a1a): One step lighter inside dark cards.
+- Canvas (`{colors.canvas}` — #ffffff): Pure white page floor.
+- Canvas Soft (`{colors.canvas-soft}` — #fafafa): Subtle alternating band.
+- Surface Card (`{colors.surface-card}` — #ffffff): Pure white card.
+- Surface Strong (`{colors.surface-strong}` — #f0f0f3): Badges, ecosystem tiles, secondary buttons.
+- Surface Dark (`{colors.surface-dark}` — #171717): Dark feature cards, code blocks, IDE mockups, featured pricing.
+- Surface Dark Elevated (`{colors.surface-dark-elevated}` — #1a1a1a): One step lighter inside dark cards.
 
 ### Atmospheric Backdrop
-- **Sky Light** (`{colors.gradient-sky-light}` — #cfe7ff) + **Sky Mid** (`{colors.gradient-sky-mid}` — #a8c8e8): The soft sky-blue gradient wash behind the homepage hero only. Not a brand action color.
+- Sky Light (`{colors.gradient-sky-light}` — #cfe7ff) + Sky Mid (`{colors.gradient-sky-mid}` — #a8c8e8): The soft sky-blue gradient wash behind the homepage hero only. Not a brand action color.
 
 ### Hairlines
-- **Hairline** (`{colors.hairline}` — #f0f0f3): Default 1px divider.
-- **Hairline Soft** (`{colors.hairline-soft}` — #f5f5f7): Lighter divider.
-- **Hairline Strong** (`{colors.hairline-strong}` — #dcdee0): Stronger panel outline.
+- Hairline (`{colors.hairline}` — #f0f0f3): Default 1px divider.
+- Hairline Soft (`{colors.hairline-soft}` — #f5f5f7): Lighter divider.
+- Hairline Strong (`{colors.hairline-strong}` — #dcdee0): Stronger panel outline.
 
 ### Text
-- **Ink** (`{colors.ink}` — #171717): Display, body emphasis.
-- **Body** (`{colors.body}` — #60646c): Default running-text — slightly cool gray.
-- **Body Strong** (`{colors.body-strong}` — #171717): Same as ink.
-- **Muted** (`{colors.muted}` — #999999): Sub-titles.
-- **Muted Soft** (`{colors.muted-soft}` — #cccccc): Disabled text.
-- **On Primary** (`{colors.on-primary}` — #ffffff): White text on black CTA.
-- **On Dark** (`{colors.on-dark}` — #ffffff): White text on dark cards.
-- **On Dark Soft** (`{colors.on-dark-soft}` — #b0b4ba): Muted off-white on dark.
+- Ink (`{colors.ink}` — #171717): Display, body emphasis.
+- Body (`{colors.body}` — #60646c): Default running-text — slightly cool gray.
+- Body Strong (`{colors.body-strong}` — #171717): Same as ink.
+- Muted (`{colors.muted}` — #999999): Sub-titles.
+- Muted Soft (`{colors.muted-soft}` — #cccccc): Disabled text.
+- On Primary (`{colors.on-primary}` — #ffffff): White text on black CTA.
+- On Dark (`{colors.on-dark}` — #ffffff): White text on dark cards.
+- On Dark Soft (`{colors.on-dark-soft}` — #b0b4ba): Muted off-white on dark.
 
 ### Semantic
-- **Warning** (`{colors.accent-warning}` — #ab6400): Warning text inside docs callouts.
-- **Preview** (`{colors.accent-preview}` — #8145b5): "Preview" tag color.
-- **Success** (`{colors.semantic-success}` — #16a34a): Confirmation.
-- **Error** (`{colors.semantic-error}` — #eb8e90): Validation errors.
+- Warning (`{colors.accent-warning}` — #ab6400): Warning text inside docs callouts.
+- Preview (`{colors.accent-preview}` — #8145b5): "Preview" tag color.
+- Success (`{colors.semantic-success}` — #16a34a): Confirmation.
+- Error (`{colors.semantic-error}` — #eb8e90): Validation errors.
 
 ## Typography
 
 ### Font Family
-**Pretendard** is the primary sans family across Korean UI, body, headings, buttons, and captions. Fallback stack: `Pretendard`, `Noto Sans KR`, `Inter`, `Geist`, `sans-serif`. Inter or Geist may be used for English-heavy or technical snippets, but only as the second active family. Keep a **maximum two font families** on any one screen.
+Pretendard is the primary sans family across Korean UI, body, headings, buttons, and captions. Fallback stack: `Pretendard`, `Noto Sans KR`, `Inter`, `Geist`, `sans-serif`. Inter or Geist may be used for English-heavy or technical snippets, but only as the second active family. Keep a maximum two font families on any one screen.
 
 Allowed family pool: Pretendard, Noto Sans KR, S-Core, Hanlim Myeongjo, Inter, and Geist. For Korean service screens, default to Pretendard or Noto Sans KR. Avoid decorative brand fonts such as Lotteria, PyeongChang Peace, Binggrae, or similar promotional typefaces because they harm readability and make the product feel less professional.
 
@@ -391,13 +391,13 @@ Allowed family pool: Pretendard, Noto Sans KR, S-Core, Hanlim Myeongjo, Inter, a
 | `{typography.nav-link}` | 14px | 600 | 1.4 | 0 | Top-nav menu |
 
 ### Principles
-- **Title, body, button, and caption sizes stay fixed once chosen.** Avoid mixing many nearby sizes on the same screen.
-- **Display weight stays at 700 in Pretendard** — strong enough for Korean headings without feeling decorative.
-- **Body weight stays at 400** with 1.5 line-height for readable Korean paragraphs.
-- **Buttons stay at 14px / 700** so action labels feel deliberate.
-- **Captions stay at 13px / 500**; uppercase labels use 11px / 700 with modest 0.04em spacing.
-- **Letter spacing stays at 0 for Korean text** unless the label is very short uppercase English.
-- **Code and technical snippets may use Inter/Geist** as the second family, but do not introduce a third family.
+- Title, body, button, and caption sizes stay fixed once chosen. Avoid mixing many nearby sizes on the same screen.
+- Display weight stays at 700 in Pretendard — strong enough for Korean headings without feeling decorative.
+- Body weight stays at 400 with 1.5 line-height for readable Korean paragraphs.
+- Buttons stay at 14px / 700 so action labels feel deliberate.
+- Captions stay at 13px / 500; uppercase labels use 11px / 700 with modest 0.04em spacing.
+- Letter spacing stays at 0 for Korean text unless the label is very short uppercase English.
+- Code and technical snippets may use Inter/Geist as the second family, but do not introduce a third family.
 
 ### 줄바꿈 원칙
 - UI 텍스트는 단순히 컨테이너 안에 들어가는지가 아니라, 사람이 자연스럽게 읽을 수 있는 의미 단위로 줄바꿈되어야 합니다.
@@ -413,9 +413,9 @@ Use Pretendard first. Noto Sans KR is the safest Korean fallback; Inter and Geis
 ## Layout
 
 ### Spacing System
-- **Base unit:** 4px.
-- **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.base}` 16px · `{spacing.md}` 20px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 96px.
-- **Section padding:** 96px.
+- Base unit: 4px.
+- Tokens: `{spacing.xxs}` 4px  /  `{spacing.xs}` 8px  /  `{spacing.sm}` 12px  /  `{spacing.base}` 16px  /  `{spacing.md}` 20px  /  `{spacing.lg}` 24px  /  `{spacing.xl}` 32px  /  `{spacing.xxl}` 48px  /  `{spacing.section}` 96px.
+- Section padding: 96px.
 
 ### Grid & Container
 - Max content width: ~1200px.
@@ -441,9 +441,9 @@ Generous editorial pacing. The white canvas does not compete with the hero's gra
 | Dark inversion | `{colors.surface-dark}` (#171717) | Dark feature cards, code blocks, featured pricing |
 
 ### Decorative Depth
-- **Sky-blue gradient backdrop** in the hero only — atmospheric depth without claiming to be a brand color.
-- **Device mockup composite** as page chrome — MacBook + iPhone showing real Expo dev surfaces.
-- **SketchCatch product frame** replaces generic device chrome when the page explains this product: show the actual Board, IaC Preview, or Check surface inside the elevated frame.
+- Sky-blue gradient backdrop in the hero only — atmospheric depth without claiming to be a brand color.
+- Device mockup composite as page chrome — MacBook + iPhone showing real Expo dev surfaces.
+- SketchCatch product frame replaces generic device chrome when the page explains this product: show the actual Board, IaC Preview, or Check surface inside the elevated frame.
 
 ## Shapes
 
@@ -467,65 +467,65 @@ Compact developer-ergonomic radii — 8px CTAs, 12px cards. Pill geometry is res
 
 ### Top Navigation
 
-**`top-nav`** — Background `{colors.canvas}`, text `{colors.ink}`, height 64px. Layout: Expo wordmark left, primary horizontal menu (Tools / Workflows / EAS / Pricing / Docs / Showcase), Sign In + Get started CTA right.
+`top-nav` — Background `{colors.canvas}`, text `{colors.ink}`, height 64px. Layout: Expo wordmark left, primary horizontal menu (Tools / Workflows / EAS / Pricing / Docs / Showcase), Sign In + Get started CTA right.
 
 ### Buttons
 
-**`button-primary`** — Pure black pill. Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.button}` (14px / 500), padding 10px × 18px, height 40px, rounded `{rounded.md}` (8px).
+`button-primary` — Pure black pill. Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.button}` (14px / 500), padding 10px × 18px, height 40px, rounded `{rounded.md}` (8px).
 
-**`button-primary-active`** — Press state. Background `{colors.primary-active}`.
+`button-primary-active` — Press state. Background `{colors.primary-active}`.
 
-**`button-secondary`** — White card with 1px hairline-strong border. Background `{colors.surface-card}`, text `{colors.ink}`, 1px `{colors.hairline-strong}` border.
+`button-secondary` — White card with 1px hairline-strong border. Background `{colors.surface-card}`, text `{colors.ink}`, 1px `{colors.hairline-strong}` border.
 
-**`button-tertiary-text`** — Inline blue text link. Background transparent, text `{colors.text-link}`.
+`button-tertiary-text` — Inline blue text link. Background transparent, text `{colors.text-link}`.
 
 ### Hero & Device Mockup
 
-**`hero-band`** — Background `{colors.canvas}` with a soft sky-blue gradient wash behind the centered headline. Display headline in `{typography.display-mega}` (64px / 600 / -1.92px), subhead in `{typography.body-md}`, single primary CTA, then below — the device mockup composite.
+`hero-band` — Background `{colors.canvas}` with a soft sky-blue gradient wash behind the centered headline. Display headline in `{typography.display-mega}` (64px / 600 / -1.92px), subhead in `{typography.body-md}`, single primary CTA, then below — the device mockup composite.
 
-**`device-mockup-card`** — A layered MacBook + iPhone composite showing real Expo dev surfaces. Background `{colors.surface-card}`, rounded `{rounded.xl}`. The MacBook holds the EAS dashboard or Expo Studio screenshot; the iPhone overlay shows the running app in Expo Go. This is the page chrome.
+`device-mockup-card` — A layered MacBook + iPhone composite showing real Expo dev surfaces. Background `{colors.surface-card}`, rounded `{rounded.xl}`. The MacBook holds the EAS dashboard or Expo Studio screenshot; the iPhone overlay shows the running app in Expo Go. This is the page chrome.
 
 ### Cards
 
-**`feature-card`** — Background `{colors.surface-card}`, text `{colors.ink}`, type `{typography.title-md}`, rounded `{rounded.lg}`, padding 24px, 1px `{colors.hairline-strong}` border.
+`feature-card` — Background `{colors.surface-card}`, text `{colors.ink}`, type `{typography.title-md}`, rounded `{rounded.lg}`, padding 24px, 1px `{colors.hairline-strong}` border.
 
-**`feature-card-dark`** — Dark variant. Background `{colors.surface-dark}`, text `{colors.on-dark}`. Same shape, dark inversion.
+`feature-card-dark` — Dark variant. Background `{colors.surface-dark}`, text `{colors.on-dark}`. Same shape, dark inversion.
 
-**`workflow-step-card`** — Step in the "Get your app on every device" workflow row. Background `{colors.surface-card}`, text `{colors.body}`, rounded `{rounded.lg}`, padding 20px. Layout: 32px square `{component.workflow-step-icon}` + step number + label + body.
+`workflow-step-card` — Step in the "Get your app on every device" workflow row. Background `{colors.surface-card}`, text `{colors.body}`, rounded `{rounded.lg}`, padding 20px. Layout: 32px square `{component.workflow-step-icon}` + step number + label + body.
 
-**`workflow-step-icon`** — Square plate. Background `{colors.surface-strong}`, rounded `{rounded.md}`, 32px size.
+`workflow-step-icon` — Square plate. Background `{colors.surface-strong}`, rounded `{rounded.md}`, 32px size.
 
-**`testimonial-card`** — Quote card. Background `{colors.surface-card}`, text `{colors.body}`, rounded `{rounded.lg}`, padding 24px.
+`testimonial-card` — Quote card. Background `{colors.surface-card}`, text `{colors.body}`, rounded `{rounded.lg}`, padding 24px.
 
 ### Code & IDE
 
-**`code-block`** — Inline code block. Background `{colors.surface-dark}`, text `{colors.on-dark}` in `{typography.code}` (Inter/Geist 13px), rounded `{rounded.lg}`, padding 20px. White text on dark.
+`code-block` — Inline code block. Background `{colors.surface-dark}`, text `{colors.on-dark}` in `{typography.code}` (Inter/Geist 13px), rounded `{rounded.lg}`, padding 20px. White text on dark.
 
-**`ide-mockup-card`** — Stylized IDE mockup. Background `{colors.surface-dark}`, rounded `{rounded.lg}`. Multi-pane editor + terminal preview.
+`ide-mockup-card` — Stylized IDE mockup. Background `{colors.surface-dark}`, rounded `{rounded.lg}`. Multi-pane editor + terminal preview.
 
 ### Pricing
 
-**`pricing-tier-card`** — Standard pricing tier. Background `{colors.surface-card}`, rounded `{rounded.lg}`, padding 32px, 1px `{colors.hairline-strong}` border.
+`pricing-tier-card` — Standard pricing tier. Background `{colors.surface-card}`, rounded `{rounded.lg}`, padding 32px, 1px `{colors.hairline-strong}` border.
 
-**`pricing-tier-featured`** — Featured tier. Background `{colors.surface-dark}`, text `{colors.on-dark}`. Same shape, dark inversion.
+`pricing-tier-featured` — Featured tier. Background `{colors.surface-dark}`, text `{colors.on-dark}`. Same shape, dark inversion.
 
 ### Ecosystem
 
-**`ecosystem-tile`** — Square logo plate for ecosystem partner logos (TypeScript, React, Sentry, etc.). Background `{colors.surface-card}`, rounded `{rounded.md}`, 64px size, 1px `{colors.hairline}` border.
+`ecosystem-tile` — Square logo plate for ecosystem partner logos (TypeScript, React, Sentry, etc.). Background `{colors.surface-card}`, rounded `{rounded.md}`, 64px size, 1px `{colors.hairline}` border.
 
 ### Forms & Tags
 
-**`text-input`** — Background `{colors.surface-card}`, text `{colors.ink}`, rounded `{rounded.md}` (8px), padding 12px × 16px, height 44px, 1px `{colors.hairline-strong}` border. Focus thickens border to 2px ink.
+`text-input` — Background `{colors.surface-card}`, text `{colors.ink}`, rounded `{rounded.md}` (8px), padding 12px × 16px, height 44px, 1px `{colors.hairline-strong}` border. Focus thickens border to 2px ink.
 
-**`badge-pill`** — Small uppercase pill. Background `{colors.surface-strong}`, text `{colors.ink}`, type `{typography.caption-uppercase}`, rounded `{rounded.pill}`, padding 4px × 10px.
+`badge-pill` — Small uppercase pill. Background `{colors.surface-strong}`, text `{colors.ink}`, type `{typography.caption-uppercase}`, rounded `{rounded.pill}`, padding 4px × 10px.
 
 ### CTA / Footer
 
-**`cta-band`** — Pre-footer band. Background `{colors.canvas}`, centered display headline in `{typography.display-lg}`, single black pill CTA. 96px padding.
+`cta-band` — Pre-footer band. Background `{colors.canvas}`, centered display headline in `{typography.display-lg}`, single black pill CTA. 96px padding.
 
-**`footer-light`** — Closing white footer. Background `{colors.canvas}`, text `{colors.body}`. 5-column link list. 64×48px padding.
+`footer-light` — Closing white footer. Background `{colors.canvas}`, text `{colors.body}`. 5-column link list. 64×48px padding.
 
-**`footer-link`** — Background transparent, text `{colors.body}`, type `{typography.body-sm}`.
+`footer-link` — Background transparent, text `{colors.body}`, type `{typography.body-sm}`.
 
 ## Do's and Don'ts
 
