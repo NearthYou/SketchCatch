@@ -9,15 +9,17 @@
 ```mermaid
 flowchart LR
   Browser["브라우저<br/>설계와 Terraform 편집"] --> ALB["ALB<br/>HTTPS 요청 분기"]
-  subgraph Service["SketchCatch AWS 환경"]<br/>    ALB --> Web["ECS Web
-Next.js"]<br/>    ALB --> API["ECS API
-Fastify"]<br/>    API --> DB[("RDS PostgreSQL
-프로젝트와 배포 기록")]<br/>    API --> Cache[("Redis
-임시 진행 상태")]<br/>    API --> Files[("S3
-Terraform과 Plan 및 State")]<br/>    API -->|"작업별 RunTask"| Worker["ECS Worker<br/>Terraform 실행"]
+  subgraph Service["SketchCatch AWS 환경"]
+    ALB --> Web["ECS Web<br/>Next.js"]
+    ALB --> API["ECS API<br/>Fastify"]
+    API --> DB[("RDS PostgreSQL<br/>프로젝트와 배포 기록")]
+    API --> Cache[("Redis<br/>임시 진행 상태")]
+    API --> Files[("S3<br/>Terraform과 Plan 및 State")]
+    API -->|"작업별 RunTask"| Worker["ECS Worker<br/>Terraform 실행"]
     Worker --> Files
   end
-  Worker -->|"사용자 역할 AssumeRole"| Target["사용자의 AWS 환경"]<br/>  Worker --> Logs["CloudWatch Logs"]
+  Worker -->|"사용자 역할 AssumeRole"| Target["사용자의 AWS 환경"]
+  Worker --> Logs["CloudWatch Logs"]
 ```
 
 ALB는 일반 요청을 Web으로 보내고 `/api`와 health 요청은 API로 보냅니다. Web과 API는 서울 리전의 Public Subnet에서 ALB 요청만 받습니다. NAT Gateway는 사용하지 않습니다. RDS와 Redis는 Private Subnet에 둡니다.
@@ -142,6 +144,8 @@ CloudFormation이 소유한 resource는 stack이 남아 있는 동안 Terraform�
 | 다이어그램 이미지, export zip, thumbnail                                       | S3                                                 |
 | Redis 임시 상태 데이터                                                     | Redis, 짧은 TTL                                    |
 | Live Observation session, receipt dedup, 1초 bucket                            | Redis, 최대 15분 TTL                               |
+
+편집 중인 Terraform 초안은 복구를 위해 RDS에도 저장합니다. 배포 대상으로 확정한 파일과 Plan, State는 S3에 보관합니다.
 
 RDS는 원천 데이터와 metadata를 저장한다. SketchCatch S3는 Terraform, tfplan, export처럼 서비스가 생성한 파일성 산출물을 저장한다. 사용자 application artifact byte는 사용자 ECR/S3 또는 provider storage에 남기고 SketchCatch production ECR/S3로 복사하지 않는다.
 Redis는 Deployment, Reverse Engineering, Git/CI/CD Integration처럼 오래 걸리는 workflow 상태와 streaming-friendly metadata를 보조한다. Live Observation은 예외적으로 15분 세션, public token SHA-256 lookup, receipt dedup, 원자 count, 1초 bucket을 Redis에만 저장하며 영구 Deployment 기록으로 승격하지 않는다. Redis 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 남긴다.

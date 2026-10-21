@@ -35,11 +35,12 @@ API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 �
 
 ```mermaid
 flowchart LR
-  Browser["브라우저<br/>다이어그램과 코드 편집"] --> ALB["ALB"]<br/>  ALB --> Web["ECS Web
-Next.js"]<br/>  ALB --> API["ECS API
-Fastify"]<br/>  API --> DB[("PostgreSQL
-프로젝트와 배포 기록")]<br/>  API --> Cache[("Redis
-임시 진행 상태")]<br/>  API -->|"배포별 실행"| Worker["ECS Worker<br/>Terraform"]
+  Browser["브라우저<br/>다이어그램과 코드 편집"] --> ALB["ALB"]
+  ALB --> Web["ECS Web<br/>Next.js"]
+  ALB --> API["ECS API<br/>Fastify"]
+  API --> DB[("PostgreSQL<br/>프로젝트와 배포 기록")]
+  API --> Cache[("Redis<br/>임시 진행 상태")]
+  API -->|"배포별 실행"| Worker["ECS Worker<br/>Terraform"]
   API --> S3[("S3<br/>코드와 Plan 및 State")]
   Worker --> S3
   Worker -->|"사용자 역할의 권한"| AWS["사용자의 AWS 환경"]
