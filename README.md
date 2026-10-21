@@ -65,11 +65,7 @@ flowchart LR
 
 ## 구현과 검증
 
-같은 클라우드 구성을 그림과 코드로 편집하려면 수정 내용이 양쪽에 유지돼야 합니다. 배포 중에는 API가 재시작돼도 진행 중인 작업을 찾을 수 있어야 합니다. 이 두 문제를 중심으로 저장 구조와 실행 추적 방식을 정리했습니다.
-
-![공통 그래프로 편집 내용을 맞추고 작업 번호로 ECS 실행을 다시 찾는 구조](./docs/assets/readme/implementation-summary.png)
-
-### 설계와 코드의 변경 유지
+### Terraform 변환 시 수정 내용 보존
 
 그림과 코드가 자원을 따로 저장하면 코드에서 고친 값이 다음 생성 때 지워질 수 있었습니다. 두 편집기가 [같은 자원과 연결 정보](./apps/api/src/services/terraform/infrastructure-graph.ts)를 읽고 수정하도록 맞췄습니다. 변환할 수 없는 코드 블록은 지우지 않고 남깁니다. [그림과 코드를 오가는 변환 테스트](./apps/web/features/architecture-board-compiler/authored-terraform-round-trip.test.ts)로 수정 내용과 미지원 블록이 유지되는지 확인합니다.
 
