@@ -95,7 +95,7 @@ pnpm test
 | 팀원 | 주요 영역 | 핵심 기여 |
 | --- | --- | --- |
 | 송채강 | Frontend, Backend | 관리형 배포와 실시간 관측, 설계 보드와 저장소 연결 화면 |
-| 이시원 | Infrastructure, CI/CD, Backend | 설계와 코드 동기화, 배포 실행과 재시작 추적, AWS 운영 환경 |
+| 이시원 | Backend, Infrastructure, CI/CD | 설계와 코드 동기화, 배포 실행과 재시작 추적, AWS 운영 환경 |
 | 이경근 | Frontend, Backend, 공용 타입 | 설계 보드와 Workspace AI, 기존 자원 조회와 Terraform 및 템플릿 매핑 |
 | 고윤서 | Frontend, Backend, Database | 로그인과 JWT, 회원과 프로젝트 계정 관리, 설정과 AWS 연결 화면 |
 | 이정현 | Frontend, Backend, CI/CD | CI/CD 전달과 준비 상태 점검, 설정 자동화와 배포 화면, 프로젝트 초안 관리 |
