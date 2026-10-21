@@ -41,7 +41,10 @@ test("evidence review manifest는 29개 corpus에서 source-balanced 8개 pendin
     assert.equal(entry.review.reviewer, null);
     assert.equal(entry.review.decision, null);
     assert.equal(entry.review.rationale, null);
-    assert.match(entry.captures.before.expectedPath, /^docs\/diagram-layout-reference\/compiler-evidence-captures\/v1\//u);
+    assert.match(
+      entry.captures.before.expectedPath,
+      /^apps\/web\/test-fixtures\/architecture-board-layout\/compiler-evidence-captures\/v1\//u
+    );
     assert.match(entry.captures.before.expectedPath, /\/before\.webp$/u);
     assert.match(entry.captures.after.expectedPath, /\/after\.webp$/u);
     assert.match(entry.diagrams.sourceFingerprint, /^sha256:[0-9a-f]{64}$/u);

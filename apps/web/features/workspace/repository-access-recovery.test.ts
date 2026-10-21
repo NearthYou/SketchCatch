@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-test("Direct Deployment shows exact Repository evidence and recovery actions after checkout failure", () => {
+test("managed deployment shows exact Repository evidence and recovery actions after checkout failure", () => {
   const source = readFileSync(
     fileURLToPath(new URL("./DirectDeploymentScreen.tsx", import.meta.url)),
     "utf8"

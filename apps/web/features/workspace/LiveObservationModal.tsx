@@ -31,7 +31,7 @@ import {
 import { createLiveObservationDesignSimulationRequest } from "./live-observation-ai-recommendation";
 import { useLiveObservationQueries } from "./live-observation-queries";
 import {
-  incrementLiveObservationEcsMaxCapacity,
+  incrementLiveObservationEcsScalingSettings,
   type LiveObservationTerraformUpdateResult
 } from "./live-observation-terraform-update";
 import { LiveObservationSignalDashboard } from "./LiveObservationSignalDashboard";
@@ -182,7 +182,7 @@ export function LiveObservationModal({
   const terraformUpdatePreview = useMemo(() => {
     if (!trafficIncidentSnapshot || terraformFiles.length === 0) return null;
     try {
-      return incrementLiveObservationEcsMaxCapacity(terraformFiles);
+      return incrementLiveObservationEcsScalingSettings(terraformFiles);
     } catch {
       return null;
     }
@@ -192,7 +192,7 @@ export function LiveObservationModal({
         actionLabel: "수정안 저장",
         boundary: "저장해도 실제 서버는 바뀌지 않아요.",
         description: terraformUpdatePreview
-          ? `최대 실행 서버를 ${terraformUpdatePreview.previousMaxCapacity}개에서 ${terraformUpdatePreview.nextMaxCapacity}개로 늘릴 수 있어요.`
+          ? `max_capacity를 ${terraformUpdatePreview.previousMaxCapacity}에서 ${terraformUpdatePreview.nextMaxCapacity}로, target_value를 ${terraformUpdatePreview.previousTargetValue}에서 ${terraformUpdatePreview.nextTargetValue}로 늘릴 수 있어요.`
           : "자동으로 바꿀 설정을 찾지 못했어요. 코드에서 직접 확인해 주세요.",
         ...(aiRecommendationState === "error" && aiRecommendationError
           ? { errorMessage: aiRecommendationError }
@@ -702,8 +702,10 @@ export function LiveObservationModal({
             <div className={styles.liveObservationMessage} role="status">
               <strong>용량 수정안을 저장했어요</strong>
               <p>
-                최대 실행 서버 {appliedTerraformUpdate.previousMaxCapacity}개 →{" "}
-                {appliedTerraformUpdate.nextMaxCapacity}개
+                max_capacity {appliedTerraformUpdate.previousMaxCapacity} →{" "}
+                {appliedTerraformUpdate.nextMaxCapacity} · target_value{" "}
+                {appliedTerraformUpdate.previousTargetValue} →{" "}
+                {appliedTerraformUpdate.nextTargetValue}
               </p>
               <p>실제 서버는 아직 바뀌지 않았어요.</p>
               <button

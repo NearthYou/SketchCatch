@@ -97,7 +97,7 @@ test("empty Deployment picker cannot open a blank native menu", () => {
   assert.match(deploymentPickerSource, /관측할 배포가 없어요\./);
 });
 
-test("Direct Deployment opens Live Observation without leaking the click event as a selection", () => {
+test("managed deployment opens Live Observation without leaking the click event as a selection", () => {
   assert.match(deploymentOutputLinksSource, /onClick=\{\(\) => onOpenLiveObservation\(\)\}/);
   assert.doesNotMatch(deploymentOutputLinksSource, /onClick=\{onOpenLiveObservation\}/);
 });
@@ -153,6 +153,34 @@ test("places the deployment time label inline to the left of the selected timest
     workspaceStyles,
     /\.liveObservationTargetBar label\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/
   );
+});
+test("web output presents the entry URL and QR action as one clear service card", () => {
+  assert.match(deploymentOutputLinksSource, /웹 엔트리 포인트 URL/);
+  assert.doesNotMatch(deploymentOutputLinksSource, /"PUBLIC"/);
+  assert.match(deploymentOutputLinksSource, /접속 QR · 실시간 관측/);
+  assert.match(deploymentOutputLinksSource, /styles\.deploymentOutputLinkValue/);
+  assert.match(workspaceStyles, /\.deploymentOutputLinks article\s*\{[\s\S]*?box-shadow:/);
+  assert.match(workspaceStyles, /\.deploymentOutputLinkActions button\[data-tone="qr"\]/);
+  assert.doesNotMatch(
+    getSourceBlock(workspaceStyles, ".deploymentOutputLinks article {", "}"),
+    /gradient\(/
+  );
+});
+
+test("keeps Deployment and CI/CD chrome on the neutral workspace palette", () => {
+  const requiredState = getSourceBlock(workspaceStyles, ".cicdRequiredState {", "}");
+  const repositoryBadge = getSourceBlock(
+    workspaceStyles,
+    ".cicdRepositorySummary > strong,",
+    "}"
+  );
+
+  assert.match(workspaceStyles, /--deployment-accent:\s*#171717/);
+  assert.doesNotMatch(workspaceStyles, /--deployment-blue:\s*#1267f4/);
+  assert.match(requiredState, /background:\s*var\(--workspace-surface-muted/);
+  assert.match(requiredState, /color:\s*var\(--workspace-text/);
+  assert.match(repositoryBadge, /background:\s*var\(--workspace-surface-strong/);
+  assert.match(repositoryBadge, /color:\s*var\(--workspace-text/);
 });
 test("anchors the QR utility below its button without covering header controls", () => {
   assert.match(
@@ -284,7 +312,8 @@ test("clears AI analysis state when its incident inputs disappear", () => {
 });
 test("offers the capacity change only as an explicit Project Draft action", () => {
   assert.match(modalSource, /createLiveObservationDesignSimulationRequest/);
-  assert.match(modalSource, /최대 실행 서버를/);
+  assert.match(modalSource, /max_capacity/);
+  assert.match(modalSource, /target_value/);
   assert.match(modalSource, /onAction: \(\) => void applyTerraformUpdate\(\)/);
   assert.match(modalSource, /저장해도 실제 서버는 바뀌지 않아요\./);
   assert.match(modalSource, /const result = await onApplyTerraformUpdate\(\)/);

@@ -95,7 +95,7 @@ function normalizeFindingText(value: string): string {
 
 function createSummary(findings: readonly CheckFinding[]): string {
   if (findings.length === 0) {
-    return "현재 기본 Pre-Deployment Check에서 막는 항목은 없습니다.";
+    return "현재 기본 deployment check에서 막는 항목은 없습니다.";
   }
 
   if (findings.some(isSecurityRelatedFinding)) {
@@ -213,7 +213,7 @@ function createSuggestionForFinding(finding: CheckFinding): ArchitectureSuggesti
           security: "neutral",
           reliability: "improve"
         },
-        explanation: "Architecture Board에서 빠진 config를 채운 뒤 Pre-Deployment Check를 다시 실행하세요."
+        explanation: "Architecture Board에서 빠진 config를 채운 뒤 deployment check를 다시 실행하세요."
       };
     case "permission":
     case "network":

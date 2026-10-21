@@ -199,8 +199,8 @@ pnpm test
 
 | 팀원 | 주요 영역 | 핵심 기여 |
 | --- | --- | --- |
-| 송채강 | Frontend · Backend | Direct Deployment·Live Observation 흐름과 Architecture Board·Repository UX 구현 |
+| 송채강 | Frontend · Backend | managed deployment·Live Observation 흐름과 Architecture Board·Repository UX 구현 |
 | 시원 | Infrastructure · CI/CD · Backend | AWS ECS/Fargate·RDS·S3 기반과 배포·관측 안전 흐름 구축 |
 | 이경근 | Frontend · Backend · 공용 타입 | Architecture Board·Workspace AI, Reverse Engineering과 Terraform·Template 매핑 구현 |
 | 고윤서 | Frontend · Backend · Database | 로그인/JWT·회원·프로젝트 계정 흐름과 Settings·AWS 연결 UX 구현 |
-| 이정현 | Frontend · Backend · CI/CD | Git/CI/CD handoff·readiness·setup 자동화와 Delivery UI·Project Draft 흐름 구현 |
+| 이정현 | Frontend · Backend · CI/CD | CI/CD handoff·readiness·setup 자동화와 Delivery UI·Project Draft 흐름 구현 |

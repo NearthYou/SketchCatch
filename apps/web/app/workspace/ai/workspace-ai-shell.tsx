@@ -29,11 +29,13 @@ import styles from "./workspace-ai.module.css";
 
 /** AI 대화, 장식 Orbit, 승인 전 최종 Preview의 화면 전환을 조율합니다. */
 export function WorkspaceAiShell({
-  existingProject
+  existingProject,
+  initialProjectName
 }: {
   readonly existingProject?: AiStartExistingProject | undefined;
+  readonly initialProjectName?: string | undefined;
 }) {
-  const workflow = useAiStartWorkflow({ existingProject });
+  const workflow = useAiStartWorkflow({ existingProject, initialProjectName });
   const [selections, setSelections] = useState<readonly SelectedAssistantOption[]>([]);
   const [stagePhase, setStagePhase] = useState<WorkspaceAiStagePhase>("orbit");
   const [mobilePreviewRequested, setMobilePreviewRequested] = useState(false);
@@ -64,7 +66,7 @@ export function WorkspaceAiShell({
   const projectName =
     workflow.projectDraft?.projectName ??
     existingProject?.projectName ??
-    "새 Practice Architecture";
+    "새 ?명봽???ㅺ퀎";
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");

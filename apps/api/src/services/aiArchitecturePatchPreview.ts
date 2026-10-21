@@ -23,6 +23,12 @@ import {
   getNaturalLanguageResourceAliases,
   RESOURCE_TYPE_KOREAN_NAMES
 } from "./architectureResourceAliases.js";
+import {
+  areExistingScalarParameterOperationsSafe,
+  createExistingScalarParameterOperations,
+  getExistingScalarPatchValues,
+  getResourceIdentityConfigAliases
+} from "./architecturePatchParameters.js";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
 import {
   createBedrockTextProvider,
@@ -659,12 +665,20 @@ AUTO_SCALING_GROUP:
 
 APPLICATION_AUTO_SCALING_POLICY:
 - config.targetTrackingScalingPolicyConfiguration.targetValue
+- config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType
+
+EXISTING SCALAR PARAMETERS:
+- For any resource type, you may set an existing scalar config path shown in the target resource config.
+- Use this only when the request identifies one resource by id, label, or existing resource name, and the requested value or intent is unambiguous.
+- Preserve the existing scalar type: string stays string, number stays number, and boolean stays boolean.
+- Never invent a config path.
+- Never modify terraformResourceType, terraformResourceName, terraformBlockType, templateId, templateResourceId, parentAreaNodeId, or diagram-prefixed fields.
 
 Rules:
 1. If selectedTargetResourceId is present, use that resource as the target if it exists. Do not ask which resource to modify.
 2. If selectedTargetResourceId is present but does not exist, return needs_clarification.
 3. If exactly one resource matches the request, select it.
-4. If more than one resource matches and no selectedTargetResourceId is present, return needs_clarification with candidateResourceIds.
+4. If more than one resource matches and no id, label, or existing resource name uniquely identifies one target, return needs_clarification with candidateResourceIds.
 5. Never guess among multiple matching resources.
 6. If the user asks to change a parameter, return modify_resource, not remove_resource or add_resource.
 7. Do not use replace/remove+add for parameter changes.
@@ -747,7 +761,7 @@ For add_resource, preserve should include:
 
 Return unsupported if:
 - the request requires an operation outside the allowed schema
-- the request asks for direct deployment/apply/destroy
+- the request asks for managed deployment/apply/destroy
 - the request asks to mutate real cloud infrastructure
 - the requested parameter path is not allowed for the resource type
 
@@ -773,6 +787,9 @@ Return exactly this JSON shape:
   "confidence": number
 }`;
 
+const PATCH_PLAN_PARAMETER_CONSTRAINT_MESSAGE =
+  "The requested values violate the target resource parameter constraints.";
+
 const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, readonly string[]>>> = {
   EC2: ["config.instanceType", "config.associatePublicIpAddress", "config.ami"],
   RDS: ["config.allocatedStorage", "config.instanceClass", "config.engine", "config.multiAz"],
@@ -784,7 +801,8 @@ const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, 
   CLOUDFRONT: ["config.signingBehavior"],
   AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"],
   APPLICATION_AUTO_SCALING_POLICY: [
-    "config.targetTrackingScalingPolicyConfiguration.targetValue"
+    "config.targetTrackingScalingPolicyConfiguration.targetValue",
+    "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType"
   ]
 };
 
@@ -802,14 +820,18 @@ export function createArchitecturePatchPlan(
     );
   }
 
-  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
+  const naturalLanguageAction =
+    isEc2InstanceTypeModificationInstruction(normalizedInstruction) ||
+    isTargetTrackingTargetValueInstruction(normalizedInstruction)
     ? "modify_resource"
     : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const inferredTargetNode =
     naturalLanguageAction === "add_resource"
       ? undefined
       : findNaturalLanguagePatchTarget(input.architectureJson.nodes, normalizedInstruction);
-  const resourceType = inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
+  const resourceType = isEcsCpuTargetTrackingInstruction(normalizedInstruction)
+    ? "APPLICATION_AUTO_SCALING_POLICY"
+    : inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
 
   if (naturalLanguageAction === "manual_review") {
     return createNeedsClarificationPatchPlan(
@@ -867,13 +889,19 @@ export function createArchitecturePatchPlan(
   }
 
   const operations = createPatchPlanOperations(
-    normalizedInstruction,
+    input.instruction,
     targetResolution.targetNode
   );
 
   if (operations.length === 0) {
     return createUnsupportedPatchPlan(
       "The request does not map to an allowed PatchPlan operation."
+    );
+  }
+
+  if (!areExistingScalarParameterOperationsSafe(targetResolution.targetNode, operations)) {
+    return createUnsupportedPatchPlan(
+      PATCH_PLAN_PARAMETER_CONSTRAINT_MESSAGE
     );
   }
 
@@ -948,8 +976,10 @@ function createArchitecturePatchPreviewFromPlan(
   providerMetadata: AiProviderMetadata
 ): ArchitecturePatchPreviewResponse {
   if (
-    patchPlan.status === "needs_clarification" &&
-    providerMetadata.routeTarget === "architecture_patch_plan"
+    (patchPlan.status === "unsupported" &&
+      patchPlan.clarificationQuestion === PATCH_PLAN_PARAMETER_CONSTRAINT_MESSAGE) ||
+    (patchPlan.status === "needs_clarification" &&
+      providerMetadata.routeTarget === "architecture_patch_plan")
   ) {
     return withArchitecturePatchPlan(
       createPatchPlanClarificationResponse(input, patchPlan, providerMetadata),
@@ -1372,12 +1402,13 @@ function validateProviderPatchPlan(
 
   if (
     input.selectedTargetResourceId === undefined &&
-    input.architectureJson.nodes.filter((node) => node.type === targetNode.type).length > 1
+    input.architectureJson.nodes.filter((node) => node.type === targetNode.type).length > 1 &&
+    !isUniquelyMentionedPatchTarget(input, targetNode)
   ) {
     return { valid: false };
   }
 
-  const validatedOperations = validatePatchPlanOperations(operations, targetNode.type);
+  const validatedOperations = validatePatchPlanOperations(operations, targetNode);
 
   if (validatedOperations === null) {
     return { valid: false };
@@ -1409,11 +1440,25 @@ function validateProviderPatchPlan(
   };
 }
 
+function isUniquelyMentionedPatchTarget(
+  input: CreateArchitecturePatchPreviewInput,
+  targetNode: ResourceNode
+): boolean {
+  const mentionedNodes = findMentionedNodes(
+    input.architectureJson.nodes,
+    input.instruction
+  );
+
+  return mentionedNodes.length === 1 && mentionedNodes[0]?.id === targetNode.id;
+}
+
 function validatePatchPlanOperations(
   operations: readonly unknown[],
-  resourceType: ResourceType
+  targetNode: ResourceNode
 ): ArchitecturePatchPlanOperation[] | null {
-  const allowedPaths = PATCH_PLAN_ALLOWED_OPERATION_PATHS[resourceType] ?? [];
+  const staticAllowedPaths = PATCH_PLAN_ALLOWED_OPERATION_PATHS[targetNode.type] ?? [];
+  const existingScalarValues = getExistingScalarPatchValues(targetNode);
+  const allowedPaths = new Set([...staticAllowedPaths, ...existingScalarValues.keys()]);
   const validatedOperations: ArchitecturePatchPlanOperation[] = [];
 
   for (const operation of operations) {
@@ -1425,7 +1470,7 @@ function validatePatchPlanOperations(
     const path = operation.path;
     const value = operation.value;
 
-    if (!isPatchPlanOperationType(op) || typeof path !== "string" || !allowedPaths.includes(path)) {
+    if (!isPatchPlanOperationType(op) || typeof path !== "string" || !allowedPaths.has(path)) {
       return null;
     }
 
@@ -1433,10 +1478,37 @@ function validatePatchPlanOperations(
       return null;
     }
 
+    const existingScalarValue = existingScalarValues.get(path);
+
+    if (existingScalarValue !== undefined) {
+      const isValidExistingScalarOperation =
+        (op === "set_value" &&
+          ((value !== null && typeof value === typeof existingScalarValue) ||
+            (value === null && path.endsWith(".resourceLabel")))) ||
+        (op === "rename" &&
+          typeof existingScalarValue === "string" &&
+          typeof value === "string") ||
+        ((op === "enable" || op === "disable") &&
+          typeof existingScalarValue === "boolean" &&
+          value === null) ||
+        ((op === "increase_one_step" || op === "decrease_one_step") &&
+          path === "config.instanceType" &&
+          typeof existingScalarValue === "string" &&
+          value === null);
+
+      if (!isValidExistingScalarOperation) {
+        return null;
+      }
+    } else if (path !== "config.ingress") {
+      return null;
+    }
+
     validatedOperations.push({ op, path, value });
   }
 
-  return validatedOperations;
+  return areExistingScalarParameterOperationsSafe(targetNode, validatedOperations)
+    ? validatedOperations
+    : null;
 }
 
 function applyPatchPlanToPreviewResponse<TResponse extends ArchitecturePatchPreviewResponse>(
@@ -1501,12 +1573,12 @@ function applyPatchPlanOperationsToConfig(
     }
 
     if (operation.op === "enable") {
-      nextConfig[key] = true;
+      setConfigPathValue(nextConfig, key, true);
       continue;
     }
 
     if (operation.op === "disable") {
-      nextConfig[key] = false;
+      setConfigPathValue(nextConfig, key, false);
       continue;
     }
 
@@ -1712,9 +1784,10 @@ function resolvePatchPlanTarget(
 }
 
 function createPatchPlanOperations(
-  normalizedInstruction: string,
+  instruction: string,
   targetNode: ResourceNode
 ): ArchitecturePatchPlanOperation[] {
+  const normalizedInstruction = normalizeSearchText(instruction);
   if (targetNode.type === "EC2") {
     const explicitInstanceType = findEc2InstanceType(normalizedInstruction);
 
@@ -1832,6 +1905,11 @@ function createPatchPlanOperations(
     ]);
     const bucketName = findBucketName(normalizedInstruction);
 
+    const genericOperations = createExistingScalarParameterOperations(instruction, targetNode);
+
+    if (genericOperations.length > 1) {
+      return genericOperations;
+    }
     if (versioning === true) {
       return [{ op: "enable", path: "config.versioning", value: null }];
     }
@@ -1908,18 +1986,35 @@ function createPatchPlanOperations(
 
   if (targetNode.type === "APPLICATION_AUTO_SCALING_POLICY") {
     const targetValue = findTargetTrackingTargetValue(normalizedInstruction);
+    const operations: ArchitecturePatchPlanOperation[] = [];
 
     if (targetValue !== undefined) {
-      return [
-        {
-          op: "set_value",
-          path: "config.targetTrackingScalingPolicyConfiguration.targetValue",
-          value: targetValue
-        }
-      ];
+      operations.push({
+        op: "set_value",
+        path: "config.targetTrackingScalingPolicyConfiguration.targetValue",
+        value: targetValue
+      });
     }
 
-    return [];
+    if (isEcsCpuTargetTrackingInstruction(normalizedInstruction)) {
+      operations.push({
+        op: "set_value",
+        path: "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.predefinedMetricType",
+        value: "ECSServiceAverageCPUUtilization"
+      });
+      const resourceLabelPath =
+        "config.targetTrackingScalingPolicyConfiguration.predefinedMetricSpecification.resourceLabel";
+
+      if (getExistingScalarPatchValues(targetNode).has(resourceLabelPath)) {
+        operations.push({
+          op: "set_value",
+          path: resourceLabelPath,
+          value: null
+        });
+      }
+    }
+
+    return operations;
   }
 
   if (targetNode.type === "AUTO_SCALING_GROUP") {
@@ -1958,7 +2053,7 @@ function createPatchPlanOperations(
     return operations;
   }
 
-  return [];
+  return createExistingScalarParameterOperations(instruction, targetNode);
 }
 
 function createStructuralPatchPreview(
@@ -2288,14 +2383,18 @@ function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): Archite
   const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
   const replacementIntent = resolveReplacementPatchIntent(normalizedInstruction);
-  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
-    ? "modify_resource"
-    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+  const naturalLanguageAction =
+    isEc2InstanceTypeModificationInstruction(normalizedInstruction) ||
+    isTargetTrackingTargetValueInstruction(normalizedInstruction)
+      ? "modify_resource"
+      : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const inferredTargetNode =
     naturalLanguageAction === "add_resource"
       ? undefined
       : findNaturalLanguagePatchTarget(input.architectureJson.nodes, normalizedInstruction);
-  const explicitResourceType = inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
+  const explicitResourceType = isEcsCpuTargetTrackingInstruction(normalizedInstruction)
+    ? "APPLICATION_AUTO_SCALING_POLICY"
+    : inferredTargetNode?.type ?? findResourceType(normalizedInstruction);
   const serviceExpansionResourceType =
     explicitResourceType === undefined
       ? inferServiceExpansionResourceType(normalizedInstruction, input.architectureJson.nodes)
@@ -2843,12 +2942,46 @@ function resolveTarget(
 
 function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string): ResourceNode[] {
   const normalizedInstruction = normalizeSearchText(instruction);
+  const compactInstruction = compactSearchText(normalizedInstruction);
+  const identityMatches = nodes.flatMap((node) =>
+    nodeIdentityAliases(node).flatMap((alias) => {
+      const normalizedAlias = normalizeSearchText(alias);
+      const directStart = normalizedInstruction.indexOf(normalizedAlias);
+      const compactStart = compactInstruction.indexOf(compactSearchText(normalizedAlias));
+      const start = directStart >= 0 ? directStart : compactStart;
 
-  return nodes.filter((node) =>
-    nodeSearchAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias))
+      return start >= 0
+        ? [{ node, start, aliasLength: compactSearchText(normalizedAlias).length }]
+        : [];
+    })
+  );
+  const earliestIdentityStart = Math.min(
+    Number.POSITIVE_INFINITY,
+    ...identityMatches.map(({ start }) => start)
+  );
+  const earliestIdentityMatches = identityMatches.filter(
+    ({ start }) => start === earliestIdentityStart
+  );
+  const longestIdentityLength = Math.max(
+    0,
+    ...earliestIdentityMatches.map(({ aliasLength }) => aliasLength)
+  );
+
+  if (longestIdentityLength > 0) {
+    return Array.from(
+      new Map(
+        earliestIdentityMatches
+          .filter(({ aliasLength }) => aliasLength === longestIdentityLength)
+          .map(({ node }) => [node.id, node])
+      ).values()
+    );
+  }
+
+  return nodes.filter(
+    (node) =>
+      node.label !== undefined && includesPhrase(normalizedInstruction, node.label)
   );
 }
-
 function findNaturalLanguagePatchTarget(
   nodes: readonly ResourceNode[],
   instruction: string
@@ -2867,14 +3000,38 @@ function findNaturalLanguagePatchTarget(
     (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
   );
 
+  const metricMatchedPolicies = scalingPolicies.filter((policy) =>
+    targetTrackingPolicyMatchesInstruction(policy, instruction)
+  );
+
+  if (metricMatchedPolicies.length === 1) {
+    return metricMatchedPolicies[0];
+  }
+
   return scalingPolicies.length === 1 ? scalingPolicies[0] : undefined;
 }
 
-function nodeSearchAliases(node: ResourceNode): string[] {
-  return [node.id, node.label].filter(
-    (alias): alias is string => alias !== undefined && alias.trim().length > 0
+function targetTrackingPolicyMatchesInstruction(
+  node: ResourceNode,
+  instruction: string
+): boolean {
+  if (!isEcsCpuTargetTrackingInstruction(instruction)) {
+    return false;
+  }
+
+  const configuration = node.config["targetTrackingScalingPolicyConfiguration"];
+
+  const serializedConfiguration = JSON.stringify(configuration);
+
+  return serializedConfiguration?.includes("ECSServiceAverageCPUUtilization") ?? false;
+}
+
+function nodeIdentityAliases(node: ResourceNode): string[] {
+  return [node.id, ...getResourceIdentityConfigAliases(node)].filter(
+    (alias) => alias.trim().length > 0
   );
 }
+
 
 function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly string[] {
   return ADD_RESOURCE_PURPOSE_SUGGESTIONS[resourceType] ?? GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS;
@@ -4207,6 +4364,10 @@ function upsertIngressPort(currentIngress: unknown, port: number): unknown[] {
 }
 
 function isTargetTrackingTargetValueInstruction(instruction: string): boolean {
+  if (isEcsCpuTargetTrackingInstruction(instruction)) {
+    return true;
+  }
+
   return includesAnyPhrase(normalizeSearchText(instruction), [
     "target value",
     "target_value",
@@ -4218,11 +4379,61 @@ function isTargetTrackingTargetValueInstruction(instruction: string): boolean {
   ]);
 }
 
+function isEcsCpuTargetTrackingInstruction(instruction: string): boolean {
+  const normalizedInstruction = normalizeSearchText(instruction);
+  const hasEcsTaskContext = includesAnyPhrase(normalizedInstruction, [
+    "ecs",
+    "task",
+    "\uD0DC\uC2A4\uD06C"
+  ]);
+  const hasCpuUtilization =
+    includesPhrase(normalizedInstruction, "cpu") &&
+    (hasEcsTaskContext || includesAnyPhrase(normalizedInstruction, [
+      "load",
+      "utilization",
+      "utilisation",
+      "usage",
+      "\uC0AC\uC6A9\uB960",
+      "\uC810\uC720\uC728",
+      "\uBD80\uD558"
+    ]));
+  const hasPercentage = /\b\d+(?:\.\d+)?\s*(?:%|percent(?:age)?\b|\uD37C\uC13C\uD2B8)/u.test(normalizedInstruction);
+  const hasScaleOutIntent = includesAnyPhrase(normalizedInstruction, [
+    "scale out",
+    "scale-out",
+    "scaleout",
+    "increase",
+    "auto scaling",
+    "autoscaling",
+    "\uB298\uB9AC",
+    "\uB298\uB824",
+    "\uC99D\uAC00",
+    "\uD655\uC7A5",
+    "\uCD94\uAC00",
+    "\uC62C\uB824",
+    "\uB192\uC5EC"
+  ]);
+
+  return hasCpuUtilization && hasPercentage && hasScaleOutIntent;
+}
+
 function findTargetTrackingTargetValue(
   normalizedInstruction: string
 ): number | undefined {
   if (!isTargetTrackingTargetValueInstruction(normalizedInstruction)) {
     return undefined;
+  }
+
+  if (isEcsCpuTargetTrackingInstruction(normalizedInstruction)) {
+    const percentageValue = Number(
+      normalizedInstruction.match(
+        /\b(\d+(?:\.\d+)?)\s*(?:%|percent(?:age)?\b|\uD37C\uC13C\uD2B8)/u
+      )?.[1]
+    );
+
+    if (Number.isFinite(percentageValue) && percentageValue > 0) {
+      return percentageValue;
+    }
   }
 
   const values = Array.from(

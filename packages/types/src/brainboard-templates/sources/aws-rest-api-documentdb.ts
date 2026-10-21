@@ -43,7 +43,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8cc66a70-095a-4dd1-b32d-9be569d07d43",
       domOrder: 1,
-      label: "restAPI-vpc",
+      label: "VPC",
       position: {
         x: 960,
         y: 340
@@ -61,7 +61,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6a793bea-ff9a-4951-bf42-7ff3f987219d",
       domOrder: 2,
-      label: "restAPI-subnet",
+      label: "DocumentDB API Subnet",
       position: {
         x: 1010,
         y: 460
@@ -79,7 +79,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "352c51ca-9f42-4d1d-b2ea-cddba97c5f91",
       domOrder: 3,
-      label: "Lambda function",
+      label: "DocumentDB Handler Lambda Function",
       position: {
         x: 1060,
         y: 530
@@ -97,7 +97,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "08ec8f09-61cc-4bca-aa03-bba22b030378",
       domOrder: 4,
-      label: "Lambda function",
+      label: "External Integration Lambda Function",
       position: {
         x: 760,
         y: 360
@@ -115,7 +115,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "82fc5147-833e-4d85-a63e-7809cecbc533",
       domOrder: 5,
-      label: "API Gateway V2 API",
+      label: "HTTP API",
       position: {
         x: 760,
         y: 530
@@ -133,7 +133,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9ae294ea-de55-47ee-ac40-9fdc891717fa",
       domOrder: 6,
-      label: "Secrets Manager secret",
+      label: "Credentials Secret",
       position: {
         x: 760,
         y: 710
@@ -151,7 +151,7 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c3987042-939e-4ef9-bf00-40bae8f06412",
       domOrder: 7,
-      label: "Document DB cluster",
+      label: "DocumentDB Cluster",
       position: {
         x: 1240,
         y: 530
@@ -493,13 +493,13 @@ export const awsRestApiDocumentDbSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.restAPI-vpc",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "6a793bea-ff9a-4951-bf42-7ff3f987219d": {
       kind: "resource",
       address: "aws_subnet.restAPI-subnet",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "352c51ca-9f42-4d1d-b2ea-cddba97c5f91": {
       kind: "resource",

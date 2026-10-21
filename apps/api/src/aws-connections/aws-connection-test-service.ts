@@ -287,17 +287,18 @@ function isExpectedAssumeRoleDeniedError(error: unknown): boolean {
   return isAwsAccessDeniedError(error);
 }
 
+// gg: STS 연결 오류를 원문 없이 Role 거부와 서버 자격 증명 문제로 나눕니다.
 export function toAwsConnectionTestError(error: unknown): AwsConnectionTestError {
   if (isAwsAccessDeniedError(error)) {
     return new AwsConnectionTestError("AWS Role assume permission denied");
   }
 
-  if (isAwsCredentialError(error)) {
-    return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
-  }
-
   if (isAwsSsoCredentialProviderError(error)) {
     return new AwsConnectionTestError("AWS SSO credentials are unavailable or expired");
+  }
+
+  if (isAwsCredentialError(error)) {
+    return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
   }
 
   if (isAwsStsTimeoutError(error)) {
@@ -359,28 +360,42 @@ function isAwsAccessDeniedError(error: unknown): boolean {
   );
 }
 
+// gg: 실제 STS caller credential 오류만 일반 자격 증명 오류로 분류합니다.
 function isAwsCredentialError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
 
   const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
+  const message = "message" in error && typeof error.message === "string"
+    ? error.message.toLowerCase()
+    : "";
 
   return (
     errorName === "ExpiredToken" ||
     errorName === "ExpiredTokenException" ||
     errorName === "InvalidClientTokenId" ||
-    errorName === "UnrecognizedClientException"
+    errorName === "UnrecognizedClientException" ||
+    errorName === "CredentialsProviderError" ||
+    errorName === "TokenProviderError" ||
+    message.includes("could not load credentials")
   );
 }
 
 function isAwsSsoCredentialProviderError(error: unknown): boolean {
   const errorName = getErrorName(error);
+  const message =
+    typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : "";
 
   return (
-    errorName === "CredentialsProviderError" ||
-    errorName === "TokenProviderError" ||
-    errorName === "SSOProviderInvalidToken"
+    errorName === "SSOProviderInvalidToken" ||
+    message.includes("sso session") ||
+    message.includes("credentials from sso") ||
+    message.includes("aws sso credentials") ||
+    message.includes("sso token") ||
+    message.includes(".aws/sso/cache")
   );
 }
 

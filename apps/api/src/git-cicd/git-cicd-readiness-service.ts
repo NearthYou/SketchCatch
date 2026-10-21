@@ -395,6 +395,54 @@ export function createGitCicdReadinessService(options: {
     async refresh(input: GitCicdReadinessInput): Promise<GitCicdReadinessSnapshot> {
       return readSnapshot(input, true);
     },
+    async synchronizeDeploymentTargetBeforeApplicationRelease(input: {
+      projectId: string;
+      userId: string;
+      expectedAwsConnectionId: string;
+    }): Promise<ProjectDeploymentTargetRecord> {
+      return options.repository.runInProjectSnapshot(input.projectId, async (repository) => {
+        const project = await repository.findAccessibleProject(input.projectId, input.userId);
+        if (!project) throw new GitCicdReadinessNotFoundError("Project not found");
+
+        const deployment =
+          await repository.findLatestSuccessfulDirectInfrastructureDeployment(input.projectId);
+        if (!deployment || !isSuccessfulDirectInfrastructureDeployment(deployment)) {
+          throw new GitCicdReadinessValidationError(
+            "Application release requires a verified successful infrastructure deployment"
+          );
+        }
+        const connection = deployment.awsConnectionId
+          ? await repository.findVerifiedConnection(deployment.awsConnectionId, input.userId)
+          : undefined;
+        if (
+          !connection ||
+          connection.id !== input.expectedAwsConnectionId ||
+          deployment.awsAccountIdSnapshot !== connection.accountId ||
+          deployment.awsRegionSnapshot !== connection.region
+        ) {
+          throw new GitCicdReadinessValidationError(
+            "Application release requires the infrastructure deployment's verified AWS connection"
+          );
+        }
+        const plan = await requireApprovedApplyPlan(
+          deployment,
+          connection,
+          repository,
+          planVerifier
+        );
+        const selection = { deployment, connection, plan };
+
+        return requireReconciledDeploymentTarget({
+          projectId: input.projectId,
+          selection,
+          sourceRepository: await selectReadinessSourceRepository(repository, input),
+          buildEnvironment: await repository.findProjectBuildEnvironment(input.projectId),
+          currentTarget: await repository.findProjectDeploymentTarget(input.projectId),
+          repository,
+          checkedAt: now()
+        });
+      });
+    },
     async synchronizeDeploymentTargetAfterSuccessfulApply(input: {
       projectId: string;
       deploymentId: string;
@@ -411,7 +459,7 @@ export function createGitCicdReadinessService(options: {
         requirePostApplyDeployment(deployment, input);
         if (!deployment.awsConnectionId) {
           throw new GitCicdReadinessValidationError(
-            "Post-Apply synchronization requires a verified AWS connection"
+            "Deployment target synchronization requires a verified AWS connection"
           );
         }
         const connection = await repository.findVerifiedConnection(
@@ -420,7 +468,7 @@ export function createGitCicdReadinessService(options: {
         );
         if (!connection) {
           throw new GitCicdReadinessValidationError(
-            "Post-Apply synchronization requires a verified AWS connection"
+            "Deployment target synchronization requires a verified AWS connection"
           );
         }
         const plan = await requireApprovedApplyPlan(
@@ -535,7 +583,8 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
             eq(deployments.status, "SUCCESS"),
             eq(deployments.source, "direct"),
             inArray(deployments.scope, ["infrastructure", "full_stack"]),
-            isNotNull(deployments.completedAt)
+            isNotNull(deployments.completedAt),
+            isNotNull(deployments.stateObjectKey)
           )
         )
         .orderBy(desc(deployments.completedAt), desc(deployments.createdAt))
@@ -894,12 +943,12 @@ async function requireReconciledDeploymentTarget(input: {
     buildEnvironment.awsConnectionId !== input.selection.connection.id
   ) {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires a ready build environment for the verified AWS connection"
+      "Deployment target synchronization requires a ready build environment for the verified AWS connection"
     );
   }
   if (input.currentTarget && input.currentTarget.runtimeTargetKind !== "ecs_fargate") {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires an ecs_fargate deployment target"
+      "Deployment target synchronization requires an ecs_fargate deployment target"
     );
   }
 
@@ -922,7 +971,7 @@ async function requireReconciledDeploymentTarget(input: {
     );
   } catch {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires complete runtime outputs and inventory"
+      "Deployment target synchronization requires complete runtime outputs and inventory"
     );
   }
 
@@ -938,7 +987,7 @@ async function requireReconciledDeploymentTarget(input: {
     : null;
   if (!confirmedBuildConfig) {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires deterministic build configuration evidence"
+      "Deployment target synchronization requires deterministic build configuration evidence"
     );
   }
   requireValidEcsFargateBuildConfig(confirmedBuildConfig);
@@ -950,7 +999,7 @@ async function requireReconciledDeploymentTarget(input: {
     )
   ) {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires exact Repository checkout verification"
+      "Deployment target synchronization requires exact Repository checkout verification"
     );
   }
 
@@ -1191,7 +1240,7 @@ function requireValidEcsFargateBuildConfig(config: ConfirmedBuildConfig): void {
     renderPreflightBuildspec(config);
   } catch {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires a valid ECS web build configuration"
+      "Deployment target synchronization requires a valid ECS web build configuration"
     );
   }
 }
@@ -1507,17 +1556,17 @@ function requirePostApplyDeployment(
   }
   if (deployment.status !== "RUNNING" && deployment.status !== "SUCCESS") {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires a RUNNING or SUCCESS deployment"
+      "Deployment target synchronization requires a RUNNING or SUCCESS deployment"
     );
   }
   if (deployment.scope !== "infrastructure" && deployment.scope !== "full_stack") {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires infrastructure or full_stack scope"
+      "Deployment target synchronization requires infrastructure or full_stack scope"
     );
   }
   if (deployment.targetKind !== "ecs_fargate") {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires an ecs_fargate deployment"
+      "Deployment target synchronization requires an ecs_fargate deployment"
     );
   }
 }
@@ -1537,7 +1586,7 @@ async function requireApprovedApplyPlan(
     !(await planVerifier.verify({ deployment, plan, connection }))
   ) {
     throw new GitCicdReadinessValidationError(
-      "Post-Apply synchronization requires the exact approved Apply Plan artifact"
+      "Deployment target synchronization requires the exact approved Apply Plan artifact"
     );
   }
   return plan;

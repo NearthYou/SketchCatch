@@ -222,6 +222,7 @@ export function DeploymentConsoleShell({
               document.getElementById("deployment-target-title")?.scrollIntoView({ block: "start" })
             );
           }}
+          onOpenTerraformEditor={close}
           onOpenLiveObservation={onOpenLiveObservation}
           requestedScope={requestedDirectScope}
           onApplyPlanApproved={(deployment) => {

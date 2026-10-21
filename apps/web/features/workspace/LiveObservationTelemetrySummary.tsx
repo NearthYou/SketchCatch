@@ -32,15 +32,16 @@ export const LiveObservationTelemetrySummary = memo(function LiveObservationTele
 
   return (
     <section
-      aria-label="인프라 설계 판단"
+      aria-label="CloudWatch 기반 지표"
       className={styles.telemetrySummary}
+      data-provider-state={model.providerState}
       data-session-status={model.sessionStatus ?? "not_started"}
       data-testid="live-observation-telemetry"
     >
       <header className={styles.telemetryHeader}>
         <div>
-          <p className={styles.eyebrow}>관측 기반</p>
-          <h2>인프라 설계 판단</h2>
+          <p className={styles.eyebrow}>AWS 운영 지표</p>
+          <h2>CloudWatch 기반 지표</h2>
         </div>
         {sessionLabel ? (
           <span className={styles.telemetryProviderState}>{sessionLabel}</span>
@@ -48,14 +49,16 @@ export const LiveObservationTelemetrySummary = memo(function LiveObservationTele
       </header>
       <div className={styles.telemetryGrid}>
         <TelemetryMetric
-          label="예상 부하"
+          label="요청량"
           value={`${Math.round(model.projectedRequestsPerMinute)} req/min · ${getPressureLabel(model.pressureLevel)}`}
         />
-        <TelemetryMetric label="Task 변화" value={`${actualTaskLabel} · ${expectedTaskLabel}`} />
-        <TelemetryMetric label="설계 분석" value={getAiLabel(model.aiState)} />
+        <TelemetryMetric label="ECS Task" value={`${actualTaskLabel} · ${expectedTaskLabel}`} />
+        <TelemetryMetric label="수집 상태" value={getProviderLabel(model.providerState)} />
       </div>
       {observationNote ? <p className={styles.telemetryNote}>{observationNote}</p> : null}
-      {aiError ? <p className={styles.telemetryError}>{aiError}</p> : null}
+      {aiError ? (
+        <p className={styles.telemetryError}>개선안 생성 상태: {aiError}</p>
+      ) : null}
     </section>
   );
 });
@@ -92,9 +95,10 @@ function getPressureLabel(level: LiveObservationV2Snapshot["live"]["pressureLeve
   return "정상";
 }
 
-function getAiLabel(state: LiveObservationAiState): string {
-  if (state === "loading") return "분석 중";
-  if (state === "ready") return "분석 완료";
-  if (state === "error") return "분석 실패";
-  return "대기 중";
+function getProviderLabel(
+  state: ReturnType<typeof createLiveObservationTelemetryModel>["providerState"]
+): string {
+  if (state === "available") return "정상 수집";
+  if (state === "delayed" || state === "unavailable") return "수집 지연";
+  return "수집 대기";
 }

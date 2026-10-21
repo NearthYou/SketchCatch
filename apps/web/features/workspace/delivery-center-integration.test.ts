@@ -161,7 +161,7 @@ test("CI/CD current-task CTA, phase accordion, and setup drawer share one presen
   assert.match(handoffPanelSource, /disabled=\{!canCreateHandoff\}/);
 });
 
-test("Apply Plan CTA는 Direct Deployment만 열고 Plan 또는 Apply API를 직접 호출하지 않는다", () => {
+test("Apply Plan CTA는 managed deployment만 열고 Plan 또는 Apply API를 직접 호출하지 않는다", () => {
   assert.match(cicdConsoleSource, /if \(action\.kind === "direct_deployment"\)/);
   assert.match(cicdConsoleSource, /onOpenDirectDeployment\?\.\(action\.scope\)/);
   assert.doesNotMatch(cicdConsoleSource, /runDeploymentPlan|approveDeploymentPlan/);
@@ -216,7 +216,7 @@ test("target save refreshes Delivery without starting deployment or Git handoff"
   );
 });
 
-test("saved deployment target invalidates the stale Direct Deployment prerequisite", () => {
+test("saved deployment target invalidates the stale managed deployment prerequisite", () => {
   assert.match(panelSource, /onDeploymentTargetSaved/);
   assert.match(panelSource, /onSaved=\{handleDeploymentTargetSaved\}/);
   assert.match(shellSource, /deploymentTargetSavedRevision/);

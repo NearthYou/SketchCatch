@@ -12,7 +12,7 @@ const handoffServiceSource = readFileSync(
   "utf8"
 );
 
-test("GitHub login OAuth credentials are not used by Git/CI/CD repository operations", () => {
+test("GitHub login OAuth credentials are not used by CI/CD repository operations", () => {
   for (const entry of readdirSync(gitCicdDirectory, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) {
       continue;
@@ -23,7 +23,7 @@ test("GitHub login OAuth credentials are not used by Git/CI/CD repository operat
   }
 });
 
-test("Git/CI/CD routes do not expose a repository mutation OAuth callback", () => {
+test("CI/CD routes do not expose a repository mutation OAuth callback", () => {
   assert.doesNotMatch(gitCicdRouteSource, /github-oauth|apply-with-github-oauth/i);
 });
 

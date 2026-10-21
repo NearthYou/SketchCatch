@@ -54,7 +54,7 @@ test("a new or failed validation request clears the previous analysis", () => {
   });
 });
 
-test("Direct Deployment exposes exactly validation, approval, and deployment", () => {
+test("managed deployment exposes exactly validation, approval, and deployment", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 
   assert.deepEqual(
@@ -66,7 +66,7 @@ test("Direct Deployment exposes exactly validation, approval, and deployment", (
   assert.equal(flow.steps[1]?.state, "idle");
 });
 
-test("Direct Deployment keeps stable step ids while naming the final step 실행", () => {
+test("managed deployment keeps stable step ids while naming the final step 실행", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 
   assert.deepEqual(
@@ -79,7 +79,7 @@ test("Direct Deployment keeps stable step ids while naming the final step 실행
   );
 });
 
-test("an idle selected step falls back to the active Direct Deployment step", () => {
+test("an idle selected step falls back to the active managed deployment step", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 
   assert.equal(resolveSelectedDirectDeploymentStepId(flow, "deployment"), "validation");
@@ -163,7 +163,7 @@ test("Trivy security findings remain advisory even when their checklist item fai
   );
 });
 
-test("non-security checklist failures still block Direct Deployment", () => {
+test("non-security checklist failures still block managed deployment", () => {
   const analysis = createPreDeploymentAnalysis({
     findings: [
       {

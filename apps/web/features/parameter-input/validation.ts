@@ -386,11 +386,16 @@ function collectNestedErrors(
         return;
       }
 
+      const itemPath =
+        definition.type === "object" && value.length === 1
+          ? path
+          : `${path}.${itemIndex}`;
+
       for (const child of definition.children ?? []) {
         collectDefinitionErrors(
           child,
           item[child.name],
-          `${path}.${itemIndex}.${child.name}`,
+          `${itemPath}.${child.name}`,
           nodes,
           currentNodeId,
           catalog,
@@ -435,9 +440,17 @@ function getTypeError(definition: ParameterCatalogDefinition, value: unknown) {
     return "목록 값이어야 합니다.";
   }
 
+  const isSingletonNestedObjectArray =
+    definition.type === "object" &&
+    definition.inputKind === "nested-block" &&
+    Array.isArray(value) &&
+    value.length === 1 &&
+    value.every(isRecord);
+
   if (
     (definition.type === "map" || definition.type === "object") &&
-    (!isRecord(value) || Array.isArray(value))
+    !isRecord(value) &&
+    !isSingletonNestedObjectArray
   ) {
     return "key-value object 값이어야 합니다.";
   }

@@ -25,7 +25,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "c7cf2dc9-4cc9-481f-b53f-9904151e2630",
       domOrder: 0,
-      label: "cluster-sg",
+      label: "EKS Cluster SG",
       position: {
         x: 795,
         y: 605
@@ -61,7 +61,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "3a7c40fe-8ca2-429b-a762-605aed1a0a33",
       domOrder: 2,
-      label: "default",
+      label: "VPC",
       position: {
         x: 760,
         y: 315
@@ -79,7 +79,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "2c258322-661f-471b-b0e6-85d49fd8e46b",
       domOrder: 3,
-      label: "us-east-1b",
+      label: "AZ us-east-1b",
       position: {
         x: 1610,
         y: 745
@@ -97,7 +97,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "dc0a5b25-308f-4bc2-871b-d5083cf2d0e2",
       domOrder: 4,
-      label: "us-east-1a",
+      label: "AZ us-east-1a",
       position: {
         x: 870,
         y: 745
@@ -115,7 +115,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "7fc5471e-298b-4fe8-b8dd-61c9e12374a6",
       domOrder: 5,
-      label: "snet1",
+      label: "Public Subnet A",
       position: {
         x: 890,
         y: 870
@@ -133,7 +133,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "9647ef8e-ba33-4608-be6b-79271f103fe3",
       domOrder: 6,
-      label: "snet2",
+      label: "Public Subnet B",
       position: {
         x: 1630,
         y: 870
@@ -151,7 +151,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "1deba4c9-a88f-4b0e-995a-2e5dc304d167",
       domOrder: 7,
-      label: "IAM role policy attachment Registry",
+      label: "ECR Read Policy Attachment",
       position: {
         x: 470,
         y: 485
@@ -169,7 +169,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "548abc5b-922e-4cf6-95ea-4c34c2fe5459",
       domOrder: 8,
-      label: "iam-cluster",
+      label: "EKS Cluster IAM Role",
       position: {
         x: 2120,
         y: 485
@@ -187,7 +187,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "57b6aa35-9b3d-46bd-967d-07493b8aaa5e",
       domOrder: 9,
-      label: "IAM role policy attachment CNI policy",
+      label: "CNI Policy Attachment",
       position: {
         x: 470,
         y: 315
@@ -205,7 +205,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "85d344cc-b877-4e92-a4fc-6ac1a7224135",
       domOrder: 10,
-      label: "default-iam",
+      label: "Worker Node IAM Role",
       position: {
         x: 670,
         y: 485
@@ -223,7 +223,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "8a4bb82f-8ca2-4314-aa88-a7895bbe985d",
       domOrder: 11,
-      label: "IAM role policy attachment WN",
+      label: "Worker Node Policy Attachment",
       position: {
         x: 470,
         y: 665
@@ -241,7 +241,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "b1dff648-3242-4a8f-bde8-5a30459b5d09",
       domOrder: 12,
-      label: "IAM role policy attachment RC",
+      label: "VPC Controller Policy Attachment",
       position: {
         x: 2210,
         y: 315
@@ -259,7 +259,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "bb5eb85d-fe0a-4239-affd-f34192d53c79",
       domOrder: 13,
-      label: "IAM role policy attachment CP",
+      label: "EKS Cluster Policy Attachment",
       position: {
         x: 2210,
         y: 645
@@ -277,7 +277,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "6c68b992-6afd-4fc8-b37c-45da1f674b4c",
       domOrder: 14,
-      label: "Internet gateway",
+      label: "Internet Gateway",
       position: {
         x: 1380,
         y: 285
@@ -295,7 +295,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "f76286ac-796e-463a-b5a7-1fd6bfdc6a7a",
       domOrder: 15,
-      label: "Route table",
+      label: "Public Route Table",
       position: {
         x: 1380,
         y: 485
@@ -313,7 +313,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "0c5bbe79-b35c-46f0-8281-f9e02e95225a",
       domOrder: 16,
-      label: "EKS cluster",
+      label: "EKS Cluster",
       position: {
         x: 1475,
         y: 875
@@ -331,7 +331,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "22a6d153-9c4c-49d4-a5b8-3c2fbb29162b",
       domOrder: 17,
-      label: "EKS node group",
+      label: "EKS Node Group",
       position: {
         x: 1235,
         y: 875
@@ -349,7 +349,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "78653b46-a7fb-490f-a677-70663c22cc5c",
       domOrder: 18,
-      label: "SG rule",
+      label: "Security Group Rule - Cluster API HTTPS",
       position: {
         x: 1370,
         y: 1210
@@ -367,7 +367,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ea26b075-2ec2-4686-9450-92cebdeeee7b",
       domOrder: 19,
-      label: "Route table association",
+      label: "Route Table Association - Public A",
       position: {
         x: 980,
         y: 945
@@ -385,7 +385,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
     {
       sourceNodeId: "ee8367ce-4b1b-4b45-9fca-eeec80c852dd",
       domOrder: 20,
-      label: "Route table association",
+      label: "Route Table Association - Public B",
       position: {
         x: 1730,
         y: 940
@@ -1249,7 +1249,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_security_group.cluster-sg",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "a9e7e1c4-6179-45d2-b7bc-885e61755ac2": {
       kind: "presentation",
@@ -1261,7 +1261,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_vpc.default",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "2c258322-661f-471b-b0e6-85d49fd8e46b": {
       kind: "presentation",
@@ -1279,13 +1279,13 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_subnet.snet1",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "9647ef8e-ba33-4608-be6b-79271f103fe3": {
       kind: "resource",
       address: "aws_subnet.snet2",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "1deba4c9-a88f-4b0e-995a-2e5dc304d167": {
       kind: "resource",
@@ -1297,7 +1297,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_iam_role.iam-cluster",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "57b6aa35-9b3d-46bd-967d-07493b8aaa5e": {
       kind: "resource",
@@ -1309,7 +1309,7 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate({
       kind: "resource",
       address: "aws_iam_role.default-iam",
       fileName: "main.tf",
-      addressMapping: "exact-title"
+      addressMapping: "reviewed-override"
     },
     "8a4bb82f-8ca2-4314-aa88-a7895bbe985d": {
       kind: "resource",

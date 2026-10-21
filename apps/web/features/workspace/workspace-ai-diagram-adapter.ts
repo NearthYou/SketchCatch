@@ -1260,7 +1260,9 @@ function normalizeGeneratedParameterValue(
       : blocks;
   }
 
-  return normalizeGeneratedNestedBlock(value, definition.children);
+  const block = Array.isArray(value) && value.length === 1 ? value[0] : value;
+
+  return normalizeGeneratedNestedBlock(block, definition.children);
 }
 
 function normalizeGeneratedNestedBlock(

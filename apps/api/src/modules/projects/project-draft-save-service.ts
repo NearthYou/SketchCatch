@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { SaveProjectDraftRequest } from "@sketchcatch/types";
+import type { DiagramJson, SaveProjectDraftRequest } from "@sketchcatch/types";
 import type { Database } from "../../db/client.js";
 import { projectDrafts, projects, touchUpdatedAt } from "../../db/schema.js";
+import { assertPreservesServerConfirmedReverseEngineeringImportDecisions } from "../../reverse-engineering/reverse-engineering-import-decision-save-policy.js";
 import {
   getNextDraftRevision,
   hasSameProjectDraftContent,
@@ -19,16 +20,65 @@ export type SaveProjectDraftRevisionResult =
       currentDraft: ProjectDraftRow;
     };
 
+type SaveProjectDraftRevisionInput = {
+  db: Database;
+  input: SaveProjectDraftRequest;
+  projectId: string;
+  userId: string;
+};
+
+type SaveServerConfirmedReverseEngineeringDraftRevisionInput = SaveProjectDraftRevisionInput & {
+  allowedImportDecisionStampNodeIds: readonly string[];
+};
+
+const EMPTY_DIAGRAM: DiagramJson = {
+  nodes: [],
+  edges: [],
+  viewport: { x: 0, y: 0, zoom: 1 }
+};
+
+/** gg: 일반 Draft 저장은 서버가 확인한 AWS import 결정을 그대로 보존합니다. */
 export async function saveProjectDraftRevision({
   db,
   input,
   projectId,
   userId
-}: {
-  db: Database;
-  input: SaveProjectDraftRequest;
-  projectId: string;
-  userId: string;
+}: SaveProjectDraftRevisionInput): Promise<SaveProjectDraftRevisionResult> {
+  return saveProjectDraftRevisionWithImportDecisionPolicy({
+    db,
+    input,
+    projectId,
+    userId,
+    allowedImportDecisionStampNodeIds: []
+  });
+}
+
+/** gg: 전용 Reverse Engineering 적용 경계만 검증을 끝낸 import 결정을 새로 저장합니다. */
+export async function saveServerConfirmedReverseEngineeringDraftRevision({
+  allowedImportDecisionStampNodeIds,
+  db,
+  input,
+  projectId,
+  userId
+}: SaveServerConfirmedReverseEngineeringDraftRevisionInput): Promise<SaveProjectDraftRevisionResult> {
+  return saveProjectDraftRevisionWithImportDecisionPolicy({
+    allowedImportDecisionStampNodeIds,
+    db,
+    input,
+    projectId,
+    userId
+  });
+}
+
+/** gg: HTTP 요청이 직접 우회할 수 없는 내부 정책 값으로 Draft 저장 경계를 나눕니다. */
+async function saveProjectDraftRevisionWithImportDecisionPolicy({
+  allowedImportDecisionStampNodeIds,
+  db,
+  input,
+  projectId,
+  userId
+}: SaveProjectDraftRevisionInput & {
+  allowedImportDecisionStampNodeIds: readonly string[];
 }): Promise<SaveProjectDraftRevisionResult> {
   const [existingDraft] = await db
     .select()
@@ -42,6 +92,12 @@ export async function saveProjectDraftRevision({
   if (!existingDraft && input.expectedRevision !== null) {
     throw new ProjectDraftRevisionMissingError();
   }
+
+  assertPreservesServerConfirmedReverseEngineeringImportDecisions(
+    existingDraft?.diagramJson ?? EMPTY_DIAGRAM,
+    input.diagramJson,
+    new Set(allowedImportDecisionStampNodeIds)
+  );
 
   const terraformFiles = input.terraformFiles ?? null;
   if (
@@ -131,9 +187,7 @@ async function updateExistingDraft({
     )
     .returning();
 
-  return draft
-    ? { status: "saved", draft }
-    : readProjectDraftConflict(db, projectId, "save");
+  return draft ? { status: "saved", draft } : readProjectDraftConflict(db, projectId, "save");
 }
 
 async function insertFirstDraft({
@@ -165,9 +219,7 @@ async function insertFirstDraft({
     .onConflictDoNothing({ target: projectDrafts.projectId })
     .returning();
 
-  return draft
-    ? { status: "saved", draft }
-    : readProjectDraftConflict(db, projectId, "first save");
+  return draft ? { status: "saved", draft } : readProjectDraftConflict(db, projectId, "first save");
 }
 
 async function readProjectDraftConflict(

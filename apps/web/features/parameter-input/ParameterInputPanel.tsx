@@ -31,6 +31,10 @@ import {
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
 import {
+  readSingleNestedParameterValue,
+  writeSingleNestedParameterValue
+} from "./nested-parameter-value";
+import {
   getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
   isAvailabilityZoneResourceNode,
@@ -1314,7 +1318,7 @@ function NestedEditor({
     );
   }
 
-  const block = toRecord(value);
+  const block = readSingleNestedParameterValue(value);
 
   return (
     <div className={styles.nestedEditor}>
@@ -1329,7 +1333,14 @@ function NestedEditor({
               errors={errors}
               key={child.name}
               nodes={nodes}
-              onChange={(childValue) => onChange(setRecordValue(block, child.name, childValue))}
+              onChange={(childValue) =>
+                onChange(
+                  writeSingleNestedParameterValue(
+                    value,
+                    setRecordValue(block, child.name, childValue)
+                  )
+                )
+              }
               path={`${path}.${child.name}`}
               value={block[child.name]}
             />

@@ -100,6 +100,7 @@ import {
 } from "./deployment-console-state";
 import {
   filterDeploymentHistoryEntries,
+  formatDeploymentPlanChangeSummary,
   getDeploymentHistoryEntries,
   getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
@@ -118,6 +119,7 @@ import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
 import { DeploymentProgressBar } from "./DeploymentProgressBar";
 import type { DeploymentProgressOperation } from "./deployment-progress";
 import {
+  getManagedDeploymentLinks,
   getSafeDeploymentLinks,
   getVisibleDeploymentOutputs,
   initialDeploymentOutputState,
@@ -166,6 +168,7 @@ export type DirectDeploymentScreenProps = {
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onOpenDeliverySetup?: (() => void) | undefined;
   readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly onOpenTerraformEditor?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
   readonly onPreDeploymentCheckStateChange: Dispatch<
     SetStateAction<DeploymentPreDeploymentCheckState>
@@ -179,7 +182,7 @@ export type DirectDeploymentScreenProps = {
   readonly projectDraftRevision?: number | null | undefined;
 };
 
-// Direct Deployment reports only Resources that can enter the Terraform execution graph.
+// managed deployment reports only Resources that can enter the Terraform execution graph.
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
   deploymentAvailability,
@@ -191,6 +194,7 @@ export function DirectDeploymentScreen({
   onConfirmationStateChange,
   onOpenDeliverySetup,
   onOpenFindingTerraformSource,
+  onOpenTerraformEditor,
   onOpenLiveObservation,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
@@ -252,6 +256,10 @@ export function DirectDeploymentScreen({
     if (requestedScope) {
       setSelectedScope(requestedScope);
       setAutoScopeRequestDeploymentId("");
+      setSelectedDeploymentId("");
+      pendingAutoAdvanceDeploymentIdRef.current = "";
+      setShowApplyConfirmation(false);
+      setSelectedDirectStepId("validation");
     }
   }, [requestedScope]);
 
@@ -276,15 +284,15 @@ export function DirectDeploymentScreen({
         value: "auto"
       },
       {
-        label: "인프라",
+        label: "인프라만",
         value: "infrastructure"
       },
       {
-        label: "애플리케이션",
+        label: "앱만",
         value: "application"
       },
       {
-        label: "전체 스택",
+        label: "인프라 + 앱 함께",
         value: "full_stack"
       }
     ],
@@ -344,8 +352,8 @@ export function DirectDeploymentScreen({
     [selectedDeploymentId, terraformOutputState]
   );
   const deploymentOutputLinks = useMemo(
-    () => getSafeDeploymentLinks(terraformOutputs),
-    [terraformOutputs]
+    () => getManagedDeploymentLinks(terraformOutputs, selectedApplicationRelease?.status ?? null),
+    [selectedApplicationRelease?.status, terraformOutputs]
   );
   const hasLoadedSelectedHistoryDetails =
     deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
@@ -468,9 +476,28 @@ export function DirectDeploymentScreen({
       setRequestState("idle");
       setFailedActionStepId(null);
       setErrorMessage("");
+
+      if (
+        selectedDeployment.scope === "application" &&
+        selectedDeployment.currentPlanArtifactId
+      ) {
+        void runAction(
+          "approval",
+          () => completeApplicationDeployment(selectedDeployment),
+          "앱 배포를 승인하고 실행하지 못했습니다."
+        );
+        return;
+      }
+
       setSelectedDirectStepId("approval");
     }
-  }, [directDeploymentFlow.activeStepId, reconciledRequestState, selectedDeployment]);
+  }, [
+    completeApplicationDeployment,
+    directDeploymentFlow.activeStepId,
+    reconciledRequestState,
+    runAction,
+    selectedDeployment
+  ]);
 
   useEffect(() => {
     if (
@@ -493,10 +520,10 @@ export function DirectDeploymentScreen({
   }, [selectedHistoryDeploymentId, visibleDeploymentHistoryEntries]);
 
   useEffect(() => {
-    if (shouldShowApplyButton) {
+    if (shouldShowApplyButton && selectedDeployment?.scope !== "application") {
       setShowApplyConfirmation(true);
     }
-  }, [shouldShowApplyButton]);
+  }, [selectedDeployment?.scope, shouldShowApplyButton]);
 
   useEffect(() => {
     onConfirmationStateChange?.(showApplyConfirmation || showInfrastructureRollbackConfirmation);
@@ -1029,6 +1056,7 @@ export function DirectDeploymentScreen({
 
       const runtimeSecretPrerequisite = getDeploymentRuntimeSecretPrerequisite({
         diagramJson: preparedArtifacts.diagramJson,
+        terraformFiles: preparedArtifacts.terraformFiles,
         scope: selectedScope,
         target
       });
@@ -1042,6 +1070,39 @@ export function DirectDeploymentScreen({
 
       await startDeploymentReview(preparedArtifacts);
     }, "프로젝트 저장·검증과 Terraform Plan을 시작하지 못했습니다.");
+  }
+
+  async function completeApplicationDeployment(
+    plannedDeployment: Deployment
+  ): Promise<Deployment> {
+    const approvedDeployment = await approveDeploymentPlan(plannedDeployment.id);
+    setDeployments((currentDeployments) =>
+      currentDeployments.map((currentDeployment) =>
+        currentDeployment.id === approvedDeployment.id ? approvedDeployment : currentDeployment
+      )
+    );
+    setSelectedDeploymentId(approvedDeployment.id);
+    setSelectedDirectStepId("deployment");
+    onApplyPlanApproved?.(approvedDeployment);
+
+    setActiveProgress({ operation: "apply" });
+    completionCandidateDeploymentIdsRef.current.add(approvedDeployment.id);
+    const completedDeployment = await executeDeployment(approvedDeployment.id);
+    setDeployments((currentDeployments) =>
+      currentDeployments.map((currentDeployment) =>
+        currentDeployment.id === completedDeployment.id ? completedDeployment : currentDeployment
+      )
+    );
+    setSelectedDeploymentId(completedDeployment.id);
+    refreshBuildEnvironmentAfterPlan(completedDeployment);
+    refreshDeploymentDetails(completedDeployment.id);
+    if (
+      completedDeployment.status === "SUCCESS" &&
+      completionCandidateDeploymentIdsRef.current.delete(completedDeployment.id)
+    ) {
+      onDeploymentSucceeded?.(completedDeployment);
+    }
+    return completedDeployment;
   }
 
   async function startDeploymentReview(
@@ -1077,13 +1138,15 @@ export function DirectDeploymentScreen({
       ...currentDeployments.filter((deployment) => deployment.id !== plannedDeployment.id)
     ]);
     setSelectedDeploymentId(plannedDeployment.id);
-    if (plannedDeployment.consolePhase === "approval") {
+    if (plannedDeployment.scope !== "application") {
       pendingAutoAdvanceDeploymentIdRef.current = "";
+    }
+    setShowApplyConfirmation(false);
+    if (plannedDeployment.consolePhase === "approval") {
       setSelectedDirectStepId("approval");
     }
     refreshBuildEnvironmentAfterPlan(plannedDeployment);
     refreshDeploymentDetails(plannedDeployment.id);
-    setShowApplyConfirmation(false);
     return plannedDeployment;
   }
 
@@ -1354,6 +1417,18 @@ export function DirectDeploymentScreen({
     }
   }
 
+  function beginDeploymentScope(scope: DeploymentScope | "auto"): void {
+    setSelectedScope(scope);
+    setAutoScopeRequestDeploymentId("");
+    setSelectedDeploymentId("");
+    pendingAutoAdvanceDeploymentIdRef.current = "";
+    setShowApplyConfirmation(false);
+    setShowInfrastructureRollbackConfirmation(false);
+    setFailedActionStepId(null);
+    setErrorMessage("");
+    setSelectedDirectStepId("validation");
+  }
+
   function selectDeploymentHistoryFilter(filter: DeploymentHistoryFilter): void {
     setDeploymentHistoryFilter(filter);
     setSelectedHistoryDeploymentId("");
@@ -1383,6 +1458,8 @@ export function DirectDeploymentScreen({
       selectedDeployment,
       selectedScope
     });
+    const isApplicationOnlyFlow =
+      selectedScope === "application" || selectedDeployment?.scope === "application";
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
@@ -1440,7 +1517,7 @@ export function DirectDeploymentScreen({
         return (
           <>
             <div className={styles.deploymentStepSummary}>
-              <InfoRow label="범위" value={selectedDeployment?.scope ?? "확인 필요"} />
+              <InfoRow label="범위" value={selectedDeployment ? formatDeploymentScope(selectedDeployment.scope) : "확인 필요"} />
               <InfoRow
                 label="차단"
                 value={
@@ -1563,6 +1640,30 @@ export function DirectDeploymentScreen({
       );
     }
 
+    function renderCleanupPlanActions() {
+      return cleanupActionTargets.map(({ actions, deployment }) =>
+        actions.shouldShowDestroyPlanButton ? (
+          <button
+            aria-busy={
+              activeProgress?.operation === "destroy-plan" && requestState === "loading"
+            }
+            className={styles.deploymentSecondaryButton}
+            data-action="destroy-plan"
+            data-active={
+              activeProgress?.operation === "destroy-plan" && requestState === "loading"
+            }
+            disabled={!actions.canRunDestroyPlan}
+            key={deployment.id}
+            onClick={() => void startTerraformDestroyPlan(deployment)}
+            type="button"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
+          </button>
+        ) : null
+      );
+    }
+
     function renderDirectStepActions(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
         return (
@@ -1614,27 +1715,7 @@ export function DirectDeploymentScreen({
                 preflightState: directPreflightState
               }) ? (
               <div className={styles.deploymentValidationActions}>
-                {cleanupActionTargets.map(({ actions, deployment }) =>
-                  actions.shouldShowDestroyPlanButton ? (
-                    <button
-                      aria-busy={
-                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
-                      }
-                      className={styles.deploymentSecondaryButton}
-                      data-action="destroy-plan"
-                      data-active={
-                        activeProgress?.operation === "destroy-plan" && requestState === "loading"
-                      }
-                      disabled={!actions.canRunDestroyPlan}
-                      key={deployment.id}
-                      onClick={() => void startTerraformDestroyPlan(deployment)}
-                      type="button"
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                      {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
-                    </button>
-                  ) : null
-                )}
+                {renderCleanupPlanActions()}
                 <button
                   aria-busy={validationIsBusy}
                   className={styles.deploymentPrimaryButton}
@@ -1643,26 +1724,43 @@ export function DirectDeploymentScreen({
                   onClick={() => void runDeploymentReviewStep()}
                   type="button"
                 >
-                  {validationIsBusy
-                    ? hasCurrentDeploymentChanges
-                      ? "저장 후 검증 중"
-                      : "검증 실행 중"
-                    : hasCurrentDeploymentChanges
-                      ? "저장 후 검증"
-                      : "검증 실행"}
+                  {isApplicationOnlyFlow
+                    ? validationIsBusy
+                      ? "앱 배포 중"
+                      : "앱 배포"
+                    : validationIsBusy
+                      ? hasCurrentDeploymentChanges
+                        ? "저장 후 검증 중"
+                        : "검증 실행 중"
+                      : hasCurrentDeploymentChanges
+                        ? "저장 후 검증"
+                        : "검증 실행"}
                 </button>
               </div>
             ) : !hasCurrentPlan ? (
-              <button
-                aria-busy={requestState === "loading"}
-                className={styles.deploymentPrimaryButton}
-                data-active={activeProgress?.operation === "plan" && requestState === "loading"}
-                disabled={!canRunPlan}
-                onClick={() => void startTerraformPlan()}
-                type="button"
-              >
-                {requestState === "loading" ? "검증 실행 중" : "검증 실행"}
-              </button>
+              <div className={styles.deploymentValidationActions}>
+                {renderCleanupPlanActions()}
+                <button
+                  aria-busy={requestState === "loading"}
+                  className={styles.deploymentPrimaryButton}
+                  data-active={activeProgress?.operation === "plan" && requestState === "loading"}
+                  disabled={isApplicationOnlyFlow ? !canRunDeploymentReviewStep : !canRunPlan}
+                  onClick={() =>
+                    void (isApplicationOnlyFlow
+                      ? runDeploymentReviewStep()
+                      : startTerraformPlan())
+                  }
+                  type="button"
+                >
+                  {isApplicationOnlyFlow
+                    ? requestState === "loading"
+                      ? "앱 배포 중"
+                      : "앱 배포"
+                    : requestState === "loading"
+                      ? "검증 실행 중"
+                      : "검증 실행"}
+                </button>
+              </div>
             ) : null}
           </div>
         );
@@ -1754,6 +1852,17 @@ export function DirectDeploymentScreen({
 
                 return buttons;
               })}
+              {selectedDeployment?.status === "SUCCESS" &&
+              selectedDeployment.scope === "infrastructure" ? (
+                <button
+                  className={styles.deploymentPrimaryButton}
+                  onClick={() => beginDeploymentScope("application")}
+                  type="button"
+                >
+                  <DashboardIcon name="rocket" />
+                  앱만 이어서 배포
+                </button>
+              ) : null}
               {showApplyConfirmation && selectedDeployment ? (
                 <>
                   <button
@@ -1789,7 +1898,7 @@ export function DirectDeploymentScreen({
     }
 
     return (
-      <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
+      <section className={styles.deploymentConsoleGrid} aria-label="managed deployment">
         <header className={styles.deploymentPageHeader}>
           <div className={styles.deploymentPageHeading}>
             <h1>배포</h1>
@@ -1802,7 +1911,7 @@ export function DirectDeploymentScreen({
           {renderDirectStepActions(selectedStep.id)}
         </header>
 
-        <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
+        <nav className={styles.deploymentStepNavigation} aria-label="managed deployment 단계">
           <ol>
             {directDeploymentFlow.steps.map((step, index) => {
               const supportLabel =
@@ -1890,18 +1999,17 @@ export function DirectDeploymentScreen({
           <div className={styles.deploymentScopeEditor} id="deployment-scope-editor">
             <div>
               <strong>실행 대상 감지 방식</strong>
-              <span>자동 감지를 유지하거나 실행 범위를 직접 선택합니다.</span>
+              <span>범위를 바꾸면 이전 Plan과 승인은 폐기되고 새 검증부터 시작합니다.</span>
             </div>
             <SelectMenu
               ariaLabel="실행 대상 감지 방식"
               disabled={requestState === "loading"}
               emptyLabel="실행 대상 없음"
               id="deployment-scope-select"
-                  onChange={(value) => {
-                    setSelectedScope(value as DeploymentScope | "auto");
-                    setAutoScopeRequestDeploymentId("");
-                    setShowDeploymentScopeEditor(false);
-                  }}
+              onChange={(value) => {
+                beginDeploymentScope(value as DeploymentScope | "auto");
+                setShowDeploymentScopeEditor(false);
+              }}
               options={deploymentScopeOptions}
               size="regular"
               tone="workspace"
@@ -1915,6 +2023,7 @@ export function DirectDeploymentScreen({
             deployment={selectedDeployment}
             isStarting={deploymentProgressIsStarting}
             operationHint={activeProgress?.operation ?? null}
+            scopeHint={selectedScope === "auto" ? null : selectedScope}
           />
           {renderDirectStepContent(selectedStep.id)}
           {deploymentLogView.source === "current" &&
@@ -1938,11 +2047,11 @@ export function DirectDeploymentScreen({
             <div className={styles.deploymentValidationError} role="alert">
               <strong>{deploymentTargetPrerequisite.title}</strong>
               <p>{deploymentTargetPrerequisite.message}</p>
-              {deploymentTargetPrerequisite.action === "repository_analysis" ? (
+              {deploymentTargetPrerequisite.action === "terraform_edit" ? (
                 <div className={styles.deploymentValidationActions}>
-                  <Link href={createRepositoryReanalysisHref(projectId, projectName)}>
-                    Repository 다시 분석
-                  </Link>
+                  <button onClick={onOpenTerraformEditor} type="button">
+                    Terraform 코드 수정
+                  </button>
                 </div>
               ) : onOpenDeliverySetup ? (
                 <div className={styles.deploymentValidationActions}>
@@ -2175,7 +2284,7 @@ export function DirectDeploymentScreen({
                             {formatDate(deployment.createdAt)}
                           </time>
                         </td>
-                        <td>{formatDeploymentChangeSummary(deployment.planSummary)}</td>
+                        <td>{formatDeploymentPlanChangeSummary(deployment.planSummary)}</td>
                         <td>{formatDeploymentScope(deployment.scope)}</td>
                         <td>
                           <code title={versionLabel}>{versionLabel}</code>
@@ -2239,7 +2348,7 @@ export function DirectDeploymentScreen({
                     </div>
                     <div>
                       <dt>변경 결과</dt>
-                      <dd>{formatDeploymentChangeSummary(deployment.planSummary)}</dd>
+                      <dd>{formatDeploymentPlanChangeSummary(deployment.planSummary)}</dd>
                     </div>
                     <div>
                       <dt>대상</dt>
@@ -2649,6 +2758,7 @@ function OptionalInfoRow({
   return <InfoRow label={label} value={value} />;
 }
 
+// 승인 전에 기존 Resource import까지 포함한 전체 Plan 변경을 한 문장으로 보여줍니다.
 function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
   const summary = deployment.planSummary;
 
@@ -2660,7 +2770,7 @@ function PlanSummaryRows({ deployment }: { readonly deployment: Deployment }) {
     <>
       <InfoRow
         label="변경 사항"
-        value={`+${summary.createCount} ~${summary.updateCount} -${summary.deleteCount} +/-${summary.replaceCount}`}
+        value={formatDeploymentPlanChangeSummary(summary)}
       />
       {summary.warnings.length > 0 ? (
         <div className={styles.deploymentWarnings}>
@@ -2901,33 +3011,16 @@ function formatOutputValue(output: TerraformOutput): string {
   return JSON.stringify(output.value);
 }
 
-function formatDeploymentChangeSummary(summary: Deployment["planSummary"]): string {
-  if (!summary) {
-    return "변경 정보 없음";
-  }
-
-  const changes = [
-    ["추가", summary.createCount],
-    ["수정", summary.updateCount],
-    ["교체", summary.replaceCount],
-    ["삭제", summary.deleteCount]
-  ]
-    .filter(([, count]) => Number(count) > 0)
-    .map(([label, count]) => `${label} ${count}개`);
-
-  return changes.length > 0 ? changes.join(" · ") : "변경 없음";
-}
-
 function formatDeploymentScope(scope: DeploymentScope): string {
   if (scope === "infrastructure") {
-    return "인프라";
+    return "인프라만";
   }
 
   if (scope === "application") {
-    return "애플리케이션";
+    return "앱만";
   }
 
-  return "전체 스택";
+  return "인프라 + 앱 함께";
 }
 
 function formatDate(value: string): string {
@@ -2941,13 +3034,4 @@ function formatDate(value: string): string {
     dateStyle: "short",
     timeStyle: "short"
   });
-}
-
-function createRepositoryReanalysisHref(projectId: string, projectName: string): string {
-  const params = new URLSearchParams({ projectId });
-  if (projectName.trim()) {
-    params.set("projectName", projectName.trim());
-  }
-
-  return `/workspace/repository?${params.toString()}`;
 }

@@ -123,12 +123,38 @@ export function getDeploymentHistoryMetrics<
   };
 }
 
-function getDeploymentPlanChangeCount(summary: Deployment["planSummary"]): number {
+// 기존 AWS Resource import도 사용자가 확인해야 하는 Plan 변경 수에 포함합니다.
+export function getDeploymentPlanChangeCount(summary: Deployment["planSummary"]): number {
   if (!summary) {
     return 0;
   }
 
-  return summary.createCount + summary.updateCount + summary.deleteCount + summary.replaceCount;
+  return (
+    summary.createCount +
+    summary.updateCount +
+    summary.deleteCount +
+    summary.replaceCount +
+    (summary.importCount ?? 0)
+  );
+}
+
+// 승인과 이력에서 같은 쉬운 문장으로 Plan 변경 내용을 보여줍니다.
+export function formatDeploymentPlanChangeSummary(summary: Deployment["planSummary"]): string {
+  if (!summary) {
+    return "변경 정보 없음";
+  }
+
+  const changes = [
+    ["기존 리소스", summary.importCount ?? 0, "개 가져오기"],
+    ["추가", summary.createCount, "개"],
+    ["수정", summary.updateCount, "개"],
+    ["교체", summary.replaceCount, "개"],
+    ["삭제", summary.deleteCount, "개"]
+  ]
+    .filter(([, count]) => Number(count) > 0)
+    .map(([label, count, suffix]) => `${label} ${count}${suffix}`);
+
+  return changes.length > 0 ? changes.join(" · ") : "변경 없음";
 }
 
 export function resolveDeploymentHistorySelection<T extends DeploymentHistorySummary>(input: {

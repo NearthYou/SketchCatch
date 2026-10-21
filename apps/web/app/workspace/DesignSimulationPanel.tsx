@@ -19,7 +19,7 @@ type CostReviewInput = {
   readonly recommendations: readonly string[];
 };
 
-// Design Simulation 결과를 Pre-Deployment Check와 섞지 않고 별도 패널로 보여줍니다.
+// Design Simulation 결과를 deployment check와 섞지 않고 별도 패널로 보여줍니다.
 export function DesignSimulationPanel({
   designSimulation,
   isDisabled,

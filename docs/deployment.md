@@ -8,8 +8,8 @@ SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Far
 | ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | 운영 배포                 | SketchCatch 서비스 자체를 ECS/Fargate에 배포                              | Docker, ECR, ECS service update, ALB path routing                   |
 | Production infra IaC      | SketchCatch 자체 AWS infrastructure를 관리                                | 분리된 S3 state, native lockfile, manual plan/import/apply approval |
-| Direct Deployment Path    | SketchCatch가 사용자가 승인한 IaC Preview를 직접 실행                     | Terraform Plan/Apply/Destroy, approval, logs, cleanup               |
-| Git/CI/CD Deployment Path | SketchCatch가 IaC Preview를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review          |
+| managed deployment    | SketchCatch가 사용자가 승인한 IaC Preview를 직접 실행                     | Terraform Plan/Apply/Destroy, approval, logs, cleanup               |
+| CI/CD delivery | SketchCatch가 IaC Preview를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review          |
 
 ## ECS 배포 속도와 측정
 
@@ -46,9 +46,9 @@ Requirement Input
 → Architecture Draft
 → Architecture Board
 → IaC Preview
-→ Pre-Deployment Check
+→ deployment check
 → User-Accepted Change
-→ Direct Deployment Path 또는 Git/CI/CD Deployment Path
+→ managed deployment 또는 CI/CD delivery
 → Deployment History
 → Auto Cleanup
 ```
@@ -66,7 +66,7 @@ AMAZON_Q_RETRIEVAL_APPLICATION_ID=<anonymous-q-application-id>
 
 `AMAZON_Q_RETRIEVAL_APPLICATION_ID`가 비어 있으면 기존 `AMAZON_Q_APPLICATION_ID`를 사용합니다. Architecture Draft는 Creator mode application ID나 Q Business 사용자 구독을 요구하지 않습니다. 선택된 패턴마다 `RETRIEVAL_MODE`를 한 번 호출하므로 API rate/cost limit과 provider metadata를 유지해야 합니다.
 
-Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
+managed deployment의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
 
 - VPC
 - Public/Private Subnet
@@ -117,10 +117,11 @@ Task Definition은 `secrets` mapping으로 모든 Task에 같은 값을 주입�
 Task Definition을 복제하고 image만 교체하므로 Secret ARN mapping을 유지합니다. `INSTANCE_ID`는 고정 주입하지 않고
 각 Task hostname을 사용해 scale-out 시 `servedBy`가 Task별로 달라지게 합니다.
 
-Repository Fixed Template 경로도 Repository Analysis의 `requiredRuntimeSecrets`를 받아 위 Secret 리소스와 Task
-mapping을 Project Draft에 함께 생성합니다. `full_stack` 배포 준비 단계는 확정된 build contract와 생성된 Terraform을
-다시 비교합니다. Secret, Secret Version, 최소 읽기 IAM policy, Task mapping 중 하나가 없거나 서로 다른 Secret을
-가리키면 Plan/승인 단계로 넘어가지 않고 새 Draft 생성을 요구합니다.
+Repository Analysis는 `requiredRuntimeSecrets` 이름만 build contract에 기록하며 Fixed Template Board 재생성을 배포
+전제조건으로 사용하지 않습니다. `full_stack` 배포 준비 단계는 저장된 Project Draft에서 준비한 `.tf` 원문을 기준으로
+Secret, Secret Version, 최소 읽기 IAM policy, Task mapping, ECS Service 참조가 하나의 체인인지 검증합니다. 하나라도
+빠지거나 서로 다른 리소스를 가리키면 Plan/승인 단계로 넘어가지 않고 현재 Terraform 코드의 수정·저장을 요구합니다.
+Terraform artifact가 아직 없는 AI Fixed Template 생성 단계에서만 Diagram 계약을 보조 검증으로 사용합니다.
 
 Application release는 배포 직전에 provider의 current state를 read-only로 확인한다. 동일한
 `ApplicationArtifact` fingerprint와 digest/reference, 동일한 `deploymentTargetFingerprint`, healthy
@@ -132,7 +133,7 @@ Runtime Cache, 이전 pipeline 성공 여부만으로는 생략하지 않는다.
 Direct ECS/Fargate는 active service/task definition과 task tag, image digest, Fargate capacity,
 rollout configuration, HTTPS health를 확인한다. Direct HTTPS probe는 credential/query/fragment와
 private IP를 거부하고 DNS 응답을 public address로 검증한 뒤 그 address에 고정해 요청한다.
-Git/CI/CD application workflow는 사용자 계정 안에서 다음 read-only preflight를 실행한다.
+CI/CD application workflow는 사용자 계정 안에서 다음 read-only preflight를 실행한다.
 
 - ECS Service + Fargate: Fargate capacity와 service 안정성, task definition tag, container image digest, HTTPS health
 - Lambda Alias/Version: alias/version, x86_64 compute, provider update 상태, version description marker, code digest, CodeDeploy group, HTTPS health
@@ -162,7 +163,7 @@ retention도 유지하며 active artifact나 active static prefix를 먼저 삭�
 - 로컬 개발은 `local_process` mode로 Terraform worker를 API hot reload와 분리합니다. 운영 ECS worker mode와 마찬가지로 API 재시작 시 active worker를 보호하며, 명시적인 legacy `in_process` mode만 실행 주체를 잃은 `RUNNING` Deployment를 `FAILED`로 정리합니다.
 - Representative Use Journey나 리허설 후 생성 리소스 cleanup을 반드시 확인합니다.
 
-### Direct Deployment 최적화 정책
+### managed deployment 최적화 정책
 
 - 최적화 지원 여부는 provider-neutral `ResourceDefinition.capabilities.deployment`에서 판정합니다. Terraform managed resource는 desired-state 최적화 대상이며 data source, `UNKNOWN`, catalog-only resource는 명시적으로 제외합니다. application artifact 재사용은 Direct/GitOps 공통 Registry v1으로 구현하며 runtime no-op은 별도 후속 계층입니다.
 - Terraform bundle은 파일명 정렬, JSON key canonicalization, LF 개행으로 정규화합니다. desired-state fingerprint에는 provider lock/identity, 비밀값을 제외한 변수 이름, backend label, project/provider/account/region target, state lineage/serial을 포함합니다.
@@ -179,18 +180,18 @@ retention도 유지하며 active artifact나 active static prefix를 먼저 삭�
 - RDS에는 identity, digest, provider location metadata, 상태만 저장합니다. 실제 사용자 image/zip/bundle은 사용자 ECR/S3 또는 provider storage에 두며 SketchCatch production ECR/S3에 복사하지 않습니다.
 - GitOps release evidence v1은 계속 허용합니다. v2 `artifact` extension은 canonical fingerprint, build contract, digest, provider location을 strict validation하며 malformed v2를 v1로 downgrade하지 않습니다. 실제 AWS mutation이나 real credential 없이 test double과 read-only adapter 계약으로 검증합니다.
 
-## Git/CI/CD Deployment Path 정책
+## CI/CD delivery 정책
 
-Git/CI/CD Deployment Path는 운영 배포와 팀 리뷰를 위한 경로입니다. SketchCatch는 Terraform 파일을 Source Repository에 commit하거나 PR로 넘기고, 외부 pipeline 상태를 추적합니다.
+CI/CD delivery는 운영 배포와 팀 리뷰를 위한 경로입니다. SketchCatch는 Terraform 파일을 Source Repository에 commit하거나 PR로 넘기고, 외부 pipeline 상태를 추적합니다.
 
-- Git/CI/CD handoff도 User-Accepted Change 이후에만 생성합니다.
+- CI/CD handoff도 User-Accepted Change 이후에만 생성합니다.
 - Source Repository token, deploy key, CI secret 원문은 응답, 로그, DB에 저장하지 않습니다.
-- PR에는 IaC Preview, Plan 요약, Pre-Deployment Check 결과, Cost Analysis 요약을 연결합니다.
+- PR에는 IaC Preview, Plan 요약, deployment check 결과, Cost Analysis 요약을 연결합니다.
 - 운영 apply는 외부 pipeline의 승인 job이나 조직 정책을 따를 수 있지만, SketchCatch는 승인 없는 apply를 권장하거나 자동 실행하지 않습니다.
-- 최초 Direct Deployment와 설치 PR은 Terraform·Workflow·Repository/AWS 설정을 준비합니다. 이후 App은 target branch push로, Infra는 사용자가 직접 실행한 `gh workflow run sketchcatch-infra.yml --ref main`으로 따로 배포합니다.
+- 최초 managed deployment와 설치 PR은 Terraform·Workflow·Repository/AWS 설정을 준비합니다. 이후 App은 target branch push로, Infra는 사용자가 직접 실행한 `gh workflow run sketchcatch-infra.yml --ref main`으로 따로 배포합니다.
 - Infra 명령 실행은 Terraform Plan 후 같은 job의 같은 `tfplan`을 Apply하는 명시적 승인입니다. 이 흐름에 별도 PR, merge, GitHub Environment reviewer 승인을 추가하지 않습니다.
-- Direct Deployment Path와 Git/CI/CD Deployment Path는 서로 경쟁하는 선택지가 아니라 사용 맥락이 다른 실행 경로입니다.
-- Git/CI/CD 상태 polling과 long-running workflow status는 Redis Runtime Cache를 사용할 수 있지만, 최종 기록은 RDS/S3에 남깁니다.
+- managed deployment와 CI/CD delivery는 서로 경쟁하는 선택지가 아니라 사용 맥락이 다른 실행 경로입니다.
+- CI/CD 상태 polling과 long-running workflow status는 Redis Runtime Cache를 사용할 수 있지만, 최종 기록은 RDS/S3에 남깁니다.
 
 ### CI/CD 관측과 알림 운영 기준
 
@@ -200,7 +201,7 @@ CI/CD console은 active run이 있으면 5초, active run이 없으면 30초마�
 
 같은 commit의 App `push`와 Infra `workflow_dispatch`는 GitHub run ID와 attempt가 다른 독립 Pipeline Run으로 저장하고 서로 덮어쓰지 않습니다. GitHub가 `skipped` job의 log를 생성하지 않은 경우에는 log를 요청하지 않고 stage 상태만 저장하며, 오래된 개별 job log가 404 등으로 없어졌다면 해당 stage에 비민감 warning을 남기고 다른 stage와 run 상태의 영속화를 계속합니다. release evidence를 읽지 못한 경우에는 ApplicationRelease를 만들지 않습니다.
 
-Direct Deployment와 Pipeline Run의 성공·실패·취소는 PostgreSQL terminal trigger가 같은 transaction에서
+managed deployment와 Pipeline Run의 성공·실패·취소는 PostgreSQL terminal trigger가 같은 transaction에서
 `notifications`와 `notification_outbox`에 기록합니다. 같은 `source:sourceId:status`는 unique key로 한 번만
 생성되며 GitOps source Deployment는 Pipeline Run 알림과 중복 생성하지 않습니다. 전역 Inbox는 RDS의
 읽음 상태를 사용하고 인증 SSE로 새 항목을 받습니다. browser Notification은 사용자가
@@ -322,9 +323,9 @@ status를 다시 조회한다. commit, digest, file count, active pointer, Outpu
 `ApplicationRelease` 원장에 `cloudfront_distribution` revision과 health/rollback evidence를 upsert한다. 실제
 sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 #378에서 수행한다.
 
-### Git/CI/CD 자동 배포 PR 산출물
+### CI/CD 자동 배포 PR 산출물
 
-Git/CI/CD 설치 PR은 인프라·앱 최초 Direct Deployment의 승인 Plan에서 생성한다. PR 생성 전에는 승인 Plan, active Source Repository, valid monitoring config, verified AWS connection, confirmed build config, runtime coordinates, 안전한 ECS HTTPS Output URL을 모두 재검증한다. Workspace의 기본 동작은 handoff를 `draft`로 먼저 저장하고 Repository 설정 → AWS Role trust → PR 순서로 한 번에 처리한다.
+CI/CD 설치 PR은 인프라·앱 최초 managed deployment의 승인 Plan에서 생성한다. PR 생성 전에는 승인 Plan, active Source Repository, valid monitoring config, verified AWS connection, confirmed build config, runtime coordinates, 안전한 ECS HTTPS Output URL을 모두 재검증한다. Workspace의 기본 동작은 handoff를 `draft`로 먼저 저장하고 Repository 설정 → AWS Role trust → PR 순서로 한 번에 처리한다.
 
 - `POST /api/git-cicd-handoffs/:handoffId/setup`: 중간 실패나 닫힌 PR이 있는 동일 handoff를 재개한다. 열린 PR은 저장된 head SHA와 handoff manifest ownership이 일치할 때만 갱신하고, 사용자 변경이 있거나 닫힌 PR이면 기존 branch를 보존한 채 새 retry branch와 PR로 복구한다. 이전 Pipeline이 실패했거나 PR이 닫혔다면 안정적인 실패 식별값을 담은 retry-only file을 추가해, retry PR merge가 ECS App workflow를 실제로 다시 시작하게 한다. 최초 설치 PR에는 이 file을 만들지 않는다.
 - Repository 설정: GitHub Environment, target branch 전용 custom deployment branch policy와 Actions variables를 GitHub App installation token으로 수렴시킨 뒤 exact read-back을 통과해야 완료된다. 이미 일치하는 값은 write를 생략한다. 빈 managed variable은 삭제하고 absence를 확인해 과거 Static Site URL/API Base URL이 남지 않게 한다.
@@ -405,12 +406,12 @@ preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_lis
 실제 실행 후 report에는 비용 범위, cleanup owner, known risk를 남기되 credential, capability, raw log는
 남기지 않는다.
 
-## Direct Deployment 사용자 단계
+## managed deployment 사용자 단계
 
 사용자에게 노출하는 흐름은 다음 세 단계다.
 
 1. `검증`: `Ctrl+S`/`Command+S` 또는 `저장하고 배포`로 Board와 Terraform working draft를 한 번의
-   ProjectDraft 저장으로 고정하고, Pre-Deployment Check와 Terraform Plan을 수행한다.
+   ProjectDraft 저장으로 고정하고, deployment check와 Terraform Plan을 수행한다.
 2. `승인`: 배포 범위, 변경량, blocker, 비용·보안 경고를 확인하고 준비 snapshot과 Plan을 승인한다.
 3. `배포`: 승인된 snapshot을 실행하고 상태, 릴리즈 버전, Output URL을 확인한다. Destroy도 같은
    `검증 → 승인 → 배포` 구조를 사용한다.
@@ -420,7 +421,7 @@ preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_lis
 사용하며 승인 snapshot, Terraform artifact, tfplan, AWS account/region을 다시 확인한다. Raw hash,
 리소스 inventory, 전체 로그는 기본 요약에서 접힌 세부정보로 제공한다.
 
-## Direct Deployment Path 실행 순서
+## managed deployment 실행 순서
 
 사용자에게는 scope와 관계없이 `검증 → 승인 → 배포` 세 단계만 노출한다. 내부 실행은 scope별로 분리한다.
 
@@ -472,7 +473,7 @@ rollback도 저장된 baseline ID와 target fingerprint를 다시 대조한다.
 5. terraform plan -out=tfplan
 6. terraform show -json tfplan
 7. Plan summary와 state baseline identity 저장
-8. Plan summary와 Pre-Deployment Check 표시
+8. Plan summary와 deployment check 표시
 9. 사용자 승인
 10. 승인 snapshot과 현재 state baseline identity 재검증
 11. terraform init
@@ -497,7 +498,7 @@ rollback도 저장된 baseline ID와 target fingerprint를 다시 대조한다.
 - Plan 실패 시 Apply 단계로 넘어가지 않습니다.
 - 승인 전 계정, region, 생성/수정/삭제 리소스, 비용/위험 요약을 표시합니다.
 - Plan 승인 화면의 최소 요약은 현재 `terraform show -json tfplan` 결과에서 생성합니다.
-- Pre-Deployment Check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체나 Plan 승인을 blocked로 만들지 않습니다. High warning이 있어도 사용자는 Plan을 승인할 수 있으며, finding은 승인 전 검토 정보로 계속 표시합니다.
+- deployment check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체나 Plan 승인을 blocked로 만들지 않습니다. High warning이 있어도 사용자는 Plan을 승인할 수 있으며, finding은 승인 전 검토 정보로 계속 표시합니다.
 - Apply 성공 후 사용자가 확인할 수 있는 output을 표시합니다.
 - Apply 실패 시 Deployment를 `FAILED`와 `failureStage: "apply"`로 남깁니다.
 - AWS 연결 또는 STS credential 준비 실패는 `failureStage: "aws_connection"`으로 남깁니다.
@@ -596,7 +597,7 @@ API/web ECS service의 task revision은 GitHub Actions가 관리하고 Terraform
 
 ### SketchCatch production infrastructure Terraform
 
-Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed IaC로 전환할 구조를 `infra/aws/production`에 둡니다. 이 경로는 사용자의 Direct Deployment Path 및 Git/CI/CD Deployment Path와 state, credential, workflow를 공유하지 않습니다.
+Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed IaC로 전환할 구조를 `infra/aws/production`에 둡니다. 이 경로는 사용자의 managed deployment 및 CI/CD delivery와 state, credential, workflow를 공유하지 않습니다.
 
 | group             | root                                   | 범위                                                   | 기본 보호                                                                 |
 | ----------------- | -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
@@ -795,13 +796,13 @@ S3에 저장하는 데이터:
 - 프로젝트 export zip
 - 프로젝트 썸네일
 
-Redis Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration 상태 추적을 우선 지원합니다. AI 결과물 캐싱은 2순위이며, 캐시된 결과가 RDS/S3의 원천 기록이나 Deployment Safety Gate를 대체하지 않습니다.
+Redis Runtime Cache는 Deployment, Reverse Engineering, CI/CD Integration 상태 추적을 우선 지원합니다. AI 결과물 캐싱은 2순위이며, 캐시된 결과가 RDS/S3의 원천 기록이나 Deployment Safety Gate를 대체하지 않습니다.
 
 `REDIS_URL`이 설정된 API runtime은 Redis Runtime Cache adapter를 사용합니다. `REDIS_URL`이 비어 있거나 `NODE_ENV=test`이면 in-memory fallback을 사용합니다. Redis 연결 또는 명령 실패는 long-running workflow의 보조 상태를 degraded로 만들 수 있지만, Deployment 원천 기록과 artifact는 계속 RDS/S3를 기준으로 확인해야 합니다.
 
 ## GitHub App 기반 Source Repository 연결
 
-Git/CI/CD Deployment Path의 운영 repository 연결은 GitHub App 설치 흐름을 기본 경로로 사용합니다. Web은 GitHub App state를 직접 만들지 않고 API가 발급한 install URL로 redirect만 수행합니다.
+CI/CD delivery의 운영 repository 연결은 GitHub App 설치 흐름을 기본 경로로 사용합니다. Web은 GitHub App state를 직접 만들지 않고 API가 발급한 install URL로 redirect만 수행합니다.
 
 API runtime 필수 환경 변수:
 
@@ -850,7 +851,7 @@ ECS 전환 뒤에는 CloudFormation stack output `SecurityGroupId`를 production
 검증 대상:
 
 - Deployment log cursor가 Runtime Cache를 사용할 수 있는지
-- Git/CI/CD pipeline status cache가 Runtime Cache를 사용할 수 있는지
+- CI/CD pipeline status cache가 Runtime Cache를 사용할 수 있는지
 - Redis 장애 또는 미설정 시 in-memory fallback으로 degraded 동작이 가능한지
 - Live Observation이 활성화된 production에서는 존재하지 않는 UUID의 public bootstrap이 `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`를 반환하는지. `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE`이면 Redis endpoint, TLS 또는 보안 그룹 연결을 복구해야 함
 

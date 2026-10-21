@@ -24,11 +24,22 @@ test("Live Observation applies Terraform files to the current Project Draft befo
     "const openLiveObservationTerraformEditor"
   );
 
+  assert.match(managerCallback, /latestDiagramRef\.current = diagramJson/);
   assert.match(managerCallback, /handleTerraformFilesChange\(files\)/);
   assert.match(managerCallback, /setTerraformFilesReplacement/);
   assert.match(managerCallback, /notifyFilesChange: false/);
-  assert.match(applyCallback, /incrementLiveObservationEcsMaxCapacity/);
-  assert.match(applyCallback, /onLiveObservationTerraformFilesApply\(result\.files\)/);
+  assert.match(applyCallback, /incrementLiveObservationEcsScalingSettings/);
+  assert.match(applyCallback, /const originalDiagram = context\.diagram/);
+  assert.match(applyCallback, /const originalFiles = terraformAiCodeContext\.files/);
+  assert.match(applyCallback, /catch \(error\)/);
+  assert.match(applyCallback, /context\.applyDiagramJson\(originalDiagram\)/);
+  assert.match(applyCallback, /diagramJson: originalDiagram,[\s\S]*?files: originalFiles/);
+  assert.match(applyCallback, /syncTerraformToDiagram/);
+  assert.match(applyCallback, /context\.applyDiagramJson\(syncResult\.diagramJson\)/);
+  assert.match(
+    applyCallback,
+    /onLiveObservationTerraformFilesApply\(\{[\s\S]*?diagramJson: syncResult\.diagramJson,[\s\S]*?files: result\.files/
+  );
   assert.match(applyCallback, /await context\.saveDiagramNow\?\.\(\)/);
   assert.match(applyCallback, /requireSavedProjectDraftRevision\(saveResult\)/);
   assert.match(
@@ -73,6 +84,17 @@ test("Live Observation clears an old incident result when the Deployment or sess
   }
 });
 
+test("Live Observation closes the Deployment overlay before opening from its console", () => {
+  const openCallback = sourceBlock(
+    rightPanelSource,
+    "const openLiveObservation = useCallback",
+    "const applyLiveObservationTerraformUpdate"
+  );
+
+  assert.match(openCallback, /setIsDeploymentConsoleOpen\(false\)/);
+  assert.match(openCallback, /setIsLiveObservationOpen\(true\)/);
+});
+
 test("Live Observation opens and highlights the exact saved Terraform location", () => {
   const openCallback = sourceBlock(
     rightPanelSource,
@@ -80,6 +102,7 @@ test("Live Observation opens and highlights the exact saved Terraform location",
     "const updateLiveObservationDeployment"
   );
 
+  assert.match(openCallback, /setIsDeploymentConsoleOpen\(false\)/);
   assert.match(openCallback, /openTerraformIssueSourceLocation\(\{/);
   assert.match(openCallback, /fileName: liveObservationAppliedTerraformUpdate\.fileName/);
   assert.match(openCallback, /line: liveObservationAppliedTerraformUpdate\.line/);

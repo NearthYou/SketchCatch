@@ -163,7 +163,7 @@ function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): s
   return warningLabels[code];
 }
 
-// Pre-Deployment Check 결과를 요약과 Check Finding 중심으로 압축 표시합니다.
+// deployment check 결과를 요약과 Check Finding 중심으로 압축 표시합니다.
 export function WorkspaceAiPreDeploymentResult({
   analysis
 }: {

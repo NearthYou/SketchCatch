@@ -311,7 +311,7 @@ test("GitHub release request is rejected before persistence when another release
         reserveExecution: async () => {
           throw new ProjectExecutionLeaseError(
             "PROJECT_RELEASE_IN_PROGRESS",
-            "Direct deployment is already running for this project",
+            "managed deployment is already running for this project",
             "direct"
           );
         }

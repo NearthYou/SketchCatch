@@ -379,7 +379,7 @@ export async function acquireProjectExecutionLease(
   throw new ProjectExecutionLeaseError(
     "PROJECT_RELEASE_IN_PROGRESS",
     active
-      ? `${active.source === "direct" ? "Direct deployment" : "GitHub release"} is already running for this project`
+      ? `${active.source === "direct" ? "managed deployment" : "GitHub release"} is already running for this project`
       : "Another release acquired this project at the same time",
     active?.source ?? null
   );

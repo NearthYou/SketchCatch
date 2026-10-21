@@ -7,15 +7,15 @@ SketchCatch is a multi-cloud-ready IaC operations service.
 1. Treat SketchCatch as an IaC operations service, not just a visual cloud diagram tool or a demo script.
 2. Terraform is the primary IaC target for the MVP and the extension point for future cloud providers.
 3. AWS is the first Provider Adapter for the MVP. Keep the domain model provider-neutral.
-4. The MVP journey is Requirement Input, Source Repository, or Reverse Engineering input -> Practice Architecture -> IaC Preview -> Pre-Deployment Check -> approved execution or Git/CI/CD handoff -> Deployment History and Auto Cleanup.
+4. The MVP journey is Requirement Input, Source Repository, or Reverse Engineering input -> infrastructure design -> IaC Preview -> deployment check -> approved execution or CI/CD handoff -> Deployment History and Auto Cleanup.
 5. Demo journeys must prove the real service flow rather than define a separate demo-only scope.
 6. Voice Requirement Input must be transcribed, shown back to the user, and confirmed before becoming a Requirement Prompt.
-7. AI, Bedrock, and Amazon Q Assistance may recommend, explain, and review, but Practice Architecture changes, IaC handoff, Git changes, and deployment actions must be user-accepted changes.
-8. SketchCatch supports two execution paths: Direct Deployment Path and Git/CI/CD Deployment Path.
+7. AI, Bedrock, and Amazon Q Assistance may recommend, explain, and review, but infrastructure design changes, IaC handoff, Git changes, and deployment actions must be user-accepted changes.
+8. SketchCatch supports two execution paths: managed deployment and CI/CD delivery.
 9. Reverse Engineering must be provider-adapter based. The MVP can implement AWS first, but the concept is not AWS-only.
-10. Redis is internal Runtime Cache infrastructure, not a user Practice Architecture Resource.
+10. Redis is internal Runtime Cache infrastructure, not a user infrastructure resource.
 11. CloudFormation may be used as an AWS reference or future compatibility target, but it is not the default MVP direction.
-12. Real cloud apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work or approved Git/CI/CD handoff with plan, approval, logging, secret masking, and cleanup safeguards.
+12. Real cloud apply, deploy, update, delete, or destroy behavior is allowed only for explicit Deployment work or approved CI/CD handoff with plan, approval, logging, secret masking, and cleanup safeguards.
 
 ## Required Reading
 
@@ -24,7 +24,7 @@ Before making changes, read this file and the nearest `AGENTS.md`. Read addition
 - `docs/README.md` for documentation work or document navigation.
 - `docs/product.md` for product scope, MVP behavior, AI/IaC workflows, roadmap, or safety policy.
 - `docs/data-models.md` for DB models, API DTOs, shared types, frontend state, AI results, Terraform artifacts, or deployment contracts.
-- `docs/architecture.md` for stack, storage, API scope, execution boundaries, deployment architecture, or ADR-level decisions.
+- `docs/architecture.md` for stack, storage, API scope, execution boundaries, deployment architecture, or durable architecture decisions.
 - `docs/development.md` for Git flow, code conventions, team AI collaboration, PR checks, or required checks.
 - `docs/deployment.md` for operational deployment, Terraform Plan/Apply/Destroy, AWS credentials, RDS, S3, logs, outputs, or cleanup.
 

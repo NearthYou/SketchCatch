@@ -76,12 +76,12 @@ test("labels and animates only a real capacity change as expected", () => {
   assert.match(html, /실제 1개 · 2개 예상 중/);
 });
 
-test("shows an early scale-out forecast at five hundred accepted requests", () => {
+test("shows an early scale-out forecast at one hundred accepted requests", () => {
   const html = renderToStaticMarkup(
     createElement(LiveObservationFocusedFlow, {
       architecture,
       snapshot: availableSnapshot({
-        acceptedEventCount: 500,
+        acceptedEventCount: 100,
         projectedRequestsPerMinute: 0,
         running: 1
       })

@@ -44,7 +44,11 @@ function createBaseDisplayName(input: AwsResourceDisplayNameInput): string {
     return displayName;
   }
 
-  return extractArnResourceName(input.providerResourceId) ?? createFallbackDisplayName(input);
+  const arnResourceName = extractArnResourceName(input.providerResourceId);
+
+  return arnResourceName && !isAwsProviderId(arnResourceName)
+    ? arnResourceName
+    : createFallbackDisplayName(input);
 }
 
 function isHumanDisplayName(displayName: string, providerResourceId: string): boolean {

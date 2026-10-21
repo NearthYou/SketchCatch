@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type {
   DeploymentFailureStage,
+  DeploymentScope,
   DeploymentProgressSnapshot,
   DeploymentStage,
   DeploymentStatus
@@ -72,6 +73,36 @@ test("fallback Plan progress shows a stage-based approximate percentage", () => 
   assert.equal(progress?.percent, 75);
   assert.equal(progress?.valueLabel, "약 75%");
   assert.match(progress?.detail ?? "", /리소스를 계산/);
+});
+
+test("application-only Plan progress describes the app release instead of Terraform resources", () => {
+  const progress = getDeploymentProgressPresentation({
+    deployment: createDeployment({
+      activeStage: "plan",
+      scope: "application",
+      status: "RUNNING"
+    }),
+    isStarting: false,
+    operationHint: "plan",
+    snapshot: null
+  });
+
+  assert.equal(progress?.title, "앱 배포 준비 중");
+  assert.equal(progress?.detail, "앱 빌드와 릴리스에 필요한 변경사항을 확인하고 있습니다.");
+  assert.doesNotMatch(`${progress?.title} ${progress?.detail}`, /Terraform|리소스/);
+});
+
+test("application-only execution uses app release wording instead of Terraform Apply", () => {
+  const progress = getDeploymentProgressPresentation({
+    deployment: createDeployment({ scope: "application", status: "PENDING" }),
+    isStarting: true,
+    operationHint: "apply",
+    snapshot: null
+  });
+
+  assert.equal(progress?.title, "앱 배포 중");
+  assert.equal(progress?.detail, "검증된 앱 Artifact를 빌드하고 릴리스하고 있습니다.");
+  assert.doesNotMatch(`${progress?.title} ${progress?.detail}`, /Terraform/);
 });
 
 test("preflight progress describes safety checks instead of cloud apply", () => {
@@ -188,6 +219,7 @@ test("a reloaded running destroy Plan is inferred from the persisted operation",
 
 function createDeployment(
   overrides: Partial<{
+    scope: DeploymentScope;
     activeStage: DeploymentStage | null;
     currentPlanOperation: "apply" | "destroy" | null;
     failureStage: DeploymentFailureStage | null;
@@ -196,6 +228,7 @@ function createDeployment(
   }> = {}
 ) {
   return {
+    scope: "full_stack" as DeploymentScope,
     activeStage: null,
     currentPlanOperation: null,
     failureStage: null,

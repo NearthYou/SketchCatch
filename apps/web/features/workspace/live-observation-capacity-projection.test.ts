@@ -33,9 +33,9 @@ test("uses the provider one-minute request count when Store traffic has gone idl
   assert.equal(projection?.direction, "scale_out");
 });
 
-test("forecasts the second Task by about five hundred accepted audience requests", () => {
+test("forecasts the second Task by one hundred accepted audience requests", () => {
   const value = snapshot({
-    acceptedEventCount: 500,
+    acceptedEventCount: 100,
     projectedRequestsPerMinute: 0,
     running: 1
   });

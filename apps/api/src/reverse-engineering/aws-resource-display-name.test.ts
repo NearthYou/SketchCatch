@@ -75,6 +75,27 @@ test("does not use untagged VPC and EC2 provider IDs as display names", () => {
   );
 });
 
+test("untagged EIP/NAT IDs와 generic ARN을 짧은 이름으로 표시한다", () => {
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: "eipalloc-0123456789abcdef0",
+      providerResourceId: "eipalloc-0123456789abcdef0",
+      providerResourceType: "AWS::EC2::EIP"
+    }),
+    "AWS EC2 EIP · abcdef0"
+  );
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName:
+        "arn:aws:ec2:ap-northeast-2:123456789012:natgateway/nat-0123456789abcdef0",
+      providerResourceId:
+        "arn:aws:ec2:ap-northeast-2:123456789012:natgateway/nat-0123456789abcdef0",
+      providerResourceType: "AWS::EC2::NatGateway"
+    }),
+    "AWS EC2 NatGateway · abcdef0"
+  );
+});
+
 test("distinguishes duplicate base names by the final seven original-ID characters", () => {
   const firstArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout-abcdef1";
   const secondArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout-abcdef2";

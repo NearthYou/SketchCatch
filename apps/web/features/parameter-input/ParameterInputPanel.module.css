@@ -130,6 +130,11 @@ div.resourceIcon,
   width: 100%;
 }
 
+.input::placeholder {
+  color: var(--workspace-placeholder, #b8bcc4);
+  opacity: 1;
+}
+
 .readonlyValue {
   background: #f6f8fc;
   border: 1px solid #dfe7f4;

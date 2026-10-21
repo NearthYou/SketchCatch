@@ -2294,7 +2294,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Return JSON only. Do not wrap the response in markdown.",
     "Write every user-facing string in Korean, including title, question, suggestions, summary, highlights, nextActions, assumptions, explanations, and requirementCoverage prose.",
     "Technical identifiers and AWS service names may remain in English, but explanatory sentences must be Korean.",
-    "Choose a cost- and security-conscious Practice Architecture from the provided ArchitectureDecisionSpace.",
+    "Choose a cost- and security-conscious infrastructure design from the provided ArchitectureDecisionSpace.",
     "SketchCatch is provider-neutral, AWS-first for the MVP, and Terraform-first.",
     "Do not perform deployment, apply, update, delete, or destroy actions.",
     "All architecture changes must remain user-accepted previews.",
@@ -4861,7 +4861,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     requiredResources.add("CODEDEPLOY_DEPLOYMENT_GROUP");
     requiredResources.add("S3");
     requiredResources.add("IAM_ROLE");
-    amazonQBrief.push("Include a Git/CI/CD handoff path with CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, and an S3 artifact bucket.");
+    amazonQBrief.push("Include a CI/CD handoff path with CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, and an S3 artifact bucket.");
   } else {
     for (const resourceType of [
       "CODESTAR_CONNECTION",

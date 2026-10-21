@@ -1,4 +1,8 @@
-import type { GitCicdPipelineRun, TerraformOutput } from "../../../../packages/types/src";
+import type {
+  ApplicationReleaseStatus,
+  GitCicdPipelineRun,
+  TerraformOutput
+} from "../../../../packages/types/src";
 
 export type SafeDeploymentLink = {
   readonly kind: "web" | "api";
@@ -46,6 +50,20 @@ export function getSafeDeploymentLinks(
   }
 
   return links;
+}
+
+export function getManagedDeploymentLinks(
+  outputs: readonly TerraformOutput[],
+  applicationReleaseStatus: ApplicationReleaseStatus | null
+): SafeDeploymentLink[] {
+  const links = getSafeDeploymentLinks(outputs);
+  const applicationReleaseFinished =
+    applicationReleaseStatus !== null &&
+    ["succeeded", "partially_failed", "partially_cancelled"].includes(
+      applicationReleaseStatus
+    );
+
+  return applicationReleaseFinished ? links : links.filter((link) => link.kind !== "web");
 }
 
 export function getSafePipelineRunLinks(

@@ -40,3 +40,18 @@ test("keeps the flow motion active between request burst snapshots", () => {
     /\.liveObservationFocusedFlow\[data-flowing="true"\] \.liveObservationPresentationNode/
   );
 });
+
+test("lets resource pulses finish and repeat independently from traffic snapshots", () => {
+  assert.match(flowSource, /resourcePulseCycle/);
+  assert.match(flowSource, /resourcePulseCycleDurationMs/);
+  assert.match(flowSource, /window\.setInterval/);
+  assert.match(flowSource, /key=\{`\$\{resourcePulseCycle\}-\$\{stage\.node\.id\}`\}/);
+  assert.doesNotMatch(
+    flowSource,
+    /key=\{`\$\{burst\.sequence\}-\$\{stage\.node\.id\}`\}/
+  );
+  assert.match(
+    stylesSource,
+    /\.liveObservationPresentationSegmentParticle\s*\{[^}]*animation:[^;]*infinite/
+  );
+});
