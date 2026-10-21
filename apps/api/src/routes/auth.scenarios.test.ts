@@ -1177,7 +1177,7 @@ function makeRefreshToken(overrides: Partial<RefreshTokenRow> = {}): RefreshToke
     id: "22222222-2222-4222-8222-222222222222",
     userId: USER_ID,
     tokenHash: hashToken("refresh-token"),
-    expiresAt: new Date("2026-07-24T00:00:00.000Z"),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     revokedAt: null,
     userAgent: null,
     ipAddress: null,
