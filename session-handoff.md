@@ -1,33 +1,25 @@
 # Session Handoff
 
-## Currently Verified
+## Current Work
 
-- Branch `codex/fix-deployment-observation-ux` starts at the current `origin/dev` commit `c6eabba8`.
-- Manual Deployment scope changes discard the previous Deployment selection, Plan, approval confirmation, and pending auto-advance before restarting validation.
-- A successful infrastructure-only Deployment offers an explicit application-only continuation.
-- The Web entry-point output is a distinct service-access card with copy, open, QR, and Live Observation actions.
-- Live Observation forecasts the next Task at 100 accepted requests and presents CloudWatch metrics, infrastructure-wide assessment, and likely bottleneck areas.
-- Pre-deployment suggestions render as a warning callout.
+Prepare v2.4.0 from dev and main. PR #558 is merged into dev at 45219559. PR #560 remains the dev-to-main release PR. The preparation branch merges both histories and preserves main's reader documentation and three approved test removals. Runtime source and migrations are identical to dev; no AWS resources were changed.
 
-## Changes This Session
+## Verified
 
-- Separated infrastructure-only, application-only, and combined Deployment flows at the Plan boundary.
-- Clarified the Web output, suggestion warning, CloudWatch metrics, infrastructure assessment, and bottleneck UI.
-- Advanced bounded Task forecasting without generating traffic.
+- Cleanup tests: 9 passed. PR #558 CI: 39606279718 passed.
+- Harness, root lint, typecheck, five-package build, migration history and compatibility checks passed.
+- CI deployment-transition tests: API 652 passed and 1 skipped; Web 105 passed.
+- Published deployment measurement records verified. Sandbox tests: 25 passed.
+- Main README's demo-video label, contributor role, evidence link and portfolio architecture image are preserved. Reader-document local links resolve.
 
-## Verification
+## Release Blockers
 
-- 91 focused Web tests pass.
-- Web lint and Web typecheck pass.
-- `git diff --check` and the final harness check pass.
-- Full build and broad test suites were intentionally skipped for the requested fast, scoped verification.
+- Full Windows API suite: 2207 passed, 24 failed and 1 skipped. Failures include AI draft constraints, auth refresh fixtures, import-upload fixtures, SQL CRLF hashes, symlink permissions and Unix archive tools.
+- Full Web suite: 1376 passed and 16 failed. Failures include board layout regression, stale generated/template hashes and source/CSS baseline expectations.
+- Types: 77 passed and 1 semantic-hash failure. Import-safety mocks: 28 passed and 2 Windows path/mode failures.
+- Do not delete failing tests, raise layout budgets or loosen permission checks to release.
+- Stable tag and main release are pending the user's scope decision. No production migrations or deployments were run. Existing stopped services remain stopped.
 
-## Broken Or Unverified
+## Next Action
 
-- Authenticated browser visual QA was not run.
-- No real traffic generation, AWS action, Terraform action, Deployment execution, or cloud mutation was performed.
-
-## Best Next Action
-
-1. Review and merge the focused branch.
-2. After deployment, smoke-test infrastructure-only followed by application-only against a disposable approved Project.
+Review the release-preparation PR and resolve or classify the broader failures before stable publication. Recheck current PR heads and CI before merging #560. Production requires a separate migration/deployment plan for 0055 through 0057 and existing resource state.
