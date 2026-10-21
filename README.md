@@ -33,18 +33,7 @@ API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 �
 
 웹과 API는 AWS ECS Fargate에서 실행합니다. API는 승인된 배포마다 별도 Worker를 시작합니다. Worker는 사용자가 연결한 AWS 계정의 실행 권한으로 Terraform을 적용합니다.
 
-```mermaid
-flowchart LR
-  Browser["브라우저<br/>다이어그램과 코드 편집"] --> ALB["ALB"]
-  ALB --> Web["ECS Web<br/>Next.js"]
-  ALB --> API["ECS API<br/>Fastify"]
-  API --> DB[("PostgreSQL<br/>프로젝트와 배포 기록")]
-  API --> Cache[("Redis<br/>임시 진행 상태")]
-  API -->|"배포별 실행"| Worker["ECS Worker<br/>Terraform"]
-  API --> S3[("S3<br/>코드와 Plan 및 State")]
-  Worker --> S3
-  Worker -->|"사용자 역할의 권한"| AWS["사용자의 AWS 환경"]
-```
+![웹과 API, 배포 Worker 및 사용자 AWS 환경의 연결 구조](assets/sketchcatch-runtime.svg)
 
 프로젝트와 배포 상태는 PostgreSQL에 저장합니다. Terraform 파일과 실행 계획, 상태 파일은 S3에 보관합니다. Redis는 임시 진행 상태를 보조하며 배포 완료 여부의 기준은 DB와 AWS 조회 결과입니다. 서버 구성과 권한은 [아키텍처 문서](./docs/architecture.md)에 정리했습니다.
 

@@ -6,21 +6,7 @@
 
 서비스 자체의 운영 환경과 사용자가 배포하는 AWS 환경을 구분합니다. SketchCatch의 웹과 API는 ECS Fargate에서 실행합니다. 사용자 배포는 작업마다 별도 Fargate Task를 시작하고 사용자가 연결한 AWS 역할의 권한으로 실행합니다.
 
-```mermaid
-flowchart LR
-  Browser["브라우저<br/>설계와 Terraform 편집"] --> ALB["ALB<br/>HTTPS 요청 분기"]
-  subgraph Service["SketchCatch AWS 환경"]
-    ALB --> Web["ECS Web<br/>Next.js"]
-    ALB --> API["ECS API<br/>Fastify"]
-    API --> DB[("RDS PostgreSQL<br/>프로젝트와 배포 기록")]
-    API --> Cache[("Redis<br/>임시 진행 상태")]
-    API --> Files[("S3<br/>Terraform과 Plan 및 State")]
-    API -->|"작업별 RunTask"| Worker["ECS Worker<br/>Terraform 실행"]
-    Worker --> Files
-  end
-  Worker -->|"사용자 역할 AssumeRole"| Target["사용자의 AWS 환경"]
-  Worker --> Logs["CloudWatch Logs"]
-```
+![웹과 API, 배포 Worker 및 사용자 AWS 환경의 연결 구조](../assets/sketchcatch-runtime.svg)
 
 ALB는 일반 요청을 Web으로 보내고 `/api`와 health 요청은 API로 보냅니다. Web과 API는 서울 리전의 Public Subnet에서 ALB 요청만 받습니다. NAT Gateway는 사용하지 않습니다. RDS와 Redis는 Private Subnet에 둡니다.
 
