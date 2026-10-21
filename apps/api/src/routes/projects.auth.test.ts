@@ -1307,7 +1307,7 @@ test("PUT Terraform upload stores server-verified Reverse Engineering imports in
     payload: terraformCode
   });
 
-  assert.equal(response.statusCode, 204);
+  assert.equal(response.statusCode, 204, response.body);
   assert.equal(putObjectRequests.length, 1);
   assert.match(putObjectRequests[0]?.objectKey ?? "", /^projects\/project-id\/\.attempt-/u);
   assert.equal(fakeDb.projectAssetRows[0]?.objectKey, putObjectRequests[0]?.objectKey);
@@ -2335,7 +2335,7 @@ function makeReverseEngineeringScan(
           region: "ap-northeast-2",
           displayName: "existing-bucket",
           resourceType: "S3",
-          config: { bucket: "existing-bucket" },
+          config: { bucket: "existing-bucket", tagsReadComplete: true, tags: [] },
           relationships: []
         }
       ],

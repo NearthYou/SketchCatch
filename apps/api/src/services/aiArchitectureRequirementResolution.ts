@@ -455,6 +455,10 @@ function createRequirementFacts(
   addDerivedRequirementFacts(facts);
   applyExplicitRequirementConstraints(normalizedPrompt, facts);
 
+  if (hasNoFileUploadRequirement(normalizedPrompt)) {
+    facts.delete("file_upload");
+  }
+
   if (prefersNoServerRuntime(normalizedPrompt)) {
     facts.delete("server_runtime");
     facts.delete("serverless_runtime");
@@ -592,7 +596,7 @@ function inferPromptServicePurpose(normalizedPrompt: string): ArchitectureServic
     return "reservation_service";
   }
 
-  if (/(파일\s*업로드|이미지만|이미지\s*업로드|profile\s+image|post\s+image|upload|file upload)/iu.test(normalizedPrompt)) {
+  if (!hasNoFileUploadRequirement(normalizedPrompt) && /(파일\s*업로드|이미지만|이미지\s*업로드|profile\s+image|post\s+image|upload|file upload)/iu.test(normalizedPrompt)) {
     return "file_upload_service";
   }
 
@@ -607,7 +611,7 @@ function inferPromptServicePurpose(normalizedPrompt: string): ArchitectureServic
     return "auth_web_service";
   }
 
-  if (includesAny(normalizedPrompt, ["업로드", "파일", "이미지", "upload", "file upload"])) {
+  if (!hasNoFileUploadRequirement(normalizedPrompt) && includesAny(normalizedPrompt, ["업로드", "파일", "이미지", "upload", "file upload"])) {
     return "file_upload_service";
   }
 
@@ -961,13 +965,53 @@ function resolveOperatingAvailabilityProfile(prompt: string): ArchitectureDraftO
   return "none";
 }
 
+export function hasNoFileUploadRequirement(normalizedPrompt: string): boolean {
+  if (
+    /(?:file\s*upload:\s*(?:none|no)|no\s+file\s+upload|upload:\s*none|text\s*only)/iu.test(
+      normalizedPrompt
+    )
+  ) {
+    return true;
+  }
+
+  const lines = normalizedPrompt.split(/\r?\n/u).map((line) => line.trim());
+  const noUploadAnswer = /^(?:\uC5C6\uC74C(?:\s*\(\uD14D\uC2A4\uD2B8\uB9CC\))?|\uD14D\uC2A4\uD2B8\uB9CC)$/u;
+  const sameLineNoUpload = /\uD30C\uC77C(?:\s*\uC5C5\uB85C\uB4DC)?[^\r\n]{0,40}(?:\uC5C6\uC74C|\uC5C6\uACE0|\uC5C6\uB2E4|\uC5C6\uAC8C|\uC5C6\uC774|\uC5C6\uB294|\uC81C\uC678)/u;
+
+  for (const [index, line] of lines.entries()) {
+    if (line.includes("?놁쓬") && line.includes("?띿뒪?몃쭔")) {
+      return true;
+    }
+
+    if (sameLineNoUpload.test(line)) {
+      return true;
+    }
+
+    if (/\uD30C\uC77C\s*\uC5C5\uB85C\uB4DC/u.test(line)) {
+      for (const answerLine of lines.slice(index + 1, index + 7)) {
+        if (answerLine === "\uC9C8\uBB38") {
+          break;
+        }
+
+        if (noUploadAnswer.test(answerLine)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return lines.some((line) => noUploadAnswer.test(line) && lines.length === 1);
+}
+
 function resolveOperatingUploadProfile(
   prompt: string,
   hasFileUpload: boolean
 ): ArchitectureDraftOperatingProfile["uploadProfile"] {
-  if (!hasFileUpload) return "none";
-  if (/(large\s+file|100mb|대용량\s*(?:파일|업로드))/iu.test(prompt)) return "large";
-  if (/(mixed\s+files?|documents?|video|동영상|문서|다양한\s*파일)/iu.test(prompt)) return "mixed";
+  if (!hasFileUpload || hasNoFileUploadRequirement(prompt)) return "none";
+  const uploadAnswer = [...prompt.matchAll(/(?:file\s*upload|파일\s*업로드)[^\r\n:]*:\s*([^\r\n]+)/giu)]
+    .at(-1)?.[1] ?? prompt;
+  if (/(large\s+file|100mb|대용량\s*(?:파일|업로드))/iu.test(uploadAnswer)) return "large";
+  if (/(mixed\s+files?|documents?|video|동영상|문서|다양한\s*파일)/iu.test(uploadAnswer)) return "mixed";
   return "image";
 }
 

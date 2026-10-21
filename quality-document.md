@@ -27,7 +27,7 @@
 | `apps/web` | B | UI와 mutation responsibility 분리 규칙이 명시되어 있다 | workspace 파일이 많아 작업 전 local AGENTS와 feature tests를 반드시 찾아야 한다 |
 | `apps/api` | B | Terraform/AWS execution이 backend 쪽에 있어야 한다는 경계가 명시되어 있다 | route/service/test 배치 확인이 필요하다 |
 | `packages/types` | B+ | shared type 우선 규칙이 명확하다 | DTO/Zod drift 자동 검출은 별도 작업이다 |
-| `docs` | A- | canonical 문서 책임이 분리되어 있다 | 하네스 문서와 canonical 문서가 충돌하지 않게 갱신 루프가 필요하다 |
+| `docs` | A- | 기준 문서 책임이 분리되어 있다 | 하네스 문서와 기준 문서가 충돌하지 않게 갱신 루프가 필요하다 |
 | `infra`/`deploy` | B | 운영 배포와 cloud 실행 경계가 문서화되어 있다 | 실제 배포 명령은 승인/환경 확인 없이는 실행하면 안 된다 |
 
 ## 다음 품질 개선 후보

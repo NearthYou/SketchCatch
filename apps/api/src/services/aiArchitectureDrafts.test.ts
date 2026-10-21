@@ -433,7 +433,7 @@ test("fixed Template keeps CI/CD resource parameters aligned with merged Terrafo
     provider,
     creditPolicy: confirmedCreditPolicy
   });
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
 
   const countNodes = (type: ArchitectureJson["nodes"][number]["type"]): number =>
@@ -516,7 +516,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     creditPolicy: confirmedCreditPolicy
   });
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
 
   const countNodes = (type: ArchitectureJson["nodes"][number]["type"]): number =>
@@ -938,7 +938,7 @@ test("selected Repository Template and follow-up answers reach Amazon Q without 
   );
 
   assert.equal(callCount, 1);
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   const payload = requestedPayload as {
     fixedTemplateSelection?: { id?: string };
     prompt?: string;
@@ -1683,7 +1683,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
     }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   assert.match(requestedPrompt, /정적 사이트/);
   assert.match(requestedPrompt, /Do not artificially limit the architecture to one resource per type/);
   assert.match(requestedPrompt, /ArchitectureDecisionSpace/);
@@ -1775,7 +1775,7 @@ test("createAmazonQArchitectureDraftResponse applies an exact server-authorized 
     }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
 
   assert.equal(response.architectureJson.nodes.some((node) => node.type === candidate.type), false);
@@ -1866,6 +1866,8 @@ test("candidate exclusions ignore stale candidates issued for a different draft"
 test("structural draft resources are never exposed or accepted as excludable candidates", async () => {
   const prompt = createStructuralCandidateDraftPrompt();
   const baseline = createArchitectureDraft({ prompt });
+  const unfilteredResponse = await createAmazonQArchitectureDraftResponse({ prompt }, { creditPolicy: confirmedCreditPolicy });
+  if ("status" in unfilteredResponse) assert.fail(`Expected baseline preview: ${unfilteredResponse.question}`);
   const structuralCandidate = baseline.architectureJson.nodes.find(({ type }) => type === "VPC");
   const referencedCandidate = baseline.architectureJson.nodes.find(({ type }) => type === "S3");
   const leafCandidate = baseline.architectureJson.nodes.find(
@@ -1895,7 +1897,7 @@ test("structural draft resources are never exposed or accepted as excludable can
 
   assert.ok(!("status" in result));
   if ("status" in result) return;
-  assert.deepEqual(result.architectureJson, baseline.architectureJson);
+  assert.deepEqual(result.architectureJson, unfilteredResponse.architectureJson);
   const candidateSnapshot = progressSnapshots.find(
     ({ provisionalArchitectureJson }) => provisionalArchitectureJson !== null
   );
@@ -2005,7 +2007,7 @@ test("authorized candidate exclusions are sent to Amazon Q and override matching
     { provider, creditPolicy: confirmedCreditPolicy }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
   assert.equal(requestedPrompts.length, 1);
   assert.match(requestedPrompts[0] ?? "", /Server-authorized Draft Candidate Exclusions/);
@@ -2050,7 +2052,7 @@ test("Amazon Q previews that violate an authorized candidate exclusion are retri
     { provider, creditPolicy: confirmedCreditPolicy }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
   assert.equal(callCount, 2);
   assert.match(requestedPrompts[1] ?? "", /violates the server-authorized candidate exclusion/);
@@ -2091,7 +2093,7 @@ test("Amazon Q cannot satisfy combined authorized exclusions with an empty final
     { provider, creditPolicy: confirmedCreditPolicy }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
   assert.equal(callCount, 2);
   assert.match(requestedPrompts[1] ?? "", /must contain at least one usable ResourceNode/);
@@ -2110,7 +2112,7 @@ test("provider fallback still emits a candidate-bearing progress snapshot before
     }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
 
   const candidateSnapshot = progressSnapshots.find(
@@ -2146,7 +2148,7 @@ test("candidate exclusions only apply to the exact server-issued id, type, and l
     }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   if ("status" in response) return;
 
   assert.equal(response.architectureJson.nodes.some(({ type }) => type === "S3"), true);
@@ -2172,7 +2174,7 @@ test("createAmazonQArchitectureDraftResponse keeps progress reporting observatio
     }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
   assert.equal(progressCallbackCount, 1);
 });
 
@@ -2197,7 +2199,7 @@ test("createAmazonQArchitectureDraftResponse keeps candidate exclusion failures 
     }
   );
 
-  assert.ok(!("status" in response));
+  assert.ok(!("status" in response), JSON.stringify(response));
 });
 
 test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q architecture plan", async () => {
@@ -4056,7 +4058,7 @@ test("createAmazonQArchitectureDraftResponse retries once when a compact plan fa
   assert.deepEqual(retryPayload.previousPlan?.resourceQuantities, { IAM_ROLE: 3 });
 });
 
-test("createAmazonQArchitectureDraftResponse rejects compact plans that contradict no-backend answers", async () => {
+test("createAmazonQArchitectureDraftResponse keeps no-backend answers when a compact plan requests compute", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
       status: "plan",
@@ -4065,13 +4067,14 @@ test("createAmazonQArchitectureDraftResponse rejects compact plans that contradi
     })
   );
 
-  await assert.rejects(
-    createAmazonQArchitectureDraftResponse(
-      { prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only") },
-      { provider, creditPolicy: confirmedCreditPolicy }
-    ),
-    { name: "ArchitectureDraftGenerationError" }
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only") },
+    { provider, creditPolicy: confirmedCreditPolicy }
   );
+  if ("status" in response) assert.fail(`Expected a static preview: ${response.question}`);
+  assert.equal(response.architectureJson.nodes.some(({ type }) => type === "EC2"), false);
+  assert.equal(response.architectureJson.nodes.some(({ type }) => type === "LAMBDA"), false);
+  assert.ok(response.architectureJson.nodes.some(({ type }) => type === "S3"));
 });
 
 test("createAmazonQArchitectureDraftResponse accepts panel-backed ResourceType values from Amazon Q", async () => {
@@ -6202,7 +6205,9 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   assert.deepEqual(
     response.architectureJson.nodes.find((node) => node.id === "web-server")?.config,
     {
-      subnetId: "public-subnet-a"
+      subnetId: "public-subnet-a",
+      instanceType: "t3.small",
+      monitoring: true
     }
   );
 });

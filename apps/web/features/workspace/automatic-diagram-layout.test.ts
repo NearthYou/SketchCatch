@@ -169,6 +169,23 @@ test("layoutAutomaticDiagram lays out containment before aligned repeated areas"
   assert.deepEqual(subnetA.size, subnetB.size);
 });
 
+test("support lanes follow traffic resources rather than Security Group overlay bounds", () => {
+  const nodes = [
+    makeNode("vpc", "aws_vpc", 0, 0, "resource", { size: { width: 800, height: 800 } }),
+    makeNode("scope", "aws_security_group", 300, 300, "resource", {
+      parentAreaNodeId: "vpc", size: { width: 300, height: 300 }
+    }),
+    makeNode("compute", "aws_instance", 400, 400, "resource", { parentAreaNodeId: "scope" }),
+    makeNode("data", "aws_s3_bucket", 100, 500, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("target", "aws_lb_target_group", 150, 300, "resource", { parentAreaNodeId: "vpc" })
+  ];
+  assert.equal(evaluateAutomaticDiagramLayout({ nodes, edges: [] }).supportLaneIntrusionCount, 0);
+  const intrudingNodes = nodes.map((node) => node.id === "target"
+    ? { ...node, position: { ...node.position, y: 530 } }
+    : node);
+  assert.equal(evaluateAutomaticDiagramLayout({ nodes: intrudingNodes, edges: [] }).supportLaneIntrusionCount, 1);
+});
+
 test("layoutAutomaticDiagram separates support lanes and reports structural quality", () => {
   const nodes = [
     makeNode("browser", "actor_browser", 700, 700, "design"),

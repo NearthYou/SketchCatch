@@ -79,7 +79,17 @@ test("초기 화면에서 금지된 상태 대시보드 문구와 중복 CTA를 
 });
 
 test("CI/CD 표면의 보조 문구도 13px 이상을 유지한다", () => {
-  assert.doesNotMatch(deliveryStyles, /font-size:\s*calc\((?:10|11|12)px/);
+  const globals = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+  const increase = Number(/--presentation-font-size-increase:\s*(\d+)px/.exec(globals)?.[1]);
+  assert.ok(Number.isFinite(increase));
+  const declarations = [...deliveryStyles.matchAll(
+    /font-size:\s*(?:(\d+)px|calc\((\d+)px \+ var\(--presentation-font-size-increase\)\))/g
+  )];
+  assert.ok(declarations.length > 0);
+  for (const [, literalSize, baseSize] of declarations) {
+    const size = literalSize === undefined ? Number(baseSize) + increase : Number(literalSize);
+    assert.ok(size >= 13, `CI/CD text renders at ${size}px`);
+  }
 });
 
 function read(file: string): string {

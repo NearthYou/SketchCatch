@@ -52,7 +52,7 @@ import {
 } from "./aiArchitectureOperationalRequirements.js";
 import { convertDiagramJsonToArchitectureJson } from "./diagram-to-architecture.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
-import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
+import { hasNoFileUploadRequirement, resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
 import {
   createAmazonQArchitectureDraftProviderFromEnv,
@@ -4546,7 +4546,7 @@ function findRequirementCoverageValidationIssues(
   }
 
   if (requiresGlobalOrFastFrontend(normalizedPrompt) && !mentionsGlobalDeliveryOrLatencyWarning(coverageText)) {
-    issues.push("The user selected global users, HTTPS-sensitive delivery, or a 1-second loading goal, but requirementCoverage does not mention global/static delivery or single-region latency warning.");
+    issues.push("The user selected global users or a 1-second loading goal, but requirementCoverage does not mention global/static delivery or single-region latency warning.");
   }
 
   if (requiresUploadStorage(normalizedPrompt) && !mentionsUploadCoverage(coverageText)) {
@@ -5269,6 +5269,7 @@ function applyAcceptedAnswerPriorityToRequirementPlan(
     resolveManagementProfile(normalizedPrompt) === "fully_managed" &&
     backendProfile !== undefined &&
     backendProfile !== "none" &&
+    backendProfile !== "microservices" &&
     !hasPromptTerm(normalizedPrompt, [
       "ecs fargate",
       "fargate service",
@@ -8557,7 +8558,10 @@ function applyCanonicalCiCdTerraformNames(
 
   const artifactBucket = [...nodes].reverse().find(
     (node) => node.type === "S3" && node.config.bucketPurpose !== "static_website_origin"
-  );
+      && node.config.bucketPurpose !== "user_uploads"
+  ) ?? (nodes.some((node) => node.type === "CLOUDFRONT")
+    ? undefined
+    : [...nodes].reverse().find((node) => node.type === "S3" && node.config.bucketPurpose !== "user_uploads"));
 
   return nodes.map((node) => {
     const terraformResourceName = (() => {
@@ -8579,7 +8583,15 @@ function applyCanonicalCiCdTerraformNames(
 
     return terraformResourceName === undefined
       ? node
-      : { ...node, config: { ...node.config, terraformResourceName } };
+      : {
+          ...node,
+          ...(node.id === artifactBucket?.id ? { label: "CI/CD Artifact Bucket" } : {}),
+          config: {
+            ...node.config,
+            terraformResourceName,
+            ...(node.id === artifactBucket?.id ? { bucketPurpose: "deployment_artifacts" } : {})
+          }
+        };
   });
 }
 
@@ -8592,7 +8604,9 @@ function configureCanonicalServerlessApiResources(
   const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
   const uploadBucketConfig = uploadBucketProfile === undefined ? undefined : resolveUploadBucketConfig(uploadBucketProfile);
   const hasCloudFront = architectureJson.nodes.some((node) => node.type === "CLOUDFRONT");
-  const staticBucket = hasCloudFront
+  const hasStaticFrontend = requiresSpaFrontend(normalizedPrompt)
+    || resolveFrontendProfile(normalizedPrompt) === "static";
+  const staticBucket = hasCloudFront && hasStaticFrontend
     ? architectureJson.nodes.find(
         (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
       ) ?? architectureJson.nodes.find((node) => node.type === "S3")
@@ -8837,20 +8851,25 @@ function configureRequiredHttpsTransport(
     id: certificateId,
     type: "ACM_CERTIFICATE" as const,
     label: "Application TLS Certificate",
-    positionX: (existingListener?.positionX ?? publicLoadBalancer.positionX) - 180,
-    positionY: (existingListener?.positionY ?? publicLoadBalancer.positionY) + 180,
+    positionX: (existingListener?.positionX ?? publicLoadBalancer.positionX) - 360,
+    positionY: (existingListener?.positionY ?? publicLoadBalancer.positionY + 180) + 180,
     config: {
       domainName: "app.example.com",
       validationMethod: "DNS"
     }
   };
+  const vpc = architectureJson.nodes.find((node) => node.type === "VPC");
+  const vpcSize = PREVIEW_NODE_LAYOUT_SIZES.VPC!;
   const targetGroupNode = existingTargetGroup ?? {
     id: targetGroupId,
     type: "LOAD_BALANCER_TARGET_GROUP" as const,
     label: "Application Target Group",
-    positionX: publicLoadBalancer.positionX + 480,
-    positionY:
-      Math.max(...architectureJson.nodes.map((node) => node.positionY)) + 160,
+    positionX: vpc
+      ? vpc.positionX + (vpcSize.width - DEFAULT_PREVIEW_NODE_SIZE.width) / 2
+      : publicLoadBalancer.positionX + 480,
+    positionY: vpc
+      ? vpc.positionY + (vpcSize.height - DEFAULT_PREVIEW_NODE_SIZE.height) / 2
+      : Math.max(...architectureJson.nodes.map((node) => node.positionY)) + 160,
     config: {
       name: "sketchcatch-app",
       port: 8080,
@@ -10161,6 +10180,10 @@ function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "none";
   }
 
+  if (/(?:file\s*upload|upload)\s*:\s*optional\b/iu.test(normalizedPrompt)) {
+    return undefined;
+  }
+
   if (/(mixed\s+files?|documents?|video)/iu.test(normalizedPrompt)) {
     return "mixed";
   }
@@ -10572,7 +10595,7 @@ function requiresComplexBackend(normalizedPrompt: string): boolean {
 }
 
 function requiresGlobalOrFastFrontend(normalizedPrompt: string): boolean {
-  return /(global|worldwide|united\s+states|europe|\uAE00\uB85C\uBC8C|\uBBF8\uAD6D|\uC720\uB7FD|1\s*second|1\uCD08|https:\s*required|ssl:\s*required|https[\s\S]{0,30}\uD544\uC218|ssl[\s\S]{0,30}\uD544\uC218)/iu.test(
+  return /(global|worldwide|united\s+states|europe|\uAE00\uB85C\uBC8C|\uBBF8\uAD6D|\uC720\uB7FD|1\s*second|1\uCD08)/iu.test(
     normalizedPrompt
   );
 }
@@ -10646,44 +10669,6 @@ function requiresApacRegion(normalizedPrompt: string): boolean {
       normalizedPrompt
     )
   );
-}
-
-function hasNoFileUploadRequirement(normalizedPrompt: string): boolean {
-  if (
-    /(?:file\s*upload:\s*(?:none|no)|no\s+file\s+upload|upload:\s*none|text\s*only)/iu.test(
-      normalizedPrompt
-    )
-  ) {
-    return true;
-  }
-
-  const lines = normalizedPrompt.split(/\r?\n/u).map((line) => line.trim());
-  const noUploadAnswer = /^(?:\uC5C6\uC74C(?:\s*\(\uD14D\uC2A4\uD2B8\uB9CC\))?|\uD14D\uC2A4\uD2B8\uB9CC)$/u;
-  const sameLineNoUpload = /\uD30C\uC77C(?:\s*\uC5C5\uB85C\uB4DC)?[^\r\n]{0,40}(?:\uC5C6\uC74C|\uC5C6\uACE0|\uC5C6\uB2E4|\uC5C6\uAC8C|\uC5C6\uC774|\uC5C6\uB294|\uC81C\uC678)/u;
-
-  for (const [index, line] of lines.entries()) {
-    if (line.includes("?놁쓬") && line.includes("?띿뒪?몃쭔")) {
-      return true;
-    }
-
-    if (sameLineNoUpload.test(line)) {
-      return true;
-    }
-
-    if (/\uD30C\uC77C\s*\uC5C5\uB85C\uB4DC/u.test(line)) {
-      for (const answerLine of lines.slice(index + 1, index + 7)) {
-        if (answerLine === "\uC9C8\uBB38") {
-          break;
-        }
-
-        if (noUploadAnswer.test(answerLine)) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return lines.some((line) => noUploadAnswer.test(line) && lines.length === 1);
 }
 
 function hasNoRealtimeRequirement(normalizedPrompt: string): boolean {

@@ -11,7 +11,7 @@ const deploymentPanelSource = readFileSync(
 test("apply confirmation can be dismissed after it opens for an approved plan", () => {
   assert.match(
     deploymentPanelSource,
-    /useEffect\(\(\) => \{\s*if \(shouldShowApplyButton\) \{\s*setShowApplyConfirmation\(true\);\s*\}\s*\}, \[shouldShowApplyButton\]\);/
+    /useEffect\(\(\) => \{\s*if \(shouldShowApplyButton && selectedDeployment\?\.scope !== "application"\) \{\s*setShowApplyConfirmation\(true\);\s*\}\s*\}, \[selectedDeployment\?\.scope, shouldShowApplyButton\]\);/
   );
   assert.match(
     deploymentPanelSource,

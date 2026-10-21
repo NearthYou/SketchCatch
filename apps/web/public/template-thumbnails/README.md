@@ -1,8 +1,6 @@
-# Template Board captures
+# 템플릿 보드 캡처
 
-이 폴더에는 카드용으로 다시 그린 축약도나 합성 SVG를 두지 않는다. 모든 파일은 로그인된
-`DiagramEditor`가 실제 Template `DiagramJson`을 ReactFlow에 렌더링한 화면에서 만든 Board
-캡처다.
+카드에 표시할 템플릿 이미지를 보관합니다. 로그인한 `DiagramEditor`에서 실제 `DiagramJson`을 ReactFlow로 렌더링한 화면을 캡처합니다. 축약도나 합성 SVG는 사용하지 않습니다.
 
 ## 갱신 절차
 

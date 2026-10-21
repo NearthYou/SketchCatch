@@ -18,7 +18,7 @@ const cssLoaderSource = `export async function load(url, context, nextLoad) {
 const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
-);
+).replaceAll("\r\n", "\n");
 
 register(`data:text/javascript,${encodeURIComponent(cssLoaderSource)}`, import.meta.url);
 Object.assign(globalThis, { React });
