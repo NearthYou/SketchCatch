@@ -77,7 +77,7 @@ test("the realtime deployment demo prompt keeps questions but always returns the
   const expectedTerraform = readFileSync(
     new URL("./fixtures/audience-live-check-demo.tf", import.meta.url),
     "utf8"
-  );
+  ).replaceAll("\r\n", "\n");
   assert.equal(terraform, expectedTerraform);
   assert.doesNotMatch(terraform, /\r/u);
   assert.match(terraform, /target_value\s+= 50/u);

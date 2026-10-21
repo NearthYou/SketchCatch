@@ -49,9 +49,9 @@ test("저장소, 배포 대상, PR, Pipeline은 같은 4개 phase 아코디언�
   }
 });
 
-test("현재 작업 하나만 프로젝트 CI/CD blue primary 버튼으로 강조한다", () => {
+test("현재 작업 하나만 프로젝트 CI/CD 기본 버튼으로 강조한다", () => {
   assert.match(deliveryStyles, /\.statusBoard/);
-  assert.match(deliveryStyles, /--cicd-primary:\s*#1267f4/);
+  assert.match(deliveryStyles, /--cicd-primary:\s*#171717/);
   assert.match(deliveryStyles, /\.nextTaskAction\s*\{[^}]*background:\s*var\(--cicd-primary\)/s);
   assert.doesNotMatch(
     deliveryStyles,

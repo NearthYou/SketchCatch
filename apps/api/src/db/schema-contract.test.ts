@@ -535,7 +535,7 @@ test("0055 AWS import access migration stays restart-safe after collision renumb
   const originalMigration = readFileSync(
     new URL("../../drizzle/0055_aws_import_access.sql", import.meta.url),
     "utf8"
-  );
+  ).replaceAll("\r\n", "\n");
 
   assert.equal(
     createHash("sha256").update(originalMigration).digest("hex"),

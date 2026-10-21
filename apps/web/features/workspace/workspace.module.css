@@ -7029,7 +7029,7 @@
 
 .deploymentOutputLinkValue > span {
   color: var(--workspace-text, #171717);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: calc(12px + var(--presentation-font-size-increase));
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11513,7 +11513,7 @@
 
 .deploymentStepButton strong {
   color: #30343a;
-  font-size: 23px;
+  font-size: calc(17px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   line-height: 1.2;
 }
@@ -11521,7 +11521,7 @@
 .deploymentStepButton small {
   color: #707884;
   display: block;
-  font-size: 16px;
+  font-size: calc(10px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-regular);
   line-height: 1.35;
   margin-top: 4px;
@@ -11538,7 +11538,7 @@
   border-radius: 9px;
   color: #59616d;
   flex: 0 0 60px;
-  font-size: 30px;
+  font-size: calc(24px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
   font-weight: var(--presentation-font-weight-bold);
   height: 60px;
@@ -11628,7 +11628,7 @@
   align-items: center;
   color: #7b828c;
   display: flex;
-  font-size: 15px;
+  font-size: calc(9px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-regular);
   gap: 10px;
   line-height: 1.4;
@@ -11639,7 +11639,7 @@
   align-items: center;
   color: #30343a;
   display: flex;
-  font-size: 17px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   gap: 4px;
   line-height: 1.35;
@@ -11658,7 +11658,7 @@
 
 .deploymentReadinessSummary button {
   color: inherit;
-  font-size: 17px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   line-height: 1.35;
   padding: 0;
   text-decoration: none;
@@ -11954,17 +11954,17 @@
 
   .deploymentStepIndex {
     flex-basis: 52px;
-    font-size: 26px;
+    font-size: calc(20px + var(--presentation-font-size-increase));
     height: 52px;
     width: 52px;
   }
 
   .deploymentStepButton strong {
-    font-size: 19px;
+    font-size: calc(13px + var(--presentation-font-size-increase));
   }
 
   .deploymentStepButton small {
-    font-size: 14px;
+    font-size: calc(8px + var(--presentation-font-size-increase));
   }
 
   .deploymentReadinessSummary {
@@ -11995,13 +11995,13 @@
   }
 
   .deploymentReadinessSummary dt {
-    font-size: 13px;
+    font-size: calc(7px + var(--presentation-font-size-increase));
     gap: 6px;
   }
 
   .deploymentReadinessSummary dd,
   .deploymentReadinessSummary button {
-    font-size: 15px;
+    font-size: calc(9px + var(--presentation-font-size-increase));
   }
 
   .deploymentHistoryHeader {
@@ -12055,13 +12055,13 @@
 
   .deploymentStepIndex {
     flex-basis: 46px;
-    font-size: 22px;
+    font-size: calc(16px + var(--presentation-font-size-increase));
     height: 46px;
     width: 46px;
   }
 
   .deploymentStepButton strong {
-    font-size: 17px;
+    font-size: calc(11px + var(--presentation-font-size-increase));
   }
 
   .deploymentStepButton small {
@@ -12085,13 +12085,13 @@
   }
 
   .deploymentReadinessSummary dt {
-    font-size: 11px;
+    font-size: calc(5px + var(--presentation-font-size-increase));
     gap: 2px;
   }
 
   .deploymentReadinessSummary dd,
   .deploymentReadinessSummary button {
-    font-size: 12px;
+    font-size: calc(6px + var(--presentation-font-size-increase));
   }
 
   .deploymentHistoryHeader > .deploymentHistoryTools {

@@ -1,25 +1,25 @@
 # Session Handoff
 
-## Changes This Session
-
-Prepare v2.4.0 from dev and main. PR #558 is merged into dev at 45219559. PR #560 remains the dev-to-main release PR. The preparation branch merges both histories and preserves main's reader documentation and three approved test removals. Runtime source and migrations are identical to dev; no AWS resources were changed.
-
 ## Currently Verified
 
-- Cleanup tests: 9 passed. PR #558 CI: 39606279718 passed.
-- Harness, root lint, typecheck, five-package build, migration history and compatibility checks passed.
-- CI deployment-transition tests: API 652 passed and 1 skipped; Web 105 passed.
-- Published deployment measurement records verified. Sandbox tests: 25 passed.
-- Main README's demo-video label, contributor role, evidence link and portfolio architecture image are preserved. Reader-document local links resolve.
+- PR #558 is merged into dev at 45219559 after CI run 39606279718 passed. Release integration uses #590 and the existing dev-to-main PR #560.
+- The local full package test run passed: Types 78, Web 1393, API 2232 passed with two platform skips. Linux CI exercises filesystem symlinks and the POSIX cache test.
+- Root harness, lint, typecheck and five-package build passed. Sandbox 25, import-safety 30, capture-generator 5 and Terraform mocked plan checks 2 passed.
+- Main's reader documentation, demo-video label, contributor role, portfolio architecture image and three approved test removals are preserved. Canonical document links resolve.
+
+## Changes This Session
+
+- Repaired upload-negation and sizing interpretation, managed microservice selection, storage purpose separation, HTTPS coverage and generated transport placement.
+- Made archive metadata/path verification portable while retaining checksum, path, type and quota checks. Refreshed auth and import test fixtures without relaxing access checks.
+- Removed Security Group overlay bounds from the support-lane traffic envelope; genuine intrusion checks and the existing aggregate budget remain intact.
+- Recaptured 10 Module and 29 Template previews using the real local editor. Updated committed asset/diagram hashes and repaired capture scripts. Test CI now runs the complete package suite and deployment/capture safety tests.
 
 ## Broken Or Unverified
 
-- Full Windows API suite: 2207 passed, 24 failed and 1 skipped. Failures include AI draft constraints, auth refresh fixtures, import-upload fixtures, SQL CRLF hashes, symlink permissions and Unix archive tools.
-- Full Web suite: 1376 passed and 16 failed. Failures include board layout regression, stale generated/template hashes and source/CSS baseline expectations.
-- Types: 77 passed and 1 semantic-hash failure. Import-safety mocks: 28 passed and 2 Windows path/mode failures.
-- Do not delete failing tests, raise layout budgets or loosen permission checks to release.
-- Stable tag and main release are pending the user's scope decision. No production migrations or deployments were run. Existing stopped services remain stopped.
+- No production DB migration, ECS deployment, service restart, paid model call or real cloud operation was executed. Existing stopped services remain stopped.
+- Production authentication, new AWS import permissions and end-to-end Terraform execution have not been smoke-tested against a live account in this session.
+- Windows cannot create file symlinks without Developer Mode or elevation; that platform-specific test is explicitly skipped locally and remains enabled in Linux CI.
 
 ## Best Next Action
 
-Review the release-preparation PR and resolve or classify the broader failures before stable publication. Recheck current PR heads and CI before merging #560. Production requires a separate migration/deployment plan for 0055 through 0057 and existing resource state.
+Use GitHub PR checks and the release page for publication status. Before any production deployment, recheck the running resource state and applied DB migration head, then follow docs/deployment.md for 0055 through 0057. Do not start stopped services merely to verify documentation or screenshots.

@@ -1481,6 +1481,7 @@ function getSupportLaneIntrusionCount(
 
   return [...nodesByParentId.values()].reduce((count, siblings) => {
     const primaryNodes = siblings.filter((node) =>
+      !isSecurityGroupScopeNode(node) &&
       isPrimaryFlowRole(getNodeSemanticRole(node, nodeById, roleByNodeId))
     );
 

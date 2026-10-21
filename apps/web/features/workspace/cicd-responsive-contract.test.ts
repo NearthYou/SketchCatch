@@ -42,12 +42,12 @@ test("CI/CD 상호작용 요소를 44px 이상으로 유지하고 select를 패�
   assert.match(handoffStyles, /\.content button:focus-visible/);
 });
 
-test("프로젝트의 CI/CD 파랑과 접근 가능한 오류색을 사용한다", () => {
+test("CI/CD 기본 버튼색과 접근 가능한 오류색을 사용한다", () => {
   const combined = [deliveryStyles, handoffStyles, workspaceStyles, targetStyles].join("\n");
   assert.doesNotMatch(combined, /#eb8e90/i);
   assert.match(deliveryStyles, /--workspace-error: var\(--color-error, #b42318\)/);
-  assert.match(deliveryStyles, /--cicd-primary: #1267f4/);
-  assert.match(deliveryStyles, /--cicd-primary-strong: #0755d6/);
+  assert.match(deliveryStyles, /--cicd-primary: #171717/);
+  assert.match(deliveryStyles, /--cicd-primary-strong: #303030/);
   assert.match(deliveryStyles, /--workspace-accent-active: var\(--cicd-primary-strong\)/);
   const shadows = [...deliveryStyles.matchAll(/box-shadow:\s*([^;]+);/g)].map((match) =>
     match[1]?.trim()

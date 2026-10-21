@@ -21,7 +21,7 @@ function toDataUrl(image: Buffer): string {
   return `data:image/webp;base64,${image.toString("base64")}`;
 }
 
-test("Template thumbnail generator targets the 6 direct and 23 available Brainboard assets", () => {
+test("Template thumbnail generator targets the 6 direct and 23 available reference assets", () => {
   const targets = TEMPLATE_THUMBNAIL_CAPTURE_TARGETS;
   assert.equal(targets.length, 29);
   assert.equal(new Set(targets.map(({ templateId }) => templateId)).size, 29);
@@ -31,7 +31,7 @@ test("Template thumbnail generator targets the 6 direct and 23 available Brainbo
   );
   assert.equal(
     targets.filter(({ relativeOutputPath }) =>
-      /^brainboard\/v1\/[^/]+\.webp$/.test(relativeOutputPath)
+      /^reference\/v1\/[^/]+\.webp$/.test(relativeOutputPath)
     ).length,
     23
   );

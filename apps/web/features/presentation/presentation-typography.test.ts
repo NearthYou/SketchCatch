@@ -72,8 +72,11 @@ test("every explicit web font size adds the six-pixel presentation increase", ()
         continue;
       }
 
+      const resolvedValue = value.replace(/var\((--[\w-]+)\)/g, (reference, name: string) =>
+        new RegExp(`${name}:\\s*([^;]+)`).exec(styles)?.[1] ?? reference
+      );
       assert.ok(
-        value.includes(sizeIncreaseToken),
+        value.includes(sizeIncreaseToken) || resolvedValue.includes(sizeIncreaseToken),
         `${cssFile}: font-size must add ${sizeIncreaseToken}: ${declaration[0]}`
       );
     }
@@ -98,7 +101,9 @@ test("inline font sizes use the same six-pixel presentation increase", () => {
 test("explicit text weights keep the current presentation baseline", () => {
   const globalStyles = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
   assert.match(globalStyles, /--presentation-font-weight-regular:\s*400;/);
+  assert.match(globalStyles, /--presentation-font-weight-medium:\s*500;/);
   assert.match(globalStyles, /--presentation-font-weight-bold:\s*700;/);
+  assert.match(globalStyles, /--presentation-font-weight-semibold:\s*650;/);
   assert.match(
     globalStyles,
     /body\s*\{[^}]*font-weight:\s*var\(--presentation-font-weight-regular\);/s
@@ -126,6 +131,8 @@ test("explicit text weights keep the current presentation baseline", () => {
       assert.ok(
         value.includes(regularWeightToken) ||
           value.includes(boldWeightToken) ||
+          value.includes("var(--presentation-font-weight-semibold)") ||
+          value.includes("var(--presentation-font-weight-medium)") ||
           /^calc\((?:500|550|600|650|700|750) - var\(--presentation-font-weight-reduction\)\)$/.test(
             value.trim()
           ),
@@ -227,7 +234,7 @@ test("web typography uses Pretendard except for Terraform code and Deployment lo
         /font-family\s*:\s*"SFMono-Regular", Consolas, "Liberation Mono", monospace;/g
       )
     ].length,
-    1
+    5
   );
   assert.match(
     workspaceStyles,

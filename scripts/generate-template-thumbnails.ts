@@ -10,7 +10,7 @@ import {
   type AvailableBrainboardTemplateId,
   type TemplateId
 } from "../packages/types/src";
-import { getBrainboardTemplateThumbnailAsset } from "../apps/web/features/resource-settings/brainboard-template-thumbnail-manifest";
+import { getReferenceTemplateThumbnailAsset } from "../apps/web/features/resource-settings/reference-template-thumbnail-manifest";
 import { getTemplateThumbnailAsset } from "../apps/web/features/resource-settings/template-thumbnail-manifest";
 import { decodeWebpDataUrl } from "./generate-module-thumbnails";
 
@@ -43,7 +43,7 @@ export const TEMPLATE_THUMBNAIL_CAPTURE_TARGETS: readonly TemplateThumbnailCaptu
     })
   ),
   ...AVAILABLE_BRAINBOARD_TEMPLATE_IDS.map((templateId): TemplateThumbnailCaptureTarget => {
-    const asset = getBrainboardTemplateThumbnailAsset(templateId);
+    const asset = getReferenceTemplateThumbnailAsset(templateId);
     if (asset.kind !== "board-capture") {
       throw new Error(`${templateId} does not have a Board capture asset`);
     }
@@ -156,9 +156,10 @@ async function main(): Promise<void> {
       targets: TEMPLATE_THUMBNAIL_CAPTURE_TARGETS
     });
   } finally {
+    await cdp?.send("Browser.close").catch(() => undefined);
     cdp?.close();
     await stopChrome(chrome);
-    await rm(profileDirectory, { force: true, recursive: true });
+    await rm(profileDirectory, { force: true, recursive: true, maxRetries: 10, retryDelay: 250 });
   }
 }
 

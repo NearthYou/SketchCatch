@@ -51,7 +51,7 @@ test("generator는 실제 6개 authored와 23개 usable Brainboard 사례를 정
   assert.deepEqual(sourceArtifact, generatedArchitectureBoardKnowledgeArtifact);
   assert.equal(
     renderArchitectureBoardKnowledgeArtifact(sourceArtifact),
-    readFileSync(generatedArtifactPath, "utf8")
+    readFileSync(generatedArtifactPath, "utf8").replaceAll("\r\n", "\n")
   );
 });
 

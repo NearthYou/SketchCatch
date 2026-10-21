@@ -16,6 +16,7 @@
       "dependsOn": ["^typecheck"]
     },
     "test": {
+      "env": ["DATABASE_URL"],
       "dependsOn": ["^test"]
     }
   }

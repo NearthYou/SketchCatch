@@ -34,7 +34,9 @@
   --font-code: var(--font-sans);
   --presentation-font-size-increase: 6px;
   --presentation-font-weight-regular: 400;
+  --presentation-font-weight-medium: 500;
   --presentation-font-weight-bold: 700;
+  --presentation-font-weight-semibold: 650;
   --radius-control: 8px;
   --radius-card: 12px;
   --radius-frame: 16px;

@@ -123,9 +123,10 @@ async function main(): Promise<void> {
       outputDirectory
     });
   } finally {
+    await cdp?.send("Browser.close").catch(() => undefined);
     cdp?.close();
     await stopChrome(chrome);
-    await rm(profileDirectory, { force: true, recursive: true });
+    await rm(profileDirectory, { force: true, recursive: true, maxRetries: 10, retryDelay: 250 });
   }
 }
 

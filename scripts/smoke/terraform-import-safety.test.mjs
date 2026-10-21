@@ -307,7 +307,7 @@ test("Terraform subprocess environment removes every ambient TF override", () =>
   assert.equal(protectedEnv.AWS_PROFILE, "sandbox");
   assert.equal(protectedEnv.TF_IN_AUTOMATION, "1");
   assert.equal(protectedEnv.TF_INPUT, "0");
-  assert.equal(protectedEnv.TF_DATA_DIR, "/safe/work/.terraform-data");
+  assert.equal(protectedEnv.TF_DATA_DIR, join("/safe/work", ".terraform-data"));
   assert.equal(
     Object.keys(protectedEnv).some((key) => /^TF_LOG/u.test(key)),
     false
@@ -1017,7 +1017,9 @@ test("evidence는 임시 파일에서 원자적으로 교체하고 secret과 Ter
       /must-not-be-written|secretAccessKey|terraformState|statePayload/iu
     );
     assert.deepEqual(await readdir(directory), ["terraform-import-evidence.json"]);
-    assert.equal((await stat(evidencePath)).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal((await stat(evidencePath)).mode & 0o777, 0o600);
+    }
   } finally {
     await removeTemporaryDirectory(directory, { recursive: true, force: true });
   }

@@ -353,7 +353,7 @@ test("diagram editor keeps project and save controls in the top bar without dupl
   assert.match(diagramEditorSource, /workspaceUserName = "Personal workspace"/);
   assert.match(diagramEditorSource, /saveStatus = "편집 중"/);
   assert.match(diagramEditorSource, /<WorkspaceProjectBar/);
-  assert.match(diagramEditorSource, /onSave:\s*onDiagramSaveRequest/);
+  assert.match(diagramEditorSource, /onSave:\s*isAutoOrganizeApplyPending \? undefined : onDiagramSaveRequest/);
   assert.doesNotMatch(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
   assert.doesNotMatch(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
@@ -605,7 +605,7 @@ test("a dedicated workflow can supply interactive empty board content without ch
 
 test("a preview-only workflow can hide the project save action", () => {
   assert.match(diagramEditorSource, /showSaveAction = true/);
-  assert.match(diagramEditorSource, /showSaveAction,\s*userName:/s);
+  assert.match(diagramEditorSource, /showSaveAction: showSaveAction && !isAutoOrganizeApplyPending,\s*userName:/s);
   assert.match(workspaceProjectBarSource, /\{workspace\.showSaveAction \? \(/);
 });
 
@@ -1134,7 +1134,7 @@ test("canvas tools dock vertically along the left center without overlapping pan
 test("new and existing resources expand newly assigned parent areas before applying reference targets", () => {
   assert.match(
     diagramEditorSource,
-    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithReconciledAreas = autoExpandAreasEnabled\s*\? reconcileAreaNodeGeometry\(\s*currentDiagram\.nodes,\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)\s*\)\s*:\s*nodesWithAssignedParents;\s*const nextDiagram = \{\s*\.\.\.currentDiagram,\s*nodes: applyContainingReferenceDropTargets\(\s*nodesWithReconciledAreas,[\s\S]*?return clearAuthoredRoutesForNodeGeometryChanges\(currentDiagram\.nodes, nextDiagram\);/s
+    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithReconciledAreas = autoExpandAreasEnabled\s*\? reconcileAreaNodeGeometry\(\s*currentDiagram\.nodes,\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)\s*\)\s*:\s*nodesWithAssignedParents;\s*const nodesWithReferences = applyContainingReferenceDropTargets\(\s*nodesWithReconciledAreas,[\s\S]*?const nextDiagram = \{\s*\.\.\.currentDiagram,\s*nodes: applyAddedApplicationAutoScalingTargetReferences\(\s*nodesWithReferences,[\s\S]*?return clearAuthoredRoutesForNodeGeometryChanges\(currentDiagram\.nodes, nextDiagram\);/s
   );
   assert.match(
     dragTransactionSource,

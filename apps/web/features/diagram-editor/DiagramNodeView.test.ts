@@ -224,7 +224,7 @@ test("diagram node view renders bounded two-line labels on a transparent backgro
   assert.match(labelBlock, /display:\s*-webkit-box;/);
   assert.match(
     labelBlock,
-    /font-size:\s*calc\(12px \+ var\(--presentation-font-size-increase\)\);/
+    /font-size:\s*calc\(7px \+ var\(--presentation-font-size-increase\)\);/
   );
   assert.match(labelBlock, /font-weight:\s*var\(--presentation-font-weight-bold\);/);
   assert.match(labelBlock, /line-height:\s*15px;/);

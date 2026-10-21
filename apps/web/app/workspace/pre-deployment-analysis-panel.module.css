@@ -28,12 +28,12 @@
 }
 
 .suggestionHeading strong {
-  font-size: 15px;
+  font-size: calc(9px + var(--presentation-font-size-increase));
 }
 
 .suggestionHeading span {
   color: #9a3412;
-  font-size: 13px;
+  font-size: calc(7px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
@@ -44,8 +44,8 @@
 
 .suggestionCallout :global(.resultTitle) {
   color: #9a3412;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(6px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
   letter-spacing: 0.04em;
   margin: 0;
   text-transform: uppercase;
@@ -75,6 +75,6 @@
 .suggestionCallout :global(.resultList span),
 .suggestionCallout :global(.resultListItems) {
   color: #9a3412;
-  font-size: 13px;
+  font-size: calc(7px + var(--presentation-font-size-increase));
   line-height: 1.55;
 }

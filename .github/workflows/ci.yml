@@ -51,6 +51,7 @@ jobs:
           pnpm exec turbo test --continue=always
           pnpm test:sandbox-e2e
           pnpm test:terraform-import-safety
+          pnpm --dir apps/web exec tsx --test ../../scripts/generate-module-thumbnails.test.ts ../../scripts/generate-template-thumbnails.test.ts
 
       - name: Lint
         run: pnpm lint
