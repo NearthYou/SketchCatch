@@ -30,11 +30,20 @@ import {
   ListRoleTagsCommand,
   type IAMClientConfig
 } from "@aws-sdk/client-iam";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { CleanupAwsConnectionManagedResources } from "./aws-connection-service.js";
 import { createAwsSdkStsGateway } from "./aws-connection-test-service.js";
 import { createProjectBuildCacheIdentity } from "../build-environments/project-build-cache.js";
 
 const buildServicePolicyName = "SketchCatchRepositoryBuildOnly";
+const awsCleanupMaxAttempts = 6;
+const iamConsistencyRetryDelaysMs = [250, 500, 1_000, 2_000, 4_000, 8_000, 16_000] as const;
+const retryableAwsCleanupConsistencyErrorNames = new Set([
+  "ConcurrentModification",
+  "ConcurrentModificationException",
+  "DeleteConflict",
+  "DeleteConflictException"
+]);
 
 type CleanupClient = {
   send(command: unknown): Promise<unknown>;
@@ -63,24 +72,32 @@ export function createAwsConnectionManagedCleanup(options: {
 
   return async ({ connection, resources }) => {
     if (resources.codeBuildProjects.length === 0 && !resources.codeConnectionArn) return;
-    if (!connection.roleArn) {
+    const roleArn = connection.roleArn;
+    if (!roleArn) {
       throw new Error("AWS 연결 Role ARN이 없어 관리 리소스를 안전하게 삭제할 수 없습니다.");
     }
-    if (!connection.accountId) {
+    const accountId = connection.accountId;
+    if (!accountId) {
       throw new Error("AWS 계정 ID가 없어 관리 리소스를 안전하게 삭제할 수 없습니다.");
     }
     const credentials = await assumeRole({
-      roleArn: connection.roleArn,
+      roleArn,
       externalId: connection.externalId,
       region: connection.region,
       roleSessionName: `sketchcatch-cleanup-${connection.id.slice(0, 32)}`
     });
-    const configuration = { region: connection.region, credentials };
-    const codeBuild = createCodeBuildClient(configuration);
-    const codeConnections = createCodeConnectionsClient(configuration);
-    const ecr = createEcrClient(configuration);
-    const logs = createCloudWatchLogsClient(configuration);
-    const iam = createIamClient(configuration);
+    const configuration = {
+      region: connection.region,
+      credentials,
+      maxAttempts: awsCleanupMaxAttempts
+    };
+    const codeBuild = withAwsCleanupConsistencyRetries(createCodeBuildClient(configuration));
+    const codeConnections = withAwsCleanupConsistencyRetries(
+      createCodeConnectionsClient(configuration)
+    );
+    const ecr = withAwsCleanupConsistencyRetries(createEcrClient(configuration));
+    const logs = withAwsCleanupConsistencyRetries(createCloudWatchLogsClient(configuration));
+    const iam = withAwsCleanupConsistencyRetries(createIamClient(configuration));
     try {
       for (const build of resources.codeBuildProjects) {
         const roleName = parseRoleName(build.serviceRoleArn);
@@ -112,7 +129,7 @@ export function createAwsConnectionManagedCleanup(options: {
         }
         await deleteOwnedBuildCache(ecr, {
           projectId: build.projectId,
-          accountId: connection.accountId,
+          accountId,
           region: connection.region
         });
       }
@@ -288,6 +305,38 @@ async function ignoreMissing(operation: () => Promise<unknown>): Promise<void> {
   }
 }
 
+function withAwsCleanupConsistencyRetries(client: CleanupClient): CleanupClient {
+  return {
+    send: (command) => retryAwsCleanupConsistencyOperation(() => client.send(command)),
+    destroy: () => client.destroy()
+  };
+}
+
+async function retryAwsCleanupConsistencyOperation<Result>(
+  operation: () => Promise<Result>
+): Promise<Result> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const retryDelayMs = iamConsistencyRetryDelaysMs[attempt];
+      if (
+        retryDelayMs === undefined ||
+        !isRetryableAwsCleanupConsistencyError(error)
+      ) {
+        throw error;
+      }
+      await sleep(retryDelayMs);
+    }
+  }
+}
+
+function isRetryableAwsCleanupConsistencyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error && typeof error.name === "string" ? error.name : "";
+  return retryableAwsCleanupConsistencyErrorNames.has(name);
+}
+
 function isMissingAwsResource(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const name = "name" in error && typeof error.name === "string" ? error.name : "";
@@ -295,6 +344,7 @@ function isMissingAwsResource(error: unknown): boolean {
     "ResourceNotFoundException",
     "RepositoryNotFoundException",
     "NoSuchEntity",
+    "NoSuchEntityException",
     "ResourceNotFound"
   ].includes(name);
 }

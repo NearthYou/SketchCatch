@@ -715,6 +715,13 @@ CodeConnections 생성은 RDS의 `CREATING` 예약이 AWS `CreateConnection`보�
 준비를 차단한 다음 managed CodeBuild/role/CodeConnections를 정리합니다. cleanup이 실패하면 metadata를 지우지
 않고 claim을 해제해 다시 시도할 수 있습니다.
 
+managed cleanup의 AWS Resource client는 throttling, timeout, 5xx를 AWS SDK의 단일 재시도 계층에서
+최초 요청 포함 최대 6회 시도합니다. IAM `DeleteConflictException`·`ConcurrentModificationException`
+같은 eventual-consistency 오류만 기존 IAM 전파 대기 정책(250ms부터 16초까지 7회 재시도)으로
+보완하며, STS `AssumeRole`은 STS gateway의 SDK 재시도 정책을 따릅니다. `AccessDeniedException`과
+ownership 검증 실패는 재시도하지 않고, 이미 삭제된 Resource는 성공으로 처리해 부분 정리 이후의
+재실행도 안전하게 유지합니다.
+
 GitHub 빌드 연결만 해제할 때도 사용자 확인 뒤 기존 managed cleanup으로 SketchCatch 소유 Resource만 정리합니다.
 CodeConnection을 `DELETING`으로 claim해 새 build 준비를 막고, 진행 중인 build·deployment가 없을 때만
 CodeBuild project, 전용 Role, log group, build cache ECR, CodeConnection을 삭제합니다. AWS 계정 연결과

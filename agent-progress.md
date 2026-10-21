@@ -2,6 +2,7 @@
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/` and remain available in Git history.
 ## Current Verified State
+- AWS connection managed cleanup uses a bounded AWS SDK retry layer and a separate bounded IAM propagation schedule. Authorization and ownership failures are not retried.
 
 - 2026-07-24: Managed application deployment now waits for its durable Terraform Plan before automatic approval, reuses exact verified Repository checkout evidence from the existing project build environment, and lets automatic ECS validation/Plan continue as infrastructure when CI/CD build settings do not exist. Focused API tests pass 12/12, focused Web tests pass 58/58, and harness, lint, typecheck, and all five production builds pass. No schema, migration, dependency metadata, Terraform apply/destroy, cloud mutation, or user CI/CD handoff changed.
 - 2026-07-24: Applied the pending local database migration `0057_reverse_engineering_scan_previews`. It creates the preview-persistence table required by the Reverse Engineering preview endpoint. Verified the 14-column table, migration ledger, and API `/health` plus `/health/db` afterward.
