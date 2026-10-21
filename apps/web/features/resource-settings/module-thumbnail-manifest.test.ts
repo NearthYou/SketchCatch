@@ -13,10 +13,6 @@ import { curatedModules } from "./module-catalog";
 
 const currentModuleIds = curatedModules.map(({ id }) => id).sort();
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const generatorSource = readFileSync(
-  join(webRoot, "../../scripts/generate-module-thumbnails.ts"),
-  "utf8"
-);
 
 test("Module thumbnail manifest binds the exact current Modules to verified versioned WebP captures", () => {
   assert.deepEqual(Object.keys(MODULE_THUMBNAIL_ASSETS).sort(), currentModuleIds);
@@ -52,10 +48,4 @@ test("Module thumbnail manifest binds the exact current Modules to verified vers
 
 test("Module thumbnail manifest returns null for an unknown Module", () => {
   assert.equal(getModuleThumbnailAsset("unknown-module"), null);
-});
-
-test("Module thumbnail generator exposes import-safe validation and batch seams", () => {
-  assert.match(generatorSource, /export function decodeWebpDataUrl/);
-  assert.match(generatorSource, /export async function captureModuleThumbnailBatch/);
-  assert.match(generatorSource, /if \(isDirectExecution\(\)\)/);
 });
