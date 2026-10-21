@@ -2,7 +2,7 @@
 
 클라우드 구성을 다이어그램으로 편집하고 Terraform 코드로 배포하는 서비스입니다. 요구사항을 입력해 설계 초안을 만들거나 기존 저장소와 AWS 자원을 불러올 수 있습니다. 배포 전에는 비용과 보안 위험을 확인하고 실제 변경 내용을 승인합니다.
 
-[서비스](https://sketchcatch.net) | [발표 영상](https://www.youtube.com/watch?v=a18RZGg8PyM) | [평가 자료](./.eval/README.md) | [제품 문서](./docs/product.md) | [개발 가이드](./docs/development.md)
+[서비스](https://sketchcatch.net) | [발표 영상](https://www.youtube.com/watch?v=a18RZGg8PyM) | [테스트와 배포 기록](./.eval/README.md) | [제품 문서](./docs/product.md) | [개발 가이드](./docs/development.md)
 
 `TypeScript` `Next.js` `Fastify` `Terraform` `ECS Fargate` `PostgreSQL`
 
