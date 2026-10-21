@@ -26,6 +26,7 @@
 | 경로 | 용도 |
 | --- | --- |
 | [`docs/assets`](./assets/) | README와 canonical 문서에서 사용하는 정적 자산 |
+| [`.eval`](../.eval/README.md) | 배포 측정의 원본 시각과 집계 검증, 주요 구현 테스트 안내 |
 | [`docs/agent-history`](./agent-history/) | 오래된 작업·검증 기록 |
 | [`agent-progress.md`](../agent-progress.md) | 현재 작업 상태와 최근 검증 결과 |
 | [`feature_list.json`](../feature_list.json) | machine-readable 기능 및 검증 tracker |

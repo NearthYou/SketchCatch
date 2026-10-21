@@ -19,13 +19,13 @@ SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Far
 - `deploy=false`는 ECR image와 cache만 만들며 ECS service와 task definition은 변경하지 않습니다. Production 실측에서는 이 모드로 cold cache를 한 번 채운 뒤 같은 commit을 `deploy=true`로 배포합니다.
 - GitHub Step Summary에는 image별 digest, ECR compressed size, build/push 시간과 전체 안정화 시간이 남습니다.
 - 실제 배포 전 read-only preflight가 API와 web의 desired/running count, pending task, primary rollout 상태를 확인하고 이전 API/web/worker task definition ARN을 rollback 기준으로 기록합니다.
-- 기준선은 최근 성공 4회 중앙값인 전체 7분 51초와 순차 build/push 81초입니다. 목표는 전체 5분 30초 이하, 병렬 image build critical path 60초 이하입니다.
+- 기준선은 캐시 개선 전 성공 4회 중앙값인 전체 470.5초(약 7분 51초)와 순차 build/push 81초입니다. 목표는 전체 5분 30초 이하, 병렬 image build critical path 60초 이하입니다.
 
 2026-07-14 production 실측에서는 동일 commit의 cache를 먼저 채운 뒤 `deploy=true`로 배포했습니다.
 
 | 항목 | 기준선 | 실측 | 결과 |
 | --- | ---: | ---: | ---: |
-| 전체 workflow | 7분 51초 | 6분 9초 | 1분 42초, 21.7% 단축 |
+| 전체 workflow | 470.5초 (4회 중앙값) | 369초 (warm-cache 1회) | 약 101.5초, 21.6% 감소 |
 | image build/push critical path | 81초 | 7초 | 74초, 91.4% 단축 |
 | API ECS service 안정화 | 3분 43초 | 3분 13초 | 30초 단축 |
 | web ECS service 안정화 | 4분 50초 | 2분 56초 | 1분 54초 단축 |
@@ -35,6 +35,8 @@ SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Far
 ALB는 API의 장시간 연결을 고려해 API 60초, web 30초의 deregistration delay를 사용합니다. 두 target group은 10초 간격으로 2회 성공하면 healthy가 됩니다. API health check grace period는 runtime 준비를 위해 60초를 유지하고 web은 30초를 사용합니다. `minimumHealthyPercent=100`, `maximumPercent=200`, circuit breaker rollback은 변경하지 않습니다.
 
 SketchCatch가 사용자 Source Repository에 생성하는 ECS/Fargate CodeBuild는 프로젝트 전용 ECR build cache만 읽고 씁니다. build-only role은 `sketchcatch-<projectSuffix>-build-cache` Repository의 layer action으로 제한되며 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront 권한을 갖지 않습니다. 서버가 생성한 buildspec은 첫 API image build의 BuildKit layer를 cache tag에 저장하고 다음 commit에서 재사용하며, cache login·import·export가 실패하면 배포를 중단하지 않고 cold build로 전환합니다. cache tag는 ECS에 배포하지 않습니다. API image와 frontend는 SketchCatch 내부 Artifact S3에 immutable candidate로 저장되고, API는 multipart complete 전에 실제 part 크기를 확인하고 압축 해제 파일 수·개별 파일·전체 크기를 제한합니다. 내부 Artifact bucket은 Public Access Block, 기본 암호화, TLS-only policy를 사용합니다. 현재 Vite demo frontend는 `VITE_API_BASE_URL=/`로 빌드해 CloudFront same-origin `/api/*`를 사용합니다. 검증된 candidate의 ECR publish와 ECS/S3/CloudFront activation은 승인 뒤 trusted worker가 별도 exact-resource 세션으로 수행합니다.
+
+측정의 원본 시작과 종료 시각은 [공개 결과 JSON](../.eval/deployment-build-results.json)에 보관했습니다. 기준선 4회는 서로 다른 이전 커밋이고 캐시 준비와 개선 후 1회만 같은 커밋입니다. 표의 21.6%는 원본 중앙값 470.5초로 계산했으며 기준선을 471초로 먼저 반올림한 과거 표기의 21.7%와 구분합니다.
 
 ## 핵심 서비스 실행 기준
 
@@ -875,7 +877,7 @@ SKETCHCATCH_PUBLIC_BASE_URL=https://sketchcatch.net
 LIVE_OBSERVATION_CAPABILITY_CURRENT_KID=<1-32 character safe kid>
 LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET=<32-byte unpadded base64url>
 LIVE_OBSERVATION_CAPABILITY_PREVIOUS_KID=
-LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET=
+LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET= # 이전 키가 없으면 비워둡니다
 LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT=
 ```
 

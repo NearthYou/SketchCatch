@@ -30,6 +30,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-10-21 - Public evidence
+
+- Updated README, diagrams and .eval. Offline checks pass; app tests lack local dependencies. Existing infra edits stay uncommitted. No deployment.
+
+
 ## Known Risk
 
 - Authenticated browser visual smoke testing for `/workspace/new` was not available in the clean browser session; the route redirected to login. Source-level regression coverage and the production build are green.
