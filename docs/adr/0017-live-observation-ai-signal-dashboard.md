@@ -40,7 +40,7 @@ Signal Dashboard는 `LiveObservationModal`에서 focused flow 다음 sibling으�
 
 ## Provider 경계
 
-API는 AWS-specific manifest와 AWS Provider Adapter를 server 경계 안에서 provider-neutral `LiveObservationV2Snapshot`으로 바꾼다. Web Signal model은 이 공통 snapshot만 읽으며 AWS ARN, SDK action, raw provider payload, credential, raw exception을 알지 못한다. 현재 AWS adapter 하나만 구현돼 있고 Azure/GCP adapter 또는 placeholder는 만들지 않는다.
+API는 AWS-specific manifest와 AWS Provider Adapter를 server 경계 안에서 클라우드 공통 `LiveObservationV2Snapshot`으로 바꾼다. Web Signal model은 이 공통 snapshot만 읽으며 AWS ARN, SDK action, raw provider payload, credential, raw exception을 알지 못한다. 현재 AWS adapter 하나만 구현돼 있고 Azure/GCP adapter 또는 placeholder는 만들지 않는다.
 
 ## 외부 참고
 

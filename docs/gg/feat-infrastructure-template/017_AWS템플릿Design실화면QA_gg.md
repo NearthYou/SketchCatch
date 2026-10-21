@@ -2,7 +2,7 @@
 
 ## 목적
 
-`015_AWS템플릿Design시각레이어설계_gg.md`와 `016_AWS템플릿Design레이어구현계획_gg.md`의 최종 결과를 로그인된 실제 Architecture Board에서 확인한 기록이다.
+`015_AWS템플릿Design시각레이어설계_gg.md`와 `016_AWS템플릿Design레이어구현계획_gg.md`의 최종 결과를 로그인된 실제 설계 편집 화면에서 확인한 기록이다.
 
 검증 범위는 다음 세 가지다.
 

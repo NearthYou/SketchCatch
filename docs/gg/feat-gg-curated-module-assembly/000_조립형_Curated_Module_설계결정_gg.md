@@ -2,7 +2,7 @@
 
 ## 한 줄 결론
 
-Workspace 왼쪽 `Modules` 카탈로그를 전면 재설계한다. 사용 가능한 Template의 실제 Resource 관계 / 포함관계 / 상대 geometry / edge routing을 기계적으로 추출한 `Module Pattern Knowledge`로 Module을 조립하고, 같은 지식을 Architecture Board Compiler에서도 사용한다.
+Workspace 왼쪽 `Modules` 카탈로그를 전면 재설계한다. 사용 가능한 Template의 실제 Resource 관계 / 포함관계 / 상대 geometry / edge routing을 기계적으로 추출한 `Module Pattern Knowledge`로 Module을 조립하고, 같은 지식을 설계 변환기에서도 사용한다.
 
 ## 핵심 문제
 
@@ -14,8 +14,8 @@ Workspace 왼쪽 `Modules` 카탈로그를 전면 재설계한다. 사용 가능
 
 ## Template과 Module의 경계
 
-- Template은 새 프로젝트를 시작하는 완성형 Practice Architecture다.
-- Curated Module은 기존 Architecture Board에 추가하는 이름과 목적이 정해진 재사용 구성이다.
+- Template은 새 프로젝트를 시작하는 완성형 설계 정보다.
+- Curated Module은 기존 설계 편집 화면에 추가하는 이름과 목적이 정해진 재사용 구성이다.
 - Template 전체를 이름만 바꿔 Module로 중복 제공하지 않는다.
 - Module의 Resource 구성, 관계, containment와 시각 배치는 Template에서 추출한 패턴으로 결정한다.
 - Module은 Terraform module이 아니다. 확장 후에는 일반 Resource와 관계로 동작한다.
@@ -58,7 +58,7 @@ Module은 임의의 모든 부분 graph 조합이 아니다. 사용자가 목적
 
 - 기능 anchor와 용도별 architecture signal을 기준으로 Template 안의 연결된 구조를 찾는다.
 - 반복되는 구조는 canonical fingerprint로 합치되 provenance는 모두 남긴다.
-- 기능별 / 용도별 이름은 고정된 provider-neutral role label과 한국어 용도 label mapping으로 생성한다.
+- 기능별 / 용도별 이름은 고정된 클라우드 공통 role label과 한국어 용도 label mapping으로 생성한다.
 - 별도의 사람 검토 / 승인 workflow는 만들지 않는다.
 - 추출 결과가 잘못되면 개별 좌표를 손으로 고치는 대신 source Template 또는 extractor 규칙을 수정한다.
 

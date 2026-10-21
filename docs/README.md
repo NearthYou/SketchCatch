@@ -2,6 +2,10 @@
 
 제품과 구현 기준은 아래 문서에서 관리합니다. 기능별 참고 문서는 해당 기준 문서와 함께 확인합니다. 운영 구성은 [아키텍처](architecture.md#운영-아키텍처), 저장소 소개와 기술 스택은 [루트 README](../README.md)에 있습니다.
 
+## 읽는 순서
+
+처음 보는 독자는 루트 README에서 기능과 주요 구현을 확인한 뒤 아키텍처 문서로 넘어가면 됩니다. 로컬 실행은 개발 가이드에서 확인합니다. 데이터 모델과 배포 문서는 필드명이나 실행 조건을 확인할 때 참고합니다. 담당자별 계획 문서에는 당시 목표와 미완료 항목도 있으므로 현재 동작은 기준 문서와 코드를 함께 확인합니다.
+
 ## 필수 문서
 
 구현을 확인할 테스트와 배포 시간의 원본 기록은 [평가 자료](../.eval/README.md)에 있습니다.
@@ -13,7 +17,7 @@
 | [데이터 모델](./data-models.md) | DB/API/프론트/AI/배포 공통 타입과 필드명 | DTO, DB schema, Zod schema, 프론트 상태를 바꿀 때 |
 | [아키텍처](./architecture.md) | 모노레포 구조, 앱 경계, 저장소 경계, Terraform/AWS 실행 위치 | API, storage, worker, 인프라 실행 경계를 정할 때 |
 | [개발 가이드](./development.md) | 로컬 실행, Git flow, 팀 AI 협업 규칙, PR 체크 | 구현 전후 작업 절차와 검증 기준을 확인할 때 |
-| [배포 운영 문서](./deployment.md) | 운영 배포, Direct Deployment Path, Git/CI/CD Deployment Path, cleanup 절차 | Terraform Plan/Apply/Destroy, Git/CI/CD handoff, AWS 연결, 운영 배포를 다룰 때 |
+| [배포 운영 문서](./deployment.md) | 운영 배포, 직접 배포 경로, Git과 CI/CD 배포 경로, cleanup 절차 | Terraform Plan/Apply/Destroy, Git/CI/CD handoff, AWS 연결, 운영 배포를 다룰 때 |
 | [다이어그램 패턴 지식 저장소](./diagram-templates/README.md) | 검증된 AWS 패턴, Amazon Q Business 인덱싱 문서, S3 패키지와 검증 절차 | Architecture Draft의 패턴 근거를 추가하거나 Q Business 데이터 소스를 동기화할 때 |
 | [에이전트 진행 로그](../agent-progress.md) | 현재 검증 상태, 최근 작업, 다음 행동 | Codex/AI 에이전트가 이전 세션을 이어받을 때 |
 | [에이전트 진행 아카이브](./agent-history/) | 오래된 세션 기록 보관 | 과거 검증 증거가 명시적으로 필요할 때 |
@@ -40,7 +44,7 @@
 - 공통 타입, API DTO, DB 모델, 프론트 상태 이름은 [데이터 모델](./data-models.md)에 모은다.
 - 기술 스택, 저장 기준, 실행 경계, ADR 수준 결정은 [아키텍처](./architecture.md)에 모은다.
 - Git 흐름, 팀 AI 작업 순서, PR 체크리스트는 [개발 가이드](./development.md)에 모은다.
-- 운영 배포, Direct Deployment Path, Git/CI/CD Deployment Path, cleanup 절차는 [배포 운영 문서](./deployment.md)에 모은다.
+- 운영 배포, 직접 배포 경로, Git과 CI/CD 배포 경로, cleanup 절차는 [배포 운영 문서](./deployment.md)에 모은다.
 - 검증된 Architecture Draft 패턴과 Amazon Q Business 인덱싱 패키지는 [다이어그램 패턴 지식 저장소](./diagram-templates/README.md)에 모은다.
 - 에이전트 세션 상태, 완료 증거, handoff는 루트 하네스 파일(`agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`)에 짧게 남긴다. 오래된 세션 기록은 `docs/agent-history/`로 이동한다.
 - 같은 내용을 새 문서로 복제하지 않는다. 먼저 기준 문서를 갱신한다.

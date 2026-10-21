@@ -6,7 +6,7 @@ Goal: 기존 AWS를 읽어온 뒤에도 사용자가 무엇을 찾았고, 무엇
 
 Architecture: AWS 원본 식별자와 화면용 이름을 분리한다. Reverse Engineering 결과는 `보드에 표시할 Resource`, `검토 전용 Resource`, `읽지 못한 서비스`를 서로 다른 상태로 표현하되, Terraform / import / 배포 가능 여부와 혼동하지 않는다. 기존 `DiscoveredResource`와 저장된 scan 결과의 원본 값은 유지하고, 화면용 상태와 짧은 이름은 읽는 시점에 계산한다. AWS 연결 준비 상태도 기존 `AwsConnection`의 상태만으로 계산해 검증된 Role이 아니면 서버의 스캔 경계를 우회하지 않고 복구 경로만 보여준다. ALB / CloudFront / ECS는 AWS reader가 낸 원본 record를 알려진 `ResourceType`과 Terraform type으로 명시적으로 매핑하고, 근거가 있는 관계만 Board에 연결한다. 그 밖의 아직 미지원 Resource는 기존처럼 `review_only`로 남긴다.
 
-Tech Stack: TypeScript, Next.js, Fastify, `@sketchcatch/types`, Node `tsx --test`, 기존 Architecture Board Compiler
+Tech Stack: TypeScript, Next.js, Fastify, `@sketchcatch/types`, Node `tsx --test`, 기존 설계 변환기
 
 ## Global Constraints
 

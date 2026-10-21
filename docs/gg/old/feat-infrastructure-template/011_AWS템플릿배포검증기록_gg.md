@@ -11,7 +11,7 @@
 ## 검증 원칙
 
 - 기본 Template 값을 그대로 사용한다.
-- 실제 apply 전에 Architecture Board의 모든 사용자 가시 Resource가 기존 Resource 카탈로그 icon, label, size, style을 사용하는지 확인한다.
+- 실제 apply 전에 설계 편집 화면의 모든 사용자 가시 Resource가 기존 Resource 카탈로그 icon, label, size, style을 사용하는지 확인한다.
 - 일반 `AWS` fallback tile 또는 `*_workspace` Terraform logical name이 하나라도 보이면 배포를 시작하지 않고 M5b 결함으로 처리한다.
 - Template 선택과 Preview는 Chrome에서 확인한다. 장시간 run의 상태는 Terraform child process와 최종 Deployment state를 함께 판정한다. 공유 환경의 다른 API watcher가 실행 중 status를 중단으로 덮는 문제를 고려했다.
 - 표의 기존 run 시간은 서버 `startedAt`부터 terminal state까지이며, Chrome 직접 run이 있는 경우에는 실제 `AWS 리소스 생성` 또는 `AWS 리소스 삭제` 클릭부터 terminal state를 관찰한 시간으로 별도 명시한다.
@@ -35,7 +35,7 @@
 | --- | --- | --- |
 | Template registry | 통과 | 정확히 6개 Template, deterministic DiagramJson |
 | AWS Role connection | 통과 | Chrome에서 Role 복구, 실제 `sts:AssumeRole` 및 `sts:GetCallerIdentity` exit 0 |
-| Architecture Board Resource 표현 | 통과 | 6개 Chrome 캡처, catalog icon / parameter default 일치, fallback / raw label / 빈 label / clipping 0개 |
+| 설계 편집 화면 Resource 표현 | 통과 | 6개 Chrome 캡처, catalog icon / parameter default 일치, fallback / raw label / 빈 label / clipping 0개 |
 | Web Template/Workspace | 통과 | catalog, template library, Terraform panel 관련 41 tests |
 | API Terraform 경로 | 통과 | resource coverage, preview, diagnostics, workspace 관련 75 tests |
 | Terraform CLI | 통과 | 6개 Template 각각 `terraform init`과 `terraform validate`, exit code 0 |
@@ -65,7 +65,7 @@
 | ECS Fargate Container App | 18 | 18 | 0 | 0 |
 | EKS Container App | 19 | 19 | 0 | 0 |
 
-모든 페이지는 마지막 M5b 코드 수정 뒤 Chrome에서 양쪽 패널을 접고 새로 열어 `Fit view`를 적용해 캡처했다. 노드별 가시 label 존재와 viewport clipping 0개도 DOM 경계에서 확인했다. 오른쪽 Resources/configurator의 Terraform address는 내부 배포 식별 정보이며, 이 표의 Architecture Board node label 판정에는 포함하지 않는다.
+모든 페이지는 마지막 M5b 코드 수정 뒤 Chrome에서 양쪽 패널을 접고 새로 열어 `Fit view`를 적용해 캡처했다. 노드별 가시 label 존재와 viewport clipping 0개도 DOM 경계에서 확인했다. 오른쪽 Resources/configurator의 Terraform address는 내부 배포 식별 정보이며, 이 표의 설계 편집 화면 node label 판정에는 포함하지 않는다.
 
 최종 캡처 여섯 장과 카탈로그 합성 소스를 각각 검토한 독립 설계 / 기능 리뷰와 시각 정밀 리뷰는 모두 `PASS`였고 blocking finding은 없었다.
 
@@ -151,4 +151,4 @@
 
 ## 미완료 조건
 
-Chrome 로그인이 연결되지 않았거나 verified AWS connection을 확인하지 못한 상태에서는 실제 apply를 시작하지 않는다. 또한 Raw Terraform Detail 노드가 Architecture Board에 보이면 M5c를 시작하지 않고 M5b 수정부터 완료한다.
+Chrome 로그인이 연결되지 않았거나 verified AWS connection을 확인하지 못한 상태에서는 실제 apply를 시작하지 않는다. 또한 Raw Terraform Detail 노드가 설계 편집 화면에 보이면 M5c를 시작하지 않고 M5b 수정부터 완료한다.

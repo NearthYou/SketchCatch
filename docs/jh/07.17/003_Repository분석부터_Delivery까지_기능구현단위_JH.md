@@ -9,7 +9,7 @@
 1. 공개 Repository 분석과 Board 생성에는 GitHub 연결을 요구하지 않는다.
 2. Repository를 변경하거나 PR / Pipeline을 실행할 때만 검증된 `SourceRepository`를 요구한다.
 3. Board를 만든 Repository 정보는 RDS의 `RepositoryAnalysisRecord`에 저장한다.
-4. commit SHA 차이는 최신성 안내일 뿐 Architecture Board 변경이나 CI/CD 차단 조건이 아니다.
+4. commit SHA 차이는 최신성 안내일 뿐 설계 편집 화면 변경이나 CI/CD 차단 조건이 아니다.
 5. 이번 범위에서 여러 active GitHub installation 선택과 Repository 변경에 따른 Architecture 재설계는 지원하지 않는다.
 
 ## 2. 완료 후 사용자 흐름

@@ -12,7 +12,7 @@
 
 - API 호출 함수와 인증 처리
 - shared type과 Zod schema
-- `ArchitectureJson`, `DiagramJson`, Architecture Board 저장과 불러오기
+- `ArchitectureJson`, `DiagramJson`, 설계 편집 화면 저장과 불러오기
 - Terraform Preview, 검증, 동기화 제안
 - Safety / Cost Check
 - Plan, Apply, Deployment History, Cleanup
@@ -53,7 +53,7 @@
 
 - 기본 글꼴: Pretendard
 - 화면 바깥 배경: 흰색 또는 `#fafafa`
-- 24px 격자: Architecture Board 안에서만 사용
+- 24px 격자: 설계 편집 화면 안에서만 사용
 - primary CTA: 검정, 높이 40px, radius 8px
 - input: 높이 44px, radius 8px
 - 일반 card: radius 12px, 1px hairline border
@@ -415,7 +415,7 @@ Dashboard 전체를 dark theme으로 만들지 않는다.
 
 ### 목표
 
-Architecture Board를 가장 넓게 쓰면서 Resource 탐색, 선택, 수정, 저장을 빠르게 한다.
+설계 편집 화면를 가장 넓게 쓰면서 Resource 탐색, 선택, 수정, 저장을 빠르게 한다.
 
 ### 작업 범위
 
@@ -465,7 +465,7 @@ Architecture Board를 가장 넓게 쓰면서 Resource 탐색, 선택, 수정, �
 
 ### DESIGN.md에서 지켜야 할 규칙
 
-24px 격자는 Architecture Board 안에서만 보인다. palette와 inspector는 흰 surface와 hairline border를 쓰고, 기술적인 code나 log가 아닌 영역을 검게 만들지 않는다.
+24px 격자는 설계 편집 화면 안에서만 보인다. palette와 inspector는 흰 surface와 hairline border를 쓰고, 기술적인 code나 log가 아닌 영역을 검게 만들지 않는다.
 
 ### 상태
 
@@ -501,7 +501,7 @@ Board가 panel보다 작아지는 구성을 허용하지 않는다.
 
 ### 목표
 
-프로젝트 생성 전에 대화로 요구사항을 좁히고, 마지막에 Practice Architecture 미리보기를 확인한다.
+프로젝트 생성 전에 대화로 요구사항을 좁히고, 마지막에 설계 정보 미리보기를 확인한다.
 
 ### 작업 범위
 
@@ -916,7 +916,7 @@ Cleanup을 일반 secondary action처럼 가볍게 보이게 하지 않는다.
 
 ### 목표
 
-Template과 Repository를 새 프로젝트의 입력으로 쓰고, 최종 결과는 같은 Architecture Board로 보낸다.
+Template과 Repository를 새 프로젝트의 입력으로 쓰고, 최종 결과는 같은 설계 편집 화면로 보낸다.
 
 ### 작업 범위
 
@@ -925,7 +925,7 @@ Template과 Repository를 새 프로젝트의 입력으로 쓰고, 최종 결과
 - Template 저장과 적용
 - `/workspace/repository`
 - GitHub callback과 분석 상태
-- 최종 Practice Architecture Preview
+- 최종 설계 정보 Preview
 
 ### 참고할 기존 기능 또는 route
 

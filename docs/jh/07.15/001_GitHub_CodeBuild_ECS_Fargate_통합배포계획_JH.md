@@ -4,7 +4,7 @@
 
 - 작성일: 2026-07-15
 - 대상 브랜치: `codex/demo-repository-owner-parity`
-- 대상 사용자 여정: Repository 분석 → 웹 포함 ECS/Fargate Architecture Board → 코드 사전 검증 → Terraform Plan 승인 → Terraform Apply → ECS API 릴리즈 → S3 웹 릴리즈 → HTTPS URL/QR → Live Observation
+- 대상 사용자 여정: Repository 분석 → 웹 포함 ECS/Fargate 설계 편집 화면 → 코드 사전 검증 → Terraform Plan 승인 → Terraform Apply → ECS API 릴리즈 → S3 웹 릴리즈 → HTTPS URL/QR → Live Observation
 - 구현 우선순위: 이번 데모에서는 S3 + CloudFront + ALB + ECS/Fargate 웹 포함 경로만 end-to-end로 완성한다.
 - 문서 성격: 사람에게는 결정 근거를 설명하고, 구현 AI에게는 작업 순서 / 계약 / 완료 조건을 제공하는 실행 계획이다.
 - 2026-07-15 필수 리뷰 반영: build/deploy 권한 분리, immutable Artifact 재사용, GitHub release-run API, 상태 전이 / 취소, scope, 삭제 FK, CloudFront exact release 검증 계약을 확정했다.

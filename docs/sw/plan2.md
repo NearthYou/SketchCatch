@@ -4,7 +4,7 @@
 
 Goal: `docs/sw/spec2.md`의 프로젝트 단위 배포 운영 계약을 우선순위와 의존성에 따라 독립적으로 검증 가능한 수직 슬라이스로 구현한다.
 
-Architecture: 프로젝트 단일 배포 타깃과 공통 릴리즈 원장을 중심에 두고 Direct Deployment와 GitOps runtime adapter를 연결한다. Live Observation, CI 로그, 알림은 Deployment/ApplicationRelease terminal evidence를 소비하며, AWS 구현은 provider-neutral 계약 뒤에 둔다.
+Architecture: 프로젝트 단일 배포 타깃과 공통 릴리즈 원장을 중심에 두고 Direct Deployment와 GitOps runtime adapter를 연결한다. Live Observation, CI 로그, 알림은 Deployment/ApplicationRelease terminal evidence를 소비하며, AWS 구현은 클라우드 공통 계약 뒤에 둔다.
 
 Tech Stack: TypeScript, Next.js, Fastify, Zod, PostgreSQL/RDS, Redis, Terraform, AWS ECS/Fargate, Lambda, CodeDeploy, S3/CloudFront, CloudWatch, GitHub Actions.
 
@@ -41,7 +41,7 @@ Tech Stack: TypeScript, Next.js, Fastify, Zod, PostgreSQL/RDS, Redis, Terraform,
 
 범위:
 
-- provider-neutral Store contract와 in-memory/Redis adapter를 같은 contract suite로 완성한다.
+- 클라우드 공통 Store contract와 in-memory/Redis adapter를 같은 contract suite로 완성한다.
 - HMAC capability, 만료, rate limit, session request budget, redaction을 서버에서 검증한다.
 - `/observe/:publicId` QR 흐름과 검증된 HTTPS Output URL 요청을 연결한다.
 - AWS runtime별 CloudWatch request/error/p95/availability/capacity/log evidence를 공통 snapshot으로 정규화한다.
@@ -76,7 +76,7 @@ Tech Stack: TypeScript, Next.js, Fastify, Zod, PostgreSQL/RDS, Redis, Terraform,
 
 범위:
 
-- provider-neutral shared type, Zod DTO, RDS migration, repository/API, 프로젝트 설정 UI를 연결한다.
+- 클라우드 공통 shared type, Zod DTO, RDS migration, repository/API, 프로젝트 설정 UI를 연결한다.
 - project당 한 target, runtime kind, confirmed build config, rollout strategy를 저장한다.
 - `application_releases`와 기존 Deployment 연결을 추가한다.
 - legacy live profile을 호환 backfill하고 기존 plan/apply API를 adapter로 유지한다.

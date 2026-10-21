@@ -2,7 +2,7 @@
 
 ## 한 줄 결론
 
-Brainboard의 `Amazon Web Services` 필터 결과 중 작성자가 `Chafik Belhaoues`인 24개 Template을 다운로드 수 내림차순으로 조사하고, 기존 여섯 Template을 변경하지 않은 채 `brainboard-*` 신규 Template으로 추가한다. 원본 좌표계와 Terraform 의미를 각각 보존하는 source fixture를 SSOT로 두고, SketchCatch의 기존 Resource catalog와 Template materialization 경로를 재사용한다.
+Brainboard의 `Amazon Web Services` 필터 결과 중 작성자가 `Chafik Belhaoues`인 24개 Template을 다운로드 수 내림차순으로 조사하고, 기존 여섯 Template을 변경하지 않은 채 `brainboard-*` 신규 Template으로 추가한다. 원본 좌표계와 Terraform 의미를 각각 보존하는 source fixture를 기준 문서로 두고, SketchCatch의 기존 Resource catalog와 Template materialization 경로를 재사용한다.
 
 ## 1. 완료 기준
 
@@ -54,7 +54,7 @@ Brainboard의 `Amazon Web Services` 필터 결과 중 작성자가 `Chafik Belha
 
 ### 접근 A: source fixture와 기존 TemplateDefinition adapter 결합
 
-원본 capture를 provider-neutral source fixture에 기록하고, adapter가 기존 `TemplateDefinition`과 `DiagramJson`으로 변환한다. Resource catalog identity와 Terraform renderer를 재사용하되, `geometryPolicy: "source-exact"`인 신규 Template만 원본 좌표와 size, z-order, edge waypoint를 그대로 통과시킨다.
+원본 capture를 클라우드 공통 source fixture에 기록하고, adapter가 기존 `TemplateDefinition`과 `DiagramJson`으로 변환한다. Resource catalog identity와 Terraform renderer를 재사용하되, `geometryPolicy: "source-exact"`인 신규 Template만 원본 좌표와 size, z-order, edge waypoint를 그대로 통과시킨다.
 
 - 장점: 원본 증거와 SketchCatch runtime model이 분리되고, 24개를 같은 방식으로 검증할 수 있다.
 - 장점: 기존 여섯 Template의 compact 40px-grid 계약을 그대로 유지할 수 있다.

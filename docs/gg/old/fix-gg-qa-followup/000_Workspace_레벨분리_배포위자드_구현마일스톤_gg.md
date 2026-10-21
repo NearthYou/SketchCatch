@@ -24,15 +24,15 @@ Deployment 레벨은 도구 탭 모음이 아니다.
 
 | 레벨 | 화면에 남길 것 | 화면에 넣지 않을 것 |
 | --- | --- | --- |
-| Architecture Board | Board, Resource 선택, Resource 정보, 필수/추가 파라미터, Terraform 생성 / 편집 / 검증 / Board 동기화 | 비용 검사, Plan 승인, Apply, Git/CI/CD handoff, 관찰, 이력, Cleanup |
+| 설계 편집 화면 | Board, Resource 선택, Resource 정보, 필수/추가 파라미터, Terraform 생성 / 편집 / 검증 / Board 동기화 | 비용 검사, Plan 승인, Apply, Git/CI/CD handoff, 관찰, 이력, Cleanup |
 | Deployment | 배포 전 검사, 배포 기준 저장, Plan, 승인, Direct Apply 또는 Git/CI/CD handoff, 실행 결과 | Resource 파라미터 편집, Terraform 코드 편집, Board 구조 변경 |
 
 다이어그램과 Terraform은 같은 설계 데이터를 본다.
-따라서 Terraform은 `WorkspaceOperationsDock`의 배포 탭이 아니라 Architecture Board 오른쪽 패널의 두 번째 보기여야 한다.
+따라서 Terraform은 `WorkspaceOperationsDock`의 배포 탭이 아니라 설계 편집 화면 오른쪽 패널의 두 번째 보기여야 한다.
 
 ## 3. 배포 위자드의 고정 흐름
 
-Architecture Board에서 Terraform이 현재 Board와 동기화된 상태일 때만 `배포 시작`을 누를 수 있다.
+설계 편집 화면에서 Terraform이 현재 Board와 동기화된 상태일 때만 `배포 시작`을 누를 수 있다.
 그 순간의 Board와 Terraform 파일을 Deployment Baseline으로 고정한다.
 
 ```text
@@ -59,7 +59,7 @@ Deployment Wizard
 
 - 미래 단계는 현재 단계의 조건이 충족되기 전까지 열지 않는다.
 - 이전 단계는 결과를 읽기 위해 다시 볼 수 있지만, 순서를 건너뛰어 실행할 수 없다.
-- Terraform을 고쳐야 하면 배포 위자드를 끝내고 Architecture Board로 돌아간다. 기존 Baseline은 폐기하고 새 Terraform으로 다시 시작한다.
+- Terraform을 고쳐야 하면 배포 위자드를 끝내고 설계 편집 화면로 돌아간다. 기존 Baseline은 폐기하고 새 Terraform으로 다시 시작한다.
 - `Cleanup`은 정상 배포 위자드의 마지막 단계가 아니다. 선택한 Deployment History에서 별도의 위험한 정리 위자드로 시작한다.
 - Git/CI/CD handoff는 Direct Apply를 먼저 실행해야 하는 경로가 아니다. 두 경로는 같은 승인된 Plan snapshot에서 갈라지는 실행 방식이다.
 
@@ -101,7 +101,7 @@ type DeploymentBaseline = {
 ```
 
 Baseline은 Terraform이 `current` 상태일 때만 만들 수 있다.
-위자드는 이 값을 바꾸지 않는다. Terraform 수정은 Architecture Board 레벨의 책임이다.
+위자드는 이 값을 바꾸지 않는다. Terraform 수정은 설계 편집 화면 레벨의 책임이다.
 
 ### 5.2 상태 중복 방지
 

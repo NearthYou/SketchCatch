@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-이 작업은 GitHub 계정 연결, Repository Analysis, 프로젝트 Source Repository 선택, Git/CI/CD 설정과 실행 상태가 여러 화면에 흩어진 문제를 정리한다. 사용자는 공개 Repository라면 GitHub 계정을 연결하지 않고 분석과 Architecture Board 생성을 진행하고, 비공개 Repository 또는 Git/CI/CD 작업이 필요할 때만 GitHub 연결과 Repository 권한을 추가한다.
+이 작업은 GitHub 계정 연결, Repository Analysis, 프로젝트 Source Repository 선택, Git/CI/CD 설정과 실행 상태가 여러 화면에 흩어진 문제를 정리한다. 사용자는 공개 Repository라면 GitHub 계정을 연결하지 않고 분석과 설계 편집 화면 생성을 진행하고, 비공개 Repository 또는 Git/CI/CD 작업이 필요할 때만 GitHub 연결과 Repository 권한을 추가한다.
 
 프로젝트 Workspace에는 `Delivery Center`를 두어 Repository, branch, 배포 타깃, 배포 환경, Git/CI/CD 준비 상태, PR, Pipeline Run과 로그를 한곳에서 확인하고 수정한다. Dashboard 환경설정은 사용자 계정 단위 GitHub App installation을 관리하는 전역 관리 화면으로 유지한다.
 
@@ -44,7 +44,7 @@
 
 ### 2.4 Board 생성과 Git/CI/CD 연결 책임 혼재
 
-현재 공개 Repository는 계정 연결 없이 분석할 수 있지만 Architecture Board 생성 전에 active `SourceRepository` 연결을 요구한다. 설계를 만들기 위해 공개 코드를 읽는 행위와 Repository에 PR을 만들거나 Pipeline을 실행하는 행위가 같은 승인 경계로 묶여 있다.
+현재 공개 Repository는 계정 연결 없이 분석할 수 있지만 설계 편집 화면 생성 전에 active `SourceRepository` 연결을 요구한다. 설계를 만들기 위해 공개 코드를 읽는 행위와 Repository에 PR을 만들거나 Pipeline을 실행하는 행위가 같은 승인 경계로 묶여 있다.
 
 ## 3. 목표 원칙
 
@@ -237,14 +237,14 @@ public Repository Analysis API는 최소한 다음 오류를 구분한다.
 - Source Repository에 저장된 마지막 인증 분석 SHA와 공개 분석 revision이 다르면 두 분석 결과가 다르다는 비차단 안내를 표시한다.
 - 이 값은 현재 GitHub head를 자동 조회한 결과라고 표현하지 않는다.
 - commit SHA 차이만으로 Architecture Resource 추가 / 변경 / 제거를 추론하거나 CI/CD를 차단하지 않는다.
-- 사용자가 원하면 최신 Repository Analysis를 다시 실행할 수 있지만, 재분석 결과가 기존 Architecture Board를 자동 변경하지 않는다.
+- 사용자가 원하면 최신 Repository Analysis를 다시 실행할 수 있지만, 재분석 결과가 기존 설계 편집 화면를 자동 변경하지 않는다.
 - Git/CI/CD handoff는 계속 `sourceRepositoryId`만 받고 identity는 RDS의 active row에서 읽는다.
 
 ## 8. 공개 분석 결과 보존 계약
 
-공개 Repository로 Architecture Board를 만든 뒤 다시 접속해도 Delivery Center가 원래 Repository URL, branch와 분석 revision을 자동 입력할 수 있도록 분석 provenance를 RDS에 영구 저장한다. `sessionStorage`와 Runtime Cache는 외부 왕복과 짧은 재사용만 담당하며 영구 기준이 아니다.
+공개 Repository로 설계 편집 화면를 만든 뒤 다시 접속해도 Delivery Center가 원래 Repository URL, branch와 분석 revision을 자동 입력할 수 있도록 분석 provenance를 RDS에 영구 저장한다. `sessionStorage`와 Runtime Cache는 외부 왕복과 짧은 재사용만 담당하며 영구 기준이 아니다.
 
-Project Draft metadata에 provenance를 섞지 않고 provider-neutral한 별도 `RepositoryAnalysisRecord` 계약을 둔다. 이 record는 공개 URL 분석 사실을 저장할 뿐, provider 권한이 검증된 `SourceRepository`를 대신하지 않는다.
+Project Draft metadata에 provenance를 섞지 않고 클라우드 공통한 별도 `RepositoryAnalysisRecord` 계약을 둔다. 이 record는 공개 URL 분석 사실을 저장할 뿐, provider 권한이 검증된 `SourceRepository`를 대신하지 않는다.
 
 ```ts
 type RepositoryAnalysisRecord = {
@@ -269,7 +269,7 @@ type RepositoryAnalysisRecord = {
 
 - public Repository Analysis가 성공해도 즉시 Git/CI/CD 권한이 생기지 않는다.
 - 사용자가 해당 분석 결과로 Board 생성을 확정할 때 project와 연결된 record를 저장한다.
-- 프로젝트마다 현재 Architecture Board를 만든 Repository 분석 record 하나만 유지한다.
+- 프로젝트마다 현재 설계 편집 화면를 만든 Repository 분석 record 하나만 유지한다.
 - 같은 프로젝트에서 다른 Repository 분석 결과로 Board 생성을 확정하면 기존 record를 새 분석 정보로 교체한다.
 - 이전 Repository 분석 provenance 이력은 이번 범위에서 보관하지 않는다. 향후 Design Version별 출처 이력이 필요하면 Design Version과 분석 record를 연결하는 별도 계약으로 확장한다.
 - Repository URL은 normalized owner/name과 함께 저장하고 branch와 commit SHA를 분리해 보존한다.
@@ -398,7 +398,7 @@ type RepositoryAnalysisRecord = {
 
 ## 12. 완료 조건
 
-1. 공개 Repository 사용자는 GitHub 계정 연결 없이 분석과 Architecture Board 생성을 완료한다.
+1. 공개 Repository 사용자는 GitHub 계정 연결 없이 분석과 설계 편집 화면 생성을 완료한다.
 2. Repository를 확인할 수 없을 때 URL 오류와 비공개 가능성을 정확히 안내한다.
 3. GitHub 상태에 따라 연결, 권한 추가, Repository 연결 버튼이 구분된다.
 4. account scope GitHub 연결을 여러 프로젝트가 재사용하되 Source Repository는 프로젝트마다 명시적으로 확정한다.

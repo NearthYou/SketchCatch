@@ -6,7 +6,7 @@
 
 ## 완료 기준
 
-여섯 AWS Template이 같은 `TemplateDefinition`에서 생성되고, 사용자가 보드에서 선택한 뒤 Terraform Preview, Pre-Deployment Check, 승인된 Direct Deployment, destroy cleanup까지 진행할 수 있어야 한다. Chrome에서 실제 배포 버튼을 눌러 성공 또는 실패를 관찰하고, 패턴별 소요 시간을 기록해야 한다.
+여섯 AWS Template이 같은 `TemplateDefinition`에서 생성되고, 사용자가 보드에서 선택한 뒤 Terraform Preview, 배포 전 검사, 승인된 Direct Deployment, destroy cleanup까지 진행할 수 있어야 한다. Chrome에서 실제 배포 버튼을 눌러 성공 또는 실패를 관찰하고, 패턴별 소요 시간을 기록해야 한다.
 
 ## 마일스톤
 
@@ -88,7 +88,7 @@
 - 여섯 Template의 47개 고유 Terraform resource type은 모두 기존 카탈로그에 존재했으며, 새 fallback이나 임시 Resource를 추가하지 않았다.
 - catalog icon, label, size, style, parameter default와 drag/drop 기본 표시 이름을 적용하고 Terraform logical name은 내부 `resourceName`으로 분리했다. Template이 명시한 parameter 값은 catalog default보다 우선한다.
 - VPC, Subnet, Security Group, Auto Scaling Group 같은 area Resource도 `diagramLabel`을 우선 표시하도록 보강했다.
-- Architecture Board에서 Raw Terraform Detail 노드는 허용하지 않는다. 필요한 세부 resource type이 카탈로그에 없으면 먼저 정식 카탈로그 Resource로 추가한다.
+- 설계 편집 화면에서 Raw Terraform Detail 노드는 허용하지 않는다. 필요한 세부 resource type이 카탈로그에 없으면 먼저 정식 카탈로그 Resource로 추가한다.
 - TDD에서 bare S3 icon과 Workspace 시작 경로가 실패하는 Red, area Resource가 `*_workspace`를 표시하는 Red를 각각 확인한 뒤 Green으로 전환했다.
 - 관련 33 tests, Web typecheck, lint, `git diff --check`를 통과했다.
 - Chrome에서 양쪽 패널을 접고 여섯 Template을 모두 열어 노드 수와 icon 수가 각각 `6/6`, `12/12`, `16/16`, `30/30`, `18/18`, `19/19`임을 확인했다. 모든 보드에서 일반 `AWS` fallback tile 0개, `*_workspace` 가시 label 0개, 빈 label 0개, viewport 밖으로 잘린 node 0개였다.

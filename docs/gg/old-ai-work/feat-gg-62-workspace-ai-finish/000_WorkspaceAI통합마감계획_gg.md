@@ -4,7 +4,7 @@
 
 ## 1. 목표
 
-실제 `/workspace`에서 사용자가 자연어로 Architecture Draft를 만들고, 확인 후 Architecture Board에 반영하고, 같은 화면에서 Pre-Deployment Check, Design Simulation, Terraform Preview 설명, Terraform 오류 설명, LLM 설명까지 확인할 수 있게 한다.
+실제 `/workspace`에서 사용자가 자연어로 Architecture Draft를 만들고, 확인 후 설계 편집 화면에 반영하고, 같은 화면에서 배포 전 검사, Design Simulation, Terraform Preview 설명, Terraform 오류 설명, LLM 설명까지 확인할 수 있게 한다.
 
 `/workspace/ai`는 데모 화면으로 남길 수 있지만, gg AI 파트의 완료 기준은 실제 `/workspace` 통합이다.
 
@@ -12,8 +12,8 @@
 
 - 실제 `/workspace`에 자연어 Architecture Draft 입력 연결
 - 생성된 Architecture Draft 요약 표시
-- 사용자가 확인한 뒤 Architecture Board에 반영
-- 현재 보드 기준 Pre-Deployment Check 실행
+- 사용자가 확인한 뒤 설계 편집 화면에 반영
+- 현재 보드 기준 배포 전 검사 실행
 - 현재 보드 기준 Design Simulation 실행
 - Terraform 코드 기준 Preview 설명 실행
 - Terraform 오류 메시지 기준 오류 설명 실행
@@ -59,7 +59,7 @@
 이유:
 
 - AI API 응답 계약은 `ArchitectureJson`으로 유지한다.
-- Architecture Board 내부 구조를 크게 바꾸지 않는다.
+- 설계 편집 화면 내부 구조를 크게 바꾸지 않는다.
 - 보드 반영 전용 변환 경계가 있으면 테스트와 디버깅이 쉽다.
 - 표시용 데이터를 대충 보드 노드로 매핑하지 않는다.
 
@@ -70,7 +70,7 @@
 이유:
 
 - 기존 `/workspace`가 오른쪽 패널에서 Resource, Terraform, Issues, Deploy 역할을 나눠 보여주는 흐름과 맞는다.
-- Architecture Board 옆에서 Architecture Draft 생성, 보드 반영, Pre-Deployment Check, Design Simulation을 바로 확인할 수 있다.
+- 설계 편집 화면 옆에서 Architecture Draft 생성, 보드 반영, 배포 전 검사, Design Simulation을 바로 확인할 수 있다.
 - 모달보다 보드와 AI 결과를 비교하기 쉽다.
 - 하단 상시 섹션보다 보드 공간을 덜 침범한다.
 
@@ -92,7 +92,7 @@
 
 ### 4.6 Architecture Draft 반영 방식
 
-선택: 사용자가 `보드에 반영`을 누르면 현재 Architecture Board를 Architecture Draft 결과로 통째로 교체한다.
+선택: 사용자가 `보드에 반영`을 누르면 현재 설계 편집 화면를 Architecture Draft 결과로 통째로 교체한다.
 
 이유:
 
@@ -114,7 +114,7 @@ UI 기준:
 
 이유:
 
-- 이번 MVP의 gg 범위는 Architecture Draft를 실제 Architecture Board에 반영하고, 그 보드 기준으로 Pre-Deployment Check와 Design Simulation을 확인하는 것이다.
+- 이번 MVP의 gg 범위는 Architecture Draft를 실제 설계 편집 화면에 반영하고, 그 보드 기준으로 배포 전 검사와 Design Simulation을 확인하는 것이다.
 - Terraform 생성, 저장, 검증 상태는 sw 흐름과 맞춰야 한다.
 - 보드 반영 직후 Terraform Preview를 자동 생성하면 인증, 저장 상태, 기존 Terraform 변경 사항과 엮일 수 있다.
 - AI 패널 안에 Terraform 생성 버튼을 넣으면 gg AI 패널이 sw 기능까지 들고 오는 모양이 된다.
@@ -126,13 +126,13 @@ UI 기준:
 
 ### 4.8 Pre-Deployment Check와 Design Simulation 실행 타이밍
 
-선택: `보드에 반영` 직후 Pre-Deployment Check와 Design Simulation을 자동 실행하지 않는다.
+선택: `보드에 반영` 직후 배포 전 검사와 Design Simulation을 자동 실행하지 않는다.
 
 사용자는 AI 패널 안에서 각각 `검사 실행`, `시뮬레이션 실행` 버튼을 눌러 실행한다.
 
 이유:
 
-- 보드 반영, Pre-Deployment Check, Design Simulation의 성공/실패 상태를 분리할 수 있다.
+- 보드 반영, 배포 전 검사, Design Simulation의 성공/실패 상태를 분리할 수 있다.
 - 자동 실행하면 로딩 시간이 길어지고 실패 위치가 흐려질 수 있다.
 - 사용자가 현재 보드 상태를 확인한 뒤 필요한 분석을 직접 실행하는 흐름이 더 명확하다.
 - 이번 MVP에서는 각 API 호출을 독립적으로 시연하고 검증하는 것이 안전하다.
@@ -140,33 +140,33 @@ UI 기준:
 UI 기준:
 
 - `보드에 반영` 완료 후 자동으로 분석 API를 호출하지 않는다.
-- `검사 실행` 버튼은 현재 Architecture Board 기준 Pre-Deployment Check를 실행한다.
-- `시뮬레이션 실행` 버튼은 현재 Architecture Board 기준 Design Simulation을 실행한다.
+- `검사 실행` 버튼은 현재 설계 편집 화면 기준 배포 전 검사를 실행한다.
+- `시뮬레이션 실행` 버튼은 현재 설계 편집 화면 기준 Design Simulation을 실행한다.
 
 ### 4.9 분석 기준
 
-선택: Pre-Deployment Check와 Design Simulation은 마지막 AI Draft 원본이 아니라 현재 Architecture Board 상태를 기준으로 실행한다.
+선택: 배포 전 검사와 Design Simulation은 마지막 AI Draft 원본이 아니라 현재 설계 편집 화면 상태를 기준으로 실행한다.
 
 구현 기준:
 
-- 현재 Architecture Board 상태를 API 입력용 `ArchitectureJson`으로 변환한다.
-- 변환된 `ArchitectureJson`을 Pre-Deployment Check와 Design Simulation API에 전달한다.
+- 현재 설계 편집 화면 상태를 API 입력용 `ArchitectureJson`으로 변환한다.
+- 변환된 `ArchitectureJson`을 배포 전 검사와 Design Simulation API에 전달한다.
 - 사용자가 보드를 수정한 뒤 실행하면 수정된 보드 상태를 기준으로 분석한다.
 
 이유:
 
-- 실제 `/workspace` 통합이라고 말하려면 화면에 보이는 Architecture Board가 분석 기준이어야 한다.
+- 실제 `/workspace` 통합이라고 말하려면 화면에 보이는 설계 편집 화면가 분석 기준이어야 한다.
 - 마지막 AI Draft 원본을 기준으로 분석하면 사용자가 보드를 수정했을 때 화면과 분석 결과가 달라질 수 있다.
 - AI Draft로 만든 보드뿐 아니라 사용자가 직접 만든 보드도 같은 분석 흐름을 탈 수 있어야 한다.
 
 UI 기준:
 
-- 분석 결과에는 현재 Architecture Board 기준으로 실행했다는 맥락이 드러나야 한다.
+- 분석 결과에는 현재 설계 편집 화면 기준으로 실행했다는 맥락이 드러나야 한다.
 - AI Draft를 생성했지만 아직 보드에 반영하지 않았다면, 분석 버튼은 현재 보드 기준으로 동작한다.
 
 ### 4.10 빈 보드와 변환 실패 처리
 
-선택: 현재 Architecture Board가 비어 있거나 API 입력용 `ArchitectureJson`으로 변환할 수 없더라도 분석 버튼은 화면에 보여준다.
+선택: 현재 설계 편집 화면가 비어 있거나 API 입력용 `ArchitectureJson`으로 변환할 수 없더라도 분석 버튼은 화면에 보여준다.
 
 사용자가 실행했을 때 안내 메시지를 보여준다.
 
@@ -179,7 +179,7 @@ UI 기준:
 이유:
 
 - 버튼을 숨기거나 비활성화하면 사용자가 왜 실행할 수 없는지 놓칠 수 있다.
-- 실행 시 안내하면 현재 분석 기준이 Architecture Board라는 점을 같이 설명할 수 있다.
+- 실행 시 안내하면 현재 분석 기준이 설계 편집 화면라는 점을 같이 설명할 수 있다.
 - 빈 보드에 샘플 Architecture Draft를 자동 삽입하면 사용자 의도와 다르게 보드가 바뀐다.
 
 UI 기준:
@@ -190,7 +190,7 @@ UI 기준:
 
 ### 4.11 Architecture Draft 생성 실패 처리
 
-선택: Architecture Draft 생성이 실패하면 AI 패널 안에 에러 메시지를 보여주고, 기존 Architecture Board는 그대로 둔다.
+선택: Architecture Draft 생성이 실패하면 AI 패널 안에 에러 메시지를 보여주고, 기존 설계 편집 화면는 그대로 둔다.
 
 예:
 
@@ -200,7 +200,7 @@ Architecture Draft 생성에 실패했습니다. 입력을 줄이거나 다시 �
 
 이유:
 
-- Draft 생성 실패는 보드 변경 전 단계이므로 기존 Architecture Board를 건드리면 안 된다.
+- Draft 생성 실패는 보드 변경 전 단계이므로 기존 설계 편집 화면를 건드리면 안 된다.
 - 실패 시 fallback 샘플 Architecture Draft를 자동으로 보여주면 사용자가 입력한 요구사항과 다른 결과가 나올 수 있다.
 - `/workspace/ai` 데모 화면으로 보내는 방식은 실제 `/workspace` 통합 목표와 맞지 않는다.
 
@@ -226,7 +226,7 @@ UI 기준:
 
 이유:
 
-- 실제 다이어그램은 `보드에 반영` 후 Architecture Board에서 확인하면 된다.
+- 실제 다이어그램은 `보드에 반영` 후 설계 편집 화면에서 확인하면 된다.
 - 오른쪽 패널 안에 작은 preview diagram을 만들면 보드 미니맵을 또 만드는 작업이 된다.
 - JSON을 바로 노출하면 개발자에게는 유용하지만 일반 시연 흐름에서는 부담스럽다.
 - MVP에서는 사용자가 “이 초안이 어떤 구조인지”만 확인하고 반영할 수 있으면 충분하다.
@@ -244,7 +244,7 @@ UI 기준:
 표시 위치:
 
 - Architecture Draft preview 요약 아래
-- Pre-Deployment Check 결과 아래
+- 배포 전 검사 결과 아래
 - Design Simulation 결과 아래
 
 이유:
@@ -262,7 +262,7 @@ UI 기준:
 
 ### 4.14 보드 변경 후 분석 결과 처리
 
-선택: Pre-Deployment Check 또는 Design Simulation 결과가 나온 뒤 Architecture Board가 변경되면 기존 분석 결과는 유지하되, 오래된 결과라는 표시를 붙인다.
+선택: 배포 전 검사 또는 Design Simulation 결과가 나온 뒤 설계 편집 화면가 변경되면 기존 분석 결과는 유지하되, 오래된 결과라는 표시를 붙인다.
 
 표시 문구 예:
 
@@ -272,14 +272,14 @@ UI 기준:
 
 이유:
 
-- 분석 기준은 현재 Architecture Board이므로 보드가 바뀌면 기존 결과가 최신 상태가 아닐 수 있다.
+- 분석 기준은 현재 설계 편집 화면이므로 보드가 바뀌면 기존 결과가 최신 상태가 아닐 수 있다.
 - 결과를 바로 지우면 사용자가 방금 확인한 내용을 갑자기 잃는다.
 - 보드 변경마다 자동 재분석하면 API 호출, loading, 실패 상태가 복잡해진다.
 - MVP에서는 사용자가 직접 다시 실행하는 흐름이 가장 명확하다.
 
 UI 기준:
 
-- 기존 Pre-Deployment Check 결과와 Design Simulation 결과는 화면에 유지한다.
+- 기존 배포 전 검사 결과와 Design Simulation 결과는 화면에 유지한다.
 - 보드 변경 감지 후 결과 영역 근처에 `다시 실행 필요` 상태를 표시한다.
 - 사용자가 `검사 실행` 또는 `시뮬레이션 실행`을 다시 누르면 최신 보드 기준 결과로 갱신한다.
 - 보드 변경만으로 분석 API를 자동 호출하지 않는다.
@@ -296,7 +296,7 @@ UI 기준:
 
 이유:
 
-- Architecture Draft, Pre-Deployment Check, Design Simulation은 각각 다른 API 요청이다.
+- Architecture Draft, 배포 전 검사, Design Simulation은 각각 다른 API 요청이다.
 - 사용자가 어떤 작업이 진행 중인지 바로 알 수 있어야 한다.
 - 하나의 공통 로딩만 두면 실패했을 때 어느 기능에서 실패했는지 흐려진다.
 - 로딩 없이 버튼 disabled만 처리하면 API가 느릴 때 멈춘 것처럼 보일 수 있다.
@@ -345,10 +345,10 @@ UI 기준:
 
 - `/workspace` 오른쪽 AI 패널에서 Architecture Draft를 생성할 수 있다.
 - 생성된 Architecture Draft preview 요약을 확인할 수 있다.
-- `보드에 반영`을 누르면 Architecture Board가 Draft 결과로 교체된다.
+- `보드에 반영`을 누르면 설계 편집 화면가 Draft 결과로 교체된다.
 - 빈 보드 또는 변환 실패 시 안내 메시지가 나온다.
-- 현재 Architecture Board 기준으로 Pre-Deployment Check를 실행할 수 있다.
-- 현재 Architecture Board 기준으로 Design Simulation을 실행할 수 있다.
+- 현재 설계 편집 화면 기준으로 배포 전 검사를 실행할 수 있다.
+- 현재 설계 편집 화면 기준으로 Design Simulation을 실행할 수 있다.
 - Terraform 코드를 붙여 넣어 Preview 설명을 실행할 수 있다.
 - Terraform 오류 메시지를 붙여 넣어 오류 설명을 실행할 수 있다.
 - Draft, Check, Simulation, Terraform 오류 설명 결과 아래에 각각 `AI 설명`이 보인다.
@@ -386,16 +386,16 @@ UI 기준:
 
 ### 6.1 Architecture Draft 보드 반영 Resource 기준
 
-선택: Architecture Draft를 Architecture Board에 반영할 때 jh가 만든 Resource catalog와 보드 노드 생성 경계를 사용한다.
+선택: Architecture Draft를 설계 편집 화면에 반영할 때 jh가 만든 Resource catalog와 보드 노드 생성 경계를 사용한다.
 
 이유:
 
 - AI가 임의 노드 모양을 만들면 수동으로 끌어온 Resource와 아이콘, 크기, 기본 스타일이 달라진다.
 - 같은 `DiagramJson`이라도 Resource catalog를 거쳐야 기존 Resource 패널, Terraform 설정, 보드 상호작용과 맞는다.
-- gg AI는 Architecture Draft를 만들고 반영하지만, Architecture Board의 Resource 표현 기준은 jh 쪽 구현을 따라야 한다.
+- gg AI는 Architecture Draft를 만들고 반영하지만, 설계 편집 화면의 Resource 표현 기준은 jh 쪽 구현을 따라야 한다.
 
 기준:
 
 - `ArchitectureJson -> DiagramJson` 변환은 Resource catalog의 `nodeDefaults`, `iconUrl`, `size`를 사용한다.
 - catalog에 없는 Resource만 fallback 노드로 낮춘다.
-- 변환 후 Pre-Deployment Check와 Design Simulation은 같은 보드 Resource 기준으로 실행한다.
+- 변환 후 배포 전 검사와 Design Simulation은 같은 보드 Resource 기준으로 실행한다.

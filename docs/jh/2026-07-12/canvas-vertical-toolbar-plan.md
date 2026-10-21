@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Goal: Architecture Board 하단 가로 툴바를 캔버스 왼쪽 세로 중앙 툴바로 변경한다.
+Goal: 설계 편집 화면 하단 가로 툴바를 캔버스 왼쪽 세로 중앙 툴바로 변경한다.
 
 Architecture: 기존 `DiagramEditor` 마크업과 버튼 동작은 유지하고 `canvasToolbar` 및 `toolbarGroup`의 배치 CSS만 세로 방향으로 변경한다. 소스 계약 테스트로 위치 / 방향 / 반응형 안전 여백을 고정하고 실제 브라우저에서 데스크톱과 모바일 레이아웃을 확인한다.
 

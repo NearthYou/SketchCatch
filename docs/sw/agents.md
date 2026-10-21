@@ -22,10 +22,10 @@
 21. SQS FIFO queue, DLQ, plan/mutation queue, always-on worker service는 현재 범위 밖이며 별도 결정 전까지 구현하지 않는다.
 22. secret 원문은 DB, 로그, S3 artifact, GitHub Actions output에 남기지 않는다.
 23. generated env file과 S3 presigned env download 의존성 제거는 ECS secret/runtime config phase에서 한다.
-24. Redis는 내부 Runtime Cache이며 Practice Architecture Resource로 설명하지 않는다.
+24. Redis는 내부 Runtime Cache이며 설계 정보 Resource로 설명하지 않는다.
 25. 실제 AWS 생성/삭제 전에는 비용, rollback, cleanup 기준을 PR에 명시한다.
 26. 완료 전 `pnpm harness:check`를 실행하고 코드/인프라 변경이면 lint/typecheck/build도 실행한다.
-27. SketchCatch production infrastructure state는 사용자 Deployment state와 공유하지 않는다.
+27. SketchCatch 운영 인프라 state는 사용자 Deployment state와 공유하지 않는다.
 28. production infra import/apply/destroy는 product API나 worker에서 실행하지 않는다.
 29. Route53/ACM, S3/RDS/Redis, disabled-by-default cold rollback은 별도 state와 approval gate로 격리한다.
 30. Retired EC2/ALB/legacy ECS warm rollback을 다시 상시 생성하지 않으며, cold rollback Route53 전환은 direct smoke 뒤 별도 승인한다.

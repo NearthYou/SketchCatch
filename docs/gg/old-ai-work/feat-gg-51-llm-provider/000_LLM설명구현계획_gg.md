@@ -10,7 +10,7 @@
 - LLM은 rule 결과를 쉬운 설명, 요약, 다음 행동으로 보강한다.
 - LLM 실패는 API 실패로 보지 않고 fallback으로 처리한다.
 - 실제 OpenAI API는 테스트에서 호출하지 않는다.
-- Architecture Board Resource 자동 수정은 하지 않는다.
+- 설계 편집 화면 Resource 자동 수정은 하지 않는다.
 
 ## Milestone 6-1. 공통 타입과 의존성 준비
 
@@ -256,6 +256,6 @@
 - 프론트에서 OpenAI 직접 호출
 - rule API와 LLM API 분리 호출
 - LLM 전용 loading state
-- Architecture Board Resource 자동 수정
+- 설계 편집 화면 Resource 자동 수정
 - 원본 OpenAI 에러 메시지 응답 또는 로그 노출
 - 원본 사용자 요청 전체를 OpenAI payload나 fallback builder에 다시 사용

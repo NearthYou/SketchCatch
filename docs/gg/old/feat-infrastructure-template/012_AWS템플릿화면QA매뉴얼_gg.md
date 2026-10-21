@@ -4,7 +4,7 @@
 
 ## 목적
 
-이 문서는 QA 담당자가 화면만 사용해 AWS Template 흐름을 점검하는 순서다. 먼저 Template 선택과 Architecture Board 표현을 확인하고, 실제 AWS 비용이 발생하는 Direct Deployment는 Static Web Hosting 한 건만 apply/destroy까지 실행한다.
+이 문서는 QA 담당자가 화면만 사용해 AWS Template 흐름을 점검하는 순서다. 먼저 Template 선택과 설계 편집 화면 표현을 확인하고, 실제 AWS 비용이 발생하는 Direct Deployment는 Static Web Hosting 한 건만 apply/destroy까지 실행한다.
 
 ## 시작 전 확인
 
@@ -57,7 +57,7 @@
 1. 오른쪽 panel의 Deploy를 연다.
 2. Terraform artifact를 저장하는 버튼이 보이면 먼저 저장한다.
 3. Terraform Preview 또는 review 단계에서 생성된 Terraform과 Plan 요약을 확인한다.
-4. Pre-Deployment Check 결과를 확인한다.
+4. 배포 전 검사 결과를 확인한다.
 5. High Security Risk 또는 비용 차단 항목이 있으면 해결 또는 명시적 승인 없이는 다음 단계로 진행하지 않는다.
 
 통과 기준: Template에 맞는 Resource 변화가 요약되고, 차단 상태가 아니면 승인 단계로 진행할 수 있다.
@@ -68,7 +68,7 @@
 
 1. Static Web Hosting Workspace의 Deploy panel을 연다.
 2. 저장 → review → plan 순서를 모두 완료한다.
-3. Plan 결과가 승인 가능하고 Pre-Deployment Check가 통과한 것을 확인한다.
+3. Plan 결과가 승인 가능하고 배포 전 검사가 통과한 것을 확인한다.
 4. apply 확인 카드에서 AWS 리소스 생성을 누른다.
 5. 누른 시각을 기록한다. 분 단위가 아니라 초 단위까지 기록한다.
 6. Terminal/Deployment status가 `SUCCESS`가 될 때까지 기다린다.
@@ -98,7 +98,7 @@ destroy 후 다음을 확인한다.
 | Board catalog icon/label | 통과 / 실패 |
 | 일반 AWS fallback | 0개 / 발견 |
 | `*_workspace` visible label | 0개 / 발견 |
-| Preview/Pre-Deployment Check | 통과 / 차단 사유 |
+| Preview/배포 전 검사 | 통과 / 차단 사유 |
 | apply 클릭 시각 | |
 | apply terminal state/시각 | |
 | apply 소요 시간 | |
@@ -115,7 +115,7 @@ destroy 후 다음을 확인한다.
 
 - Board에 일반 `AWS` fallback tile 또는 `*_workspace` visible label이 보인다.
 - AWS connection, Role, artifact 저장, Terraform init 중 권한 오류가 난다.
-- Pre-Deployment Check가 차단 상태다.
+- 배포 전 검사가 차단 상태다.
 - destroy를 수행할 수 없는 시간 / 권한 / 환경이다.
 
 이미 apply가 시작된 뒤 오류가 난 경우에는 우선 Deployment History에서 상태와 로그를 확인하고, 가능한 경우 destroy를 실행해 리소스를 정리한다.

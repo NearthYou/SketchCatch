@@ -6,6 +6,8 @@
 
 `TypeScript` `Next.js` `Fastify` `Terraform` `ECS Fargate` `PostgreSQL`
 
+![다이어그램과 Terraform 코드를 함께 편집하는 화면](assets/sketchcatch-editor.jpg)
+
 ## 사용 흐름
 
 1. 필요한 구성을 입력하거나 기존 Terraform 코드와 AWS 자원을 불러옵니다.
@@ -27,11 +29,23 @@ AWS에 배포 실행을 요청한 직후 API가 꺼지면 실행 식별자를 DB
 
 API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 때까지 다음 작업이 기다려야 했습니다. 두 이미지를 병렬로 만들고 이전 빌드 결과를 재사용하도록 바꿨습니다. [보관한 배포 기록](./.eval/deployment-build-results.json)에서 이전 성공 4회의 전체 시간 중앙값은 470.5초였고 캐시를 준비한 뒤 배포한 1회는 369초였습니다. 서로 다른 커밋의 기록을 비교한 값이므로 [측정 조건](./.eval/README.md#운영-배포-측정)을 함께 확인할 수 있게 했습니다.
 
-## 실행 구조
+## 아키텍처
 
 웹과 API는 AWS ECS Fargate에서 실행합니다. API는 승인된 배포마다 별도 Worker를 시작합니다. Worker는 사용자가 연결한 AWS 계정의 실행 권한으로 Terraform을 적용합니다.
 
-프로젝트와 배포 상태는 PostgreSQL에 저장합니다. Terraform 파일과 실행 계획, 상태 파일은 S3에 보관합니다. 서버 구성과 권한은 [아키텍처 문서](./docs/architecture.md)에 정리했습니다.
+```mermaid
+flowchart LR
+  Browser["브라우저<br/>다이어그램과 코드 편집"] --> ALB["ALB"]<br/>  ALB --> Web["ECS Web
+Next.js"]<br/>  ALB --> API["ECS API
+Fastify"]<br/>  API --> DB[("PostgreSQL
+프로젝트와 배포 기록")]<br/>  API --> Cache[("Redis
+임시 진행 상태")]<br/>  API -->|"배포별 실행"| Worker["ECS Worker<br/>Terraform"]
+  API --> S3[("S3<br/>코드와 Plan 및 State")]
+  Worker --> S3
+  Worker -->|"사용자 역할의 권한"| AWS["사용자의 AWS 환경"]
+```
+
+프로젝트와 배포 상태는 PostgreSQL에 저장합니다. Terraform 파일과 실행 계획, 상태 파일은 S3에 보관합니다. Redis는 임시 진행 상태를 보조하며 배포 완료 여부의 기준은 DB와 AWS 조회 결과입니다. 서버 구성과 권한은 [아키텍처 문서](./docs/architecture.md)에 정리했습니다.
 
 | 용도 | 기술 |
 | --- | --- |
@@ -40,6 +54,12 @@ API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 �
 | 데이터 저장 | PostgreSQL, Drizzle ORM, S3 |
 | 서비스 실행 | Docker, ECS Fargate, ALB |
 | 빌드와 배포 | GitHub Actions, ECR |
+
+## 배포 승인과 권한
+
+설계를 수정하거나 AI 제안을 받아들이는 일과 AWS를 바꾸는 일은 분리했습니다. 배포 전 검사와 Terraform Plan으로 변경할 자원을 보여 주고 사용자가 승인한 계획을 Worker가 실행합니다. 승인 뒤 코드나 대상이 달라지면 같은 승인으로 실행할 수 없습니다.
+
+사용자 저장소의 빌드 코드는 제한된 CodeBuild 역할에서 실행합니다. 실제 배포 권한은 Worker에 두고 빌드 결과의 대상과 내용을 다시 확인한 뒤 배포합니다. 자세한 권한 범위는 [빌드와 배포 권한 분리](docs/architecture.md#adr-007-저장소-빌드와-앱-배포-권한-분리)에 있습니다.
 
 ## 로컬 실행
 

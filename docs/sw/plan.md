@@ -110,7 +110,7 @@
 
 - `deployment_jobs` 모델, DB lease, job status 계약을 추가한다.
 - plan/apply/destroy 요청을 job으로 표현한다.
-- API가 ECS `RunTask` one-off worker task를 요청하기 위한 provider-neutral job 계약을 정리한다.
+- API가 ECS `RunTask` one-off worker task를 요청하기 위한 클라우드 공통 job 계약을 정리한다.
 - 기존 public deployment API endpoint는 유지한다.
 - RDS/S3/Redis 기록 계약을 `docs/data-models.md`와 맞춘다.
 - SQS queue와 상시 worker service는 추가하지 않는다.
