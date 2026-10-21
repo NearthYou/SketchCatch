@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- 2026-10-21: Added the real editor capture and README architecture. Rewrote architecture entry sections and corrected prose terminology across guides without changing code examples, identifiers, numeric limits, or links. README audit and harness pass. Runtime and protected original checkout unchanged. PRs 558 and 560 are drafts with unresolved changes preserved.
+- 2026-10-21: Restored the exact portfolio architecture image and presentation video. Condensed the five entry guides; source types, DB schema and workflows remain linked. Prior deep links are preserved. No runtime or protected original files changed.
 
 - 2026-10-15: Updated project documentation from origin/main without merging the divergent dev history. Replaced the operating architecture image with the supplied portfolio diagram, balanced the README technology summary, and revised prose and headings across project guides. Verified local links in the 21 primary README/reference documents, git diff whitespace, and the harness. Runtime code, dependency files, infrastructure definitions, and migrations are unchanged.
 
