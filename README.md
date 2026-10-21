@@ -2,7 +2,7 @@
 
 클라우드 구성을 다이어그램으로 편집하고 Terraform 코드로 배포하는 서비스입니다. 요구사항을 입력해 설계 초안을 만들거나 기존 저장소와 AWS 자원을 불러올 수 있습니다. 배포 전에는 비용과 보안 위험을 확인하고 실제 변경 내용을 승인합니다.
 
-[서비스](https://sketchcatch.net) | [평가 자료](./.eval/README.md) | [제품 문서](./docs/product.md) | [개발 가이드](./docs/development.md)
+[서비스](https://sketchcatch.net) | [발표 영상](https://www.youtube.com/watch?v=a18RZGg8PyM) | [평가 자료](./.eval/README.md) | [제품 문서](./docs/product.md) | [개발 가이드](./docs/development.md)
 
 `TypeScript` `Next.js` `Fastify` `Terraform` `ECS Fargate` `PostgreSQL`
 
@@ -33,7 +33,7 @@ API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 �
 
 웹과 API는 AWS ECS Fargate에서 실행합니다. API는 승인된 배포마다 별도 Worker를 시작합니다. Worker는 사용자가 연결한 AWS 계정의 실행 권한으로 Terraform을 적용합니다.
 
-![웹과 API, 배포 Worker 및 사용자 AWS 환경의 연결 구조](assets/sketchcatch-runtime.svg)
+![웹과 API, 배포 Worker 및 사용자 AWS 환경의 연결 구조](assets/sketchcatch-production-architecture.png)
 
 프로젝트와 배포 상태는 PostgreSQL에 저장합니다. Terraform 파일과 실행 계획, 상태 파일은 S3에 보관합니다. Redis는 임시 진행 상태를 보조하며 배포 완료 여부의 기준은 DB와 AWS 조회 결과입니다. 서버 구성과 권한은 [아키텍처 문서](./docs/architecture.md)에 정리했습니다.
 
@@ -49,7 +49,7 @@ API와 웹의 실행 이미지를 순서대로 만들면 앞 작업이 끝날 �
 
 설계를 수정하거나 AI 제안을 받아들이는 일과 AWS를 바꾸는 일은 분리했습니다. 배포 전 검사와 Terraform Plan으로 변경할 자원을 보여 주고 사용자가 승인한 계획을 Worker가 실행합니다. 승인 뒤 코드나 대상이 달라지면 같은 승인으로 실행할 수 없습니다.
 
-사용자 저장소의 빌드 코드는 제한된 CodeBuild 역할에서 실행합니다. 실제 배포 권한은 Worker에 두고 빌드 결과의 대상과 내용을 다시 확인한 뒤 배포합니다. 자세한 권한 범위는 [빌드와 배포 권한 분리](docs/architecture.md#adr-007-저장소-빌드와-앱-배포-권한-분리)에 있습니다.
+사용자 저장소의 빌드 코드는 제한된 CodeBuild 역할에서 실행합니다. 실제 배포 권한은 Worker에 두고 빌드 결과의 대상과 내용을 다시 확인한 뒤 배포합니다. 자세한 권한 범위는 [빌드와 배포 권한 분리](docs/architecture.md#빌드와-배포-권한)에 있습니다.
 
 ## 로컬 실행
 

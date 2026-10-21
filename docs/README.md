@@ -1,63 +1,22 @@
 # 문서 안내
 
-제품과 구현 기준은 아래 문서에서 관리합니다. 기능별 참고 문서는 해당 기준 문서와 함께 확인합니다. 운영 구성은 [아키텍처](architecture.md#운영-아키텍처), 저장소 소개와 기술 스택은 [루트 README](../README.md)에 있습니다.
+처음에는 [README](../README.md)와 [발표 영상](https://www.youtube.com/watch?v=a18RZGg8PyM)을 보면 됩니다. 아래 다섯 문서는 목적에 따라 골라 읽습니다.
 
-## 읽는 순서
+| 문서 | 내용 |
+| --- | --- |
+| [제품 소개](product.md) | 사용 흐름과 주요 기능, 지원 범위 |
+| [아키텍처](architecture.md) | 서비스 구성과 데이터 저장, 실행 권한 |
+| [데이터 모델](data-models.md) | 주요 모델의 관계와 타입 및 스키마 위치 |
+| [개발 방법](development.md) | 로컬 실행과 코드 위치, 검증 및 협업 |
+| [배포 절차](deployment.md) | 운영 배포와 사용자 배포, 실패 및 복구 |
 
-처음 보는 독자는 루트 README에서 기능과 주요 구현을 확인한 뒤 아키텍처 문서로 넘어가면 됩니다. 로컬 실행은 개발 가이드에서 확인합니다. 데이터 모델과 배포 문서는 필드명이나 실행 조건을 확인할 때 참고합니다. 담당자별 계획 문서에는 당시 목표와 미완료 항목도 있으므로 현재 동작은 기준 문서와 코드를 함께 확인합니다.
+[평가 자료](../.eval/README.md)에는 구현 검증과 배포 측정 기록이 있습니다. 세부 설계의 결정 이유는 [ADR](adr/README.md), Terraform 변환 구현은 [담당 문서](sw/README.md)에서 확인할 수 있습니다.
 
-## 필수 문서
+필드와 상태를 바꿀 때는 [공유 타입](../packages/types/src/index.ts)과 [DB 스키마](../apps/api/src/db/schema.ts), API 검증을 함께 확인합니다. 담당자별 계획과 과거 로그를 현재 구현 완료 목록으로 취급하지 않습니다.
 
-구현을 확인할 테스트와 배포 시간의 원본 기록은 [평가 자료](../.eval/README.md)에 있습니다.
+<details>
+<summary>에이전트 작업 기록</summary>
 
-| 문서 | 책임 | 언제 읽는가 |
-| --- | --- | --- |
-| [제품 방향](./product.md) | 제품 정의, MVP 목표, 핵심 서비스 여정, 기능 우선순위, 3주 로드맵 | 무엇을 만들지, 이번 작업이 MVP에 포함되는지 판단할 때 |
-| [상세 기획서](./000_상세기획서.md) | 기획자와 개발자가 함께 읽는 서비스 흐름, 기능 요구사항, 현재 구현 상태, 책임 분배 | 제품 방향을 구현 가능한 업무 단위로 풀어 이해해야 할 때 |
-| [데이터 모델](./data-models.md) | DB/API/프론트/AI/배포 공통 타입과 필드명 | DTO, DB schema, Zod schema, 프론트 상태를 바꿀 때 |
-| [아키텍처](./architecture.md) | 모노레포 구조, 앱 경계, 저장소 경계, Terraform/AWS 실행 위치 | API, storage, worker, 인프라 실행 경계를 정할 때 |
-| [개발 가이드](./development.md) | 로컬 실행, Git flow, 팀 AI 협업 규칙, PR 체크 | 구현 전후 작업 절차와 검증 기준을 확인할 때 |
-| [배포 운영 문서](./deployment.md) | 운영 배포, 직접 배포 경로, Git과 CI/CD 배포 경로, cleanup 절차 | Terraform Plan/Apply/Destroy, Git/CI/CD handoff, AWS 연결, 운영 배포를 다룰 때 |
-| [다이어그램 패턴 지식 저장소](./diagram-templates/README.md) | 검증된 AWS 패턴, Amazon Q Business 인덱싱 문서, S3 패키지와 검증 절차 | Architecture Draft의 패턴 근거를 추가하거나 Q Business 데이터 소스를 동기화할 때 |
-| [에이전트 진행 로그](../agent-progress.md) | 현재 검증 상태, 최근 작업, 다음 행동 | Codex/AI 에이전트가 이전 세션을 이어받을 때 |
-| [에이전트 진행 아카이브](./agent-history/) | 오래된 세션 기록 보관 | 과거 검증 증거가 명시적으로 필요할 때 |
-| [하네스 기능 목록](../feature_list.json) | 에이전트 하네스 작업 상태와 검증 증거 | 작업 범위와 완료 증거를 기계 가독 형태로 확인할 때 |
-| [루트 README](../README.md) | 저장소 빠른 시작 | 처음 저장소를 실행할 때 |
+[현재 진행 상태](../agent-progress.md) | [과거 기록](./agent-history/) | [기능 검증 목록](../feature_list.json)
 
-## 문서 우선순위
-
-문서가 서로 충돌하면 아래 순서로 판단한다.
-
-1. 루트 `AGENTS.md`와 가장 가까운 하위 `AGENTS.md`
-2. 이 문서에 명시된 기준 문서
-3. 에이전트 하네스 상태 파일(`agent-progress.md`, `feature_list.json`, `session-handoff.md`)과 필요한 경우 `docs/agent-history/`
-4. `packages/types/src/index.ts`와 API Zod schema
-5. 담당자별 참고 문서
-6. 오래된 작업 로그나 개인 메모
-
-담당자별 문서는 구현 아이디어와 맥락을 담는 참고 자료다. 공통 계약으로 확정하려면 반드시 기준 문서와 shared type에 반영한다.
-
-## 문서 정리 기준
-
-- 제품 전략, MVP 범위, 로드맵, 리스크는 [제품 방향](./product.md)에 모은다.
-- 기획자/개발자 공통 이해를 위한 상세 기획서는 [상세 기획서](./000_상세기획서.md)에 두되, 계약 충돌 시 기준 문서를 우선한다.
-- 공통 타입, API DTO, DB 모델, 프론트 상태 이름은 [데이터 모델](./data-models.md)에 모은다.
-- 기술 스택, 저장 기준, 실행 경계, ADR 수준 결정은 [아키텍처](./architecture.md)에 모은다.
-- Git 흐름, 팀 AI 작업 순서, PR 체크리스트는 [개발 가이드](./development.md)에 모은다.
-- 운영 배포, 직접 배포 경로, Git과 CI/CD 배포 경로, cleanup 절차는 [배포 운영 문서](./deployment.md)에 모은다.
-- 검증된 Architecture Draft 패턴과 Amazon Q Business 인덱싱 패키지는 [다이어그램 패턴 지식 저장소](./diagram-templates/README.md)에 모은다.
-- 에이전트 세션 상태, 완료 증거, handoff는 루트 하네스 파일(`agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`)에 짧게 남긴다. 오래된 세션 기록은 `docs/agent-history/`로 이동한다.
-- 같은 내용을 새 문서로 복제하지 않는다. 먼저 기준 문서를 갱신한다.
-- 오래된 범위 문구는 남겨두지 않는다. MVP 목표가 바뀌면 기준 문서에서 즉시 갱신한다.
-
-## 담당자별 참고 문서
-
-| 폴더 | 성격 | 규칙 |
-| --- | --- | --- |
-| [`docs/gg`](./gg/006_문서구조_gg.md) | AI 분석/추천 참고 문서 | 확정 DTO와 범위는 `data-models.md`, `product.md`를 따른다. |
-| [`docs/sw`](./sw/README.md) | Terraform 변환/동기화 참고 문서 | 확정 DTO와 Terraform 실행 경계는 `data-models.md`, `architecture.md`를 따른다. |
-| [`docs/ck`](./ck/README.md) | 배포 실행 참고 문서 | 실제 실행 정책은 `deployment.md`와 API/DB 계약을 따른다. |
-| [`docs/ys`](./ys/README.md) | 플랫폼/인증/프로젝트 참고 문서 | 사용자, 프로젝트, 인증 계약은 `data-models.md`를 따른다. |
-| [`docs/adr`](./adr/README.md) | 되돌리기 어렵고 맥락이 필요한 결정 | 결정이 굳어진 경우에만 추가한다. |
-
-담당자별 폴더에서 문서를 찾을 때는 위 인덱스를 먼저 본다. 새 참고 문서를 추가하면 해당 폴더의 인덱스도 함께 갱신한다.
+</details>
