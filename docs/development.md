@@ -60,7 +60,7 @@ pnpm --filter @sketchcatch/api db:generate
 pnpm --filter @sketchcatch/api db:migrate
 ```
 
-Project thumbnail과 API 경유 Terraform artifact upload는 local development와 test에서 기본적으로 filesystem을 사용한다. Browser는 storage provider와 관계없이 기존 same-origin `upload-content` endpoint에 PUT한다.
+로컬 개발과 테스트에서는 프로젝트 썸네일과 Terraform 파일을 기본적으로 파일 시스템에 저장합니다. 브라우저는 저장 방식과 관계없이 같은 출처의 `upload-content` 경로로 파일을 보냅니다.
 
 ```text
 PROJECT_ASSET_STORAGE_BACKEND=
@@ -103,7 +103,7 @@ CLOUDFORMATION_TEMPLATE_TOKEN_SECRET=<32자 이상 CloudFormation template URL �
 
 ## 팀 AI 협업 절차
 
-팀원이 모두 AI를 활용해 작업할 때 가장 큰 위험은 각 AI가 서로 다른 계약을 전제로 구현하는 것이다. 기능 구현 전 각 담당자는 아래 SSOT 순서를 따른다.
+팀원이 각자 AI로 기능을 만들면 같은 데이터의 필드명이나 상태를 다르게 해석할 수 있습니다. 연결 단계에서 다시 고치는 일을 줄이기 위해 구현 전 아래 순서로 계약을 확인합니다.
 
 1. [문서 안내](./README.md)에서 작업에 필요한 기준 문서를 확인한다.
 2. [제품 방향](./product.md)에서 현재 MVP 목표와 기능 우선순위를 확인한다.
@@ -133,12 +133,12 @@ Codex 작업자는 아래 행동을 하지 않는다.
 - 공통 API 응답 형식이 정해졌다고 가정하지 않는다. 코드에 없으면 팀장에게 확인한다.
 - 다른 팀원이 맡은 실제 AWS apply, Terraform 실행, 인증/권한 저장을 자신의 구현에서 열지 않는다.
 - "나중에 맞추면 됨"으로 shared type과 Zod schema 불일치를 방치하지 않는다.
-- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 확인 없이 Practice Architecture, IaC Preview, Git 변경, Deployment 실행에 반영하지 않는다.
-- Representative Use Journey를 위해 실제 서비스 흐름과 다른 데모 전용 상태나 우회 API를 만들지 않는다.
+- AI, Bedrock, Amazon Q, Voice Requirement Input 결과를 사용자 확인 없이 설계 정보, 인프라 코드 미리보기, Git 변경, Deployment 실행에 반영하지 않는다.
+- 대표 사용 흐름를 위해 실제 서비스 흐름과 다른 데모 전용 상태나 우회 API를 만들지 않는다.
 
 ## 역할별 SSOT 체크
 
-| 담당 축 | 구현 전 확인할 SSOT | 특히 확인할 계약 |
+| 담당 축 | 구현 전 확인할 기준 문서 | 특히 확인할 계약 |
 | --- | --- | --- |
 | `Requirement Input` + `AI Architecture Recommendation` + Bedrock/Amazon Q | `docs/product.md`, `docs/data-models.md`, `apps/api/AGENTS.md`, `apps/web/AGENTS.md` | `RequirementInput`, `ArchitectureDraft`, `LlmExplanation`, `UserAcceptedChange`, Voice Requirement Input 확인 흐름 |
 | `Architecture Board` + `Infrastructure Graph` + `IaC Preview` | `docs/data-models.md`, `docs/architecture.md`, `apps/web/AGENTS.md`, `apps/api/AGENTS.md` | `DiagramJson`, `InfrastructureGraph`, `DiagramNode.parameters`, Terraform generate/validate/sync DTO |

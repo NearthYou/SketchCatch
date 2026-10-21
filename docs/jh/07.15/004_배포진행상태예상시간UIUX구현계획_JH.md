@@ -197,7 +197,7 @@ type DeploymentEstimateKey = {
 ```
 
 AWS region은 snapshot에 표시하고 관측 자료에는 남기지만 초기 MVP 통계 key에서는 제외한다. 표본이 충분하지
-않은 상태에서 region까지 나누면 계속 기본값만 사용하게 되기 때문이다. provider-neutral 계약은 유지하며
+않은 상태에서 region까지 나누면 계속 기본값만 사용하게 되기 때문이다. 클라우드 공통 계약은 유지하며
 AWS 외 Provider Adapter도 자신의 기본 범위를 제공할 수 있어야 한다.
 
 ### 6.3 통계 방식

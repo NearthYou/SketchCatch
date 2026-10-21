@@ -560,7 +560,7 @@ getDeployment
 | `requireDeploymentTerraformArtifact` | Terraform artifact가 Deployment의 project/architecture와 맞는지 확인한다. |
 | `requireDeploymentAwsConnection` | verified AWS connection을 가져온다. |
 | `canReuseDeploymentPlanArtifact` | 기존 current Plan artifact를 그대로 써도 되는지 확인한다. |
-| `findArchitectureInProject` | Pre-Deployment Check에 사용할 architecture JSON을 가져온다. |
+| `findArchitectureInProject` | 배포 전 검사에 사용할 architecture JSON을 가져온다. |
 
 ### 8.5 기존 Plan artifact 재사용 경로
 
@@ -592,7 +592,7 @@ const canReusePlanArtifact = await canReuseDeploymentPlanArtifact(...)
 
 route가 이미 `RUNNING`으로 바꿔둔 상태를 다시 `PENDING`으로 돌리고, Terraform 명령은 하나도 실행하지 않는다.
 
-재사용이 불가능하면 아래의 Pre-Deployment Check와 Terraform 실행 경로로 계속 진행한다.
+재사용이 불가능하면 아래의 배포 전 검사와 Terraform 실행 경로로 계속 진행한다.
 
 ### 8.6 Pre-Deployment Check
 
@@ -769,7 +769,7 @@ createDeploymentPlanSummaryFromTerraformShowJson
 createBlockedPlanSummary
 ```
 
-Pre-Deployment Check의 high-risk finding을 Plan warning으로 합친다.
+배포 전 검사의 high-risk finding을 Plan warning으로 합친다.
 
 그리고 `blocked: true`로 만든다.
 

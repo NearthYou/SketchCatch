@@ -21,6 +21,8 @@ This folder contains product, architecture, data model, development, and deploym
 9. Treat presentation flows as Representative Use Journeys. Do not let demo-only wording replace the service's real user journey.
 10. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved Git/CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
 11. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user Practice Architecture Resource.
+12. Explain the user problem and the responsible process before introducing internal names. Prefer ordinary Korean in explanatory prose. Preserve exact identifiers, commands, limits, approval rules, and links in technical references.
+13. Use real application captures for screenshots. Do not present slide mockups or generated UI illustrations as service screens. Keep capture dates and verification notes in evidence records rather than image captions.
 
 ## Document Filename Rules
 

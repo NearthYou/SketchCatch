@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
+<title id="title">SketchCatch 실행 구조</title>
+<desc id="desc">ALB가 Web과 API에 요청을 전달합니다. API는 프로젝트와 배포 기록을 저장하고 배포별 Worker를 실행합니다. Worker는 사용자 AWS 역할로 Terraform을 실행합니다.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker></defs>
+<rect width="1200" height="540" fill="white"/>
+<style>text{font-family:"Noto Sans KR","Malgun Gothic",sans-serif;fill:#17202a} .name{font-size:22px;font-weight:600} .detail{font-size:18px;fill:#475569} .edge{fill:none;stroke:#475569;stroke-width:2;marker-end:url(#arrow)}</style>
+<rect x="190" y="54" width="738" height="458" fill="#fafafa" stroke="#94a3b8"/>
+<text x="210" y="38" class="name">SketchCatch AWS 환경</text>
+<text x="990" y="38" class="name">사용자 AWS 환경</text>
+<path class="edge" d="M166 148H224"/>
+<path class="edge" d="M376 148H444"/>
+<path class="edge" d="M300 190V277"/>
+<path class="edge" d="M604 148H724"/>
+<text x="627" y="120" class="detail">배포별 실행</text>
+<path class="edge" d="M884 148H994"/>
+<text x="940" y="92" text-anchor="middle" class="detail">AssumeRole</text>
+<path class="edge" d="M524 190V277"/>
+<path class="edge" d="M804 190V277"/>
+<path class="edge" d="M524 190V231H407V450H380"/>
+<path class="edge" d="M604 170H663V320H724"/>
+
+<rect x="18" y="106" width="148" height="84" fill="white" stroke="#64748b"/>
+<text x="92.0" y="140" text-anchor="middle" class="name">브라우저</text>
+<text x="92.0" y="167" text-anchor="middle" class="detail">설계와 코드</text>
+<rect x="224" y="106" width="152" height="84" fill="white" stroke="#64748b"/>
+<text x="300.0" y="140" text-anchor="middle" class="name">ALB</text>
+<text x="300.0" y="167" text-anchor="middle" class="detail">요청 전달</text>
+<rect x="444" y="106" width="160" height="84" fill="white" stroke="#64748b"/>
+<text x="524.0" y="140" text-anchor="middle" class="name">ECS API</text>
+<text x="524.0" y="167" text-anchor="middle" class="detail">Fastify</text>
+<rect x="724" y="106" width="160" height="84" fill="white" stroke="#64748b"/>
+<text x="804.0" y="140" text-anchor="middle" class="name">ECS Worker</text>
+<text x="804.0" y="167" text-anchor="middle" class="detail">Terraform 실행</text>
+<rect x="994" y="106" width="190" height="84" fill="white" stroke="#64748b"/>
+<text x="1089.0" y="140" text-anchor="middle" class="name">사용자 자원</text>
+<text x="1089.0" y="167" text-anchor="middle" class="detail">승인한 변경 반영</text>
+<rect x="224" y="278" width="152" height="84" fill="white" stroke="#64748b"/>
+<text x="300.0" y="312" text-anchor="middle" class="name">ECS Web</text>
+<text x="300.0" y="339" text-anchor="middle" class="detail">Next.js</text>
+<rect x="444" y="278" width="160" height="84" fill="white" stroke="#64748b"/>
+<text x="524.0" y="312" text-anchor="middle" class="name">PostgreSQL</text>
+<text x="524.0" y="339" text-anchor="middle" class="detail">프로젝트, 배포</text>
+<rect x="724" y="278" width="160" height="84" fill="white" stroke="#64748b"/>
+<text x="804.0" y="312" text-anchor="middle" class="name">S3</text>
+<text x="804.0" y="339" text-anchor="middle" class="detail">코드, Plan, State</text>
+<rect x="224" y="408" width="156" height="84" fill="white" stroke="#64748b"/>
+<text x="302.0" y="442" text-anchor="middle" class="name">Redis</text>
+<text x="302.0" y="469" text-anchor="middle" class="detail">임시 진행 상태</text>
+</svg>

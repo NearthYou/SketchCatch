@@ -2,7 +2,7 @@
 
 ## 목적
 
-여섯 Template의 배포 의미는 그대로 두고, 실제 Architecture Board의 `position`, `parent/group`, `viewport`, edge handle/routing만 PNG 패턴에 맞게 다시 정리한다.
+여섯 Template의 배포 의미는 그대로 두고, 실제 설계 편집 화면의 `position`, `parent/group`, `viewport`, edge handle/routing만 PNG 패턴에 맞게 다시 정리한다.
 
 ## 비교 기준
 

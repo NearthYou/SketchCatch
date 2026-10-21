@@ -4,7 +4,7 @@
 
 Terraform 코드 오류를 사용자가 놓치지 않게 Issues 탭 중심으로 고정하고, 각 오류에 대해 AI가 원인과 해결 방향을 설명한 뒤 사용자가 승인한 경우에만 안전한 수정안을 적용한다.
 
-이 기능은 SketchCatch의 IaC Preview와 Pre-Deployment Check 사이에서 사용자가 Terraform 문제를 이해하고 수정하도록 돕는 UX다. 실제 AWS apply/destroy, Git/CI/CD handoff, cloud mutation은 포함하지 않는다.
+이 기능은 SketchCatch의 인프라 코드 미리보기와 배포 전 검사 사이에서 사용자가 Terraform 문제를 이해하고 수정하도록 돕는 UX다. 실제 AWS apply/destroy, Git/CI/CD handoff, cloud mutation은 포함하지 않는다.
 
 ## 2. 현재 문제
 

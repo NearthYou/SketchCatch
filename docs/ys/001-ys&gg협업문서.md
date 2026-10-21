@@ -38,7 +38,7 @@ A. AI 분석 실행 자체는 최근 작업에 남기지 않는다. (추천)
 - 장점: Activity 모델이 안정되기 전까지 노이즈를 줄인다.
 - gg AI 파트 영향: AI endpoint는 activity 생성 책임을 지지 않는다.
 
-B. Architecture Draft 생성과 Pre-Deployment Check만 최근 작업에 남긴다.
+B. Architecture Draft 생성과 배포 전 검사만 최근 작업에 남긴다.
 
 - 장점: 사용자가 중요한 AI 작업을 추적할 수 있다.
 - 위험: activity schema와 event naming 합의가 필요하다.

@@ -4,7 +4,7 @@
 
 ## 목적
 
-`../old/feat-infrastructure-template/007_AWS템플릿패턴_gg.md`의 여섯 PNG 패턴과 `013_AWS템플릿보드배치매핑_gg.md`의 배치 계약이 실제 Architecture Board에서도 같은 구조로 보이는지 확인한 기록이다.
+`../old/feat-infrastructure-template/007_AWS템플릿패턴_gg.md`의 여섯 PNG 패턴과 `013_AWS템플릿보드배치매핑_gg.md`의 배치 계약이 실제 설계 편집 화면에서도 같은 구조로 보이는지 확인한 기록이다.
 
 검증 대상은 화면 표현뿐이다. Resource ID / 종류 / 수 / Terraform value / relationship ID/source/target/label / API / 배포 동작은 바꾸지 않는다.
 
@@ -12,7 +12,7 @@
 
 - 일자: 2026-07-13
 - 브라우저: 로그인된 로컬 Chrome 세션
-- 화면: 데스크톱 `1920 × 900`, Resource panel과 Inspector를 기본 상태로 연 Architecture Board
+- 화면: 데스크톱 `1920 × 900`, Resource panel과 Inspector를 기본 상태로 연 설계 편집 화면
 - 진입 주소: `http://127.0.0.1:3000/workspace?templateId={templateId}&projectName=Template%20QA`
 - 기준 커밋: `908cd797` (`Feat: AWS 템플릿 보드 배치 반영`)
 

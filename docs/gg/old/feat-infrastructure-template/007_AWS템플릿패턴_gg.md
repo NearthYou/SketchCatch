@@ -4,9 +4,9 @@
 
 이 문서는 SketchCatch의 AWS Template 구현 전에 참고할 Architecture Pattern을 정리한 문서다.
 
-여기서 정리하는 내용은 AWS 공부용 요약이 아니라, 나중에 SketchCatch의 Practice Architecture Template과 ArchitectureJson으로 변환할 수 있는 Resource 조합, 관계, Cost Risk, Security Risk 후보를 추출하기 위한 기준 자료다.
+여기서 정리하는 내용은 AWS 공부용 요약이 아니라, 나중에 SketchCatch의 설계 정보 Template과 ArchitectureJson으로 변환할 수 있는 Resource 조합, 관계, Cost Risk, Security Risk 후보를 추출하기 위한 기준 자료다.
 
-Template은 Resource만 던지는 것이 아니라, 사용자가 바로 IaC Preview와 Deployment까지 이어갈 수 있도록 배포 가능한 기본 파라미터를 포함해야 한다. 사용자는 기본값을 받은 뒤 Architecture Board에서 이름, CIDR, instance size, runtime, domain 같은 값을 바꿀 수 있어야 한다.
+Template은 Resource만 던지는 것이 아니라, 사용자가 바로 인프라 코드 미리보기와 Deployment까지 이어갈 수 있도록 배포 가능한 기본 파라미터를 포함해야 한다. 사용자는 기본값을 받은 뒤 설계 편집 화면에서 이름, CIDR, instance size, runtime, domain 같은 값을 바꿀 수 있어야 한다.
 
 기본 파라미터는 다음 원칙을 따른다.
 
@@ -22,8 +22,8 @@ Template은 Resource만 던지는 것이 아니라, 사용자가 바로 IaC Prev
 
 이 문서에서 말하는 두 종류의 노드를 구분한다.
 
-1. 카탈로그 Resource 노드: Architecture Board에 표시되는 정식 AWS/Kubernetes Resource다. 기존 Resource catalog의 `ResourceDefinition`, icon, label, style, parameter 계약을 통해 생성한다. 예를 들어 `VPC`, `ECS Cluster`, `Internet Gateway`처럼 사용자가 이해할 수 있는 실제 리소스 이름을 표시한다.
-2. Raw Terraform Detail 노드: Terraform `resource`/`data` block 주소와 내부 설정을 표현하는 구현용 단위다. `aws_s3_bucket.static_web_hosting_workspace`나 일반 `AWS` tile처럼 Terraform logical name을 그대로 표시하는 노드가 여기에 해당한다. 이 노드는 IaC Preview 내부에서만 허용하고 Architecture Board에는 표시하지 않는다.
+1. 카탈로그 Resource 노드: 설계 편집 화면에 표시되는 정식 AWS/Kubernetes Resource다. 기존 Resource catalog의 `ResourceDefinition`, icon, label, style, parameter 계약을 통해 생성한다. 예를 들어 `VPC`, `ECS Cluster`, `Internet Gateway`처럼 사용자가 이해할 수 있는 실제 리소스 이름을 표시한다.
+2. Raw Terraform Detail 노드: Terraform `resource`/`data` block 주소와 내부 설정을 표현하는 구현용 단위다. `aws_s3_bucket.static_web_hosting_workspace`나 일반 `AWS` tile처럼 Terraform logical name을 그대로 표시하는 노드가 여기에 해당한다. 이 노드는 인프라 코드 미리보기 내부에서만 허용하고 설계 편집 화면에는 표시하지 않는다.
 
 따라서 첫 번째 그림처럼 Terraform logical name을 보드의 노드 이름으로 노출하거나, 카탈로그에 없는 리소스를 임시 `AWS` 노드로 만들어 연결하는 방식은 사용하지 않는다. 두 번째 그림처럼 기존에 등록된 Resource catalog의 실제 리소스 노드를 끌어다 연결하는 방식만 허용한다.
 
@@ -816,7 +816,7 @@ EKS Cluster 자체는 AWS Resource지만, 실제 app Template은 Kubernetes Reso
 
 매우 높음.
 
-AWS Resource와 Kubernetes Resource가 동시에 필요하고, Board에서 둘을 같은 Practice Architecture로 표현하는 모델이 필요하다.
+AWS Resource와 Kubernetes Resource가 동시에 필요하고, Board에서 둘을 같은 설계 정보로 표현하는 모델이 필요하다.
 
 ### 비고
 

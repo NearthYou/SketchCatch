@@ -10,16 +10,16 @@
 - 공유 타입에는 `passwordHash`, raw access key, secret key, private token, DB password를 넣지 않는다.
 - 새 필드, enum, status, DTO는 먼저 이 문서와 `packages/types/src/index.ts`에 맞춘다.
 - API 요청/응답은 shared type을 기준으로 하고, API route에서는 Zod schema로 같은 계약을 검증한다.
-- `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 provider-neutral 개념으로 다룬다. AWS-first 구현은 가능하지만 공통 모델에 AWS-only 가정을 섞지 않는다.
-- AI, Bedrock, Amazon Q, 음성 입력은 제안과 설명 계층이다. Practice Architecture, IaC Preview, Git 변경, Deployment 실행 같은 상태 변경은 `User-Accepted Change`여야 한다.
+- `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 클라우드 공통 개념으로 다룬다. AWS-first 구현은 가능하지만 공통 모델에 AWS-only 가정을 섞지 않는다.
+- AI, Bedrock, Amazon Q, 음성 입력은 제안과 설명 계층이다. 설계 정보, 인프라 코드 미리보기, Git 변경, Deployment 실행 같은 상태 변경은 `User-Accepted Change`여야 한다.
 
 ## 핵심 계약
 
 | 모델                     | 책임                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------ |
-| `ArchitectureJson`       | 저장된 Practice Architecture의 도메인 그래프                                   |
+| `ArchitectureJson`       | 저장된 설계 정보의 도메인 그래프                                   |
 | `InfrastructureGraph`    | `DiagramJson`과 Terraform 사이의 양방향 동기화 중간 그래프                     |
-| `DiagramJson`            | Architecture Board 편집 상태와 Terraform 변환 입력                             |
+| `DiagramJson`            | 설계 편집 화면 편집 상태와 Terraform 변환 입력                             |
 | `ProjectDraft`           | 프로젝트별 최신 편집 draft                                                     |
 | `TerraformArtifact`      | S3에 저장된 Terraform 파일 메타데이터                                          |
 | `AwsConnection`          | 사용자가 한 번 연결해 여러 프로젝트에서 재사용하는 AWS Role 연결 metadata      |
@@ -28,15 +28,15 @@
 | `DeploymentLog`          | Deployment 단계별 실행 로그                                                    |
 | `DeployedResource`       | Apply 성공 후 Terraform state에서 추출한 실제 생성 리소스                      |
 | `TerraformOutput`        | Apply 성공 후 `terraform output -json`에서 추출한 output                       |
-| `CheckFinding`           | Pre-Deployment Check의 단일 경고/검증 결과                                     |
+| `CheckFinding`           | 배포 전 검사의 단일 경고/검증 결과                                     |
 | `RequirementInput`       | 텍스트 또는 음성에서 들어온 요구사항 입력                                      |
 | `ProviderAdapter`        | provider별 Resource 조회, import, IaC 세부를 공통 모델로 변환하는 경계         |
-| `GitCicdHandoff`         | IaC Preview를 Source Repository PR과 외부 pipeline으로 넘기는 handoff metadata |
+| `GitCicdHandoff`         | 인프라 코드 미리보기를 Source Repository PR과 외부 pipeline으로 넘기는 handoff metadata |
 | `ReverseEngineeringScan` | 기존 cloud Resource 스캔 작업과 복원 결과 metadata                             |
 
 ## Requirement Input과 User-Accepted Change
 
-`RequirementInput`은 사용자가 Practice Architecture를 만들거나 바꾸기 위해 제공하는 자연어 입력이다. 입력 채널은 텍스트 또는 음성일 수 있다. 음성 입력은 Amazon Transcribe 같은 전사 단계를 거쳐 텍스트로 확인된 뒤 `RequirementPrompt`로 확정된다.
+`RequirementInput`은 사용자가 설계 정보를 만들거나 바꾸기 위해 제공하는 자연어 입력이다. 입력 채널은 텍스트 또는 음성일 수 있다. 음성 입력은 Amazon Transcribe 같은 전사 단계를 거쳐 텍스트로 확인된 뒤 `RequirementPrompt`로 확정된다.
 
 ```ts
 type RequirementInputMode = "text" | "voice";
@@ -105,7 +105,7 @@ type ResourceEdge = {
 
 ## InfrastructureGraph
 
-`InfrastructureGraph`는 `DiagramJson`과 Terraform을 양방향 동기화할 때 사용하는 정규화된 중간 모델이다. Architecture Board 전용 그래프를 새로 만드는 것이 아니라, 보드 편집 상태와 Terraform HCL subset이 같은 Resource identity와 IaC identity를 공유하도록 맞추는 동기화 계약이다.
+`InfrastructureGraph`는 `DiagramJson`과 Terraform을 양방향 동기화할 때 사용하는 정규화된 중간 모델이다. 설계 편집 화면 전용 그래프를 새로 만드는 것이 아니라, 보드 편집 상태와 Terraform HCL subset이 같은 Resource identity와 IaC identity를 공유하도록 맞추는 동기화 계약이다.
 
 ```ts
 type InfrastructureGraph = {
@@ -146,7 +146,7 @@ type InfrastructureGraphEdge = {
 
 ## DiagramJson
 
-`DiagramJson`은 Architecture Board 편집 상태와 Terraform 변환 입력이다. React Flow 스타일의 위치, 크기, viewport, node style, Terraform parameters를 포함할 수 있다.
+`DiagramJson`은 설계 편집 화면 편집 상태와 Terraform 변환 입력이다. React Flow 스타일의 위치, 크기, viewport, node style, Terraform parameters를 포함할 수 있다.
 
 ```ts
 type DiagramJson = {
@@ -164,7 +164,7 @@ containment로 변환한다.
 ### 자동 다이어그램 배치 정책
 
 AI가 `ArchitectureJson`만 반환하거나 새 리소스를 제안한 경우 프론트 어댑터는 고정 서비스 좌표표가 아니라
-결정론적 자동 배치 pipeline으로 `DiagramJson`을 만든다. pipeline은 provider-neutral semantic role과 방향성
+결정론적 자동 배치 pipeline으로 `DiagramJson`을 만든다. pipeline은 클라우드 공통 semantic role과 방향성
 graph를 기준으로 다음 순서를 지킨다.
 
 1. `contains`/`hosts`와 Terraform 참조에서 parent-child containment를 확정한다.
@@ -181,7 +181,7 @@ graph를 기준으로 다음 순서를 지킨다.
 
 AWS resource type은 MVP Provider Adapter의 첫 분류 입력이지만 배치 모델의 role, graph, containment, 반복 패턴,
 품질 점수는 AWS 전용 좌표를 전제하지 않는다. `docs/diagram-layout-reference`의 이미지와 설명은 설계 / 회귀 근거이며
-production runtime 입력이 아니다.
+운영 실행 환경 입력이 아니다.
 
 정확한 `draft.diagramJson` fixture와 `templateResourceId`가 있는 명시적 Template 좌표는 작성된 위치를 그대로
 우선한다. 기존 Board를 대상으로 한 AI patch에서는 같은 node id의 `position`, `size`, `locked`를 보존하고 새
@@ -199,7 +199,7 @@ node 중 `Global IAM`과 `Definition / Ops`만 실제 `design_group` 컨테이�
 
 ### Architecture Board Compilation 제안 계약
 
-기존 자동 배치와 별도로 Architecture Board Compiler는 Resource, 관계, Terraform parameter, containment,
+기존 자동 배치와 별도로 설계 변환기는 Resource, 관계, Terraform parameter, containment,
 presentation node, geometry, z-index, edge routing을 모두 변경한 제안을 만들 수 있다. 명시된 요구사항, 기존
 Deployment 상태, Provider / Terraform 유효성과 충돌해도 후보에서 자동 탈락시키지 않고 diagnostic과 품질 비용으로
 표현한다.
@@ -252,7 +252,7 @@ AI Draft / Reverse Engineering은 같은 node ID/type이라도 config / 관계 l
 
 `Compilation Distance`는 입력과 제안 사이의 변경 비용이다. 기본 순서는 위치, 크기, 시각적 소속, 관계, 설정,
 Resource 추가, Resource 삭제 순으로 커진다. 이 비용은 파괴적 변경을 금지하지 않지만 빈 Board처럼 시각 점수만
-좋은 후보가 자동 선택되는 것을 막는다. Compiler는 제안만 반환하며 현재 `ProjectDraft`, `DiagramJson`, IaC Preview를
+좋은 후보가 자동 선택되는 것을 막는다. Compiler는 제안만 반환하며 현재 `ProjectDraft`, `DiagramJson`, 인프라 코드 미리보기를
 직접 변경하지 않는다. 실제 적용은 하나의 `User-Accepted Change`로 처리하고 Deployment 검증 계약은 그대로 유지한다.
 
 Compiler의 `quality.score`에는 시각 / 구조 / diagnostic / Compilation Distance와 함께, checked-in 된 versioned Template
@@ -337,7 +337,7 @@ Live Observation의 기본 발표 화면은 이 그래프에서 선택한 메인
 좌표는 finite number, 크기는 finite positive number여야 하며 Terraform resource/data block 생성에는 사용하지 않는다.
 
 Region과 AZ는 `design_region`, `design_az`가 아니라 보드 영역 리소스인 `aws_region`,
-`aws_availability_zone` resource node로 표현한다. 이 두 node는 Architecture Board containment와
+`aws_availability_zone` resource node로 표현한다. 이 두 node는 설계 편집 화면 containment와
 Terraform Sync proposal 정렬을 위한 SketchCatch 영역 리소스이며, Terraform HCL `resource`, `data`,
 또는 `provider "aws"` block으로 직접 렌더링하지 않는다.
 
@@ -375,7 +375,7 @@ type AuthSession = {
 
 소셜 로그인 provider 계정은 `oauth_accounts`에 저장한다. `oauth_accounts.provider + provider_user_id`는 외부 provider 계정의 고유 연결 키이며, 실제 provider access token은 저장하지 않는다. 소셜 전용 사용자는 `users.password_hash`가 `null`일 수 있고, 일반 비밀번호 로그인에서는 password hash가 없는 사용자를 로그인 실패로 처리한다.
 
-AWS-first Direct Deployment Path에서는 `DiagramJson -> InfrastructureGraph -> Terraform` 흐름을 우선 사용한다. Terraform 편집 내용을 다시 반영할 때는 `Terraform -> InfrastructureGraph patch -> DiagramJson` 흐름으로 같은 node의 `parameters.values`를 갱신한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
+AWS-first 직접 배포 경로에서는 `DiagramJson -> InfrastructureGraph -> Terraform` 흐름을 우선 사용한다. Terraform 편집 내용을 다시 반영할 때는 `Terraform -> InfrastructureGraph patch -> DiagramJson` 흐름으로 같은 node의 `parameters.values`를 갱신한다. AI 분석이나 비용/위험 분석이 `ArchitectureJson`을 요구하면 `DiagramJson -> ArchitectureJson` 어댑터를 둔다.
 
 `ArchitectureJson`, `InfrastructureGraph`, `DiagramJson`은 서로 대체 관계가 아니다.
 
@@ -385,7 +385,7 @@ AWS-first Direct Deployment Path에서는 `DiagramJson -> InfrastructureGraph ->
 
 ## ResourceType
 
-`ResourceType`은 provider-neutral `Resource` 개념을 코드에서 분류하기 위한 값이다. 현재 shared type은 AWS-first MVP 리소스를 먼저 담고 있지만, `Resource` 자체를 AWS 전용 개념으로 해석하지 않는다. Azure/GCP 등 provider별 타입은 Provider Adapter와 shared type 확장 작업에서 추가한다.
+`ResourceType`은 클라우드 공통 `Resource` 개념을 코드에서 분류하기 위한 값이다. 현재 shared type은 AWS-first MVP 리소스를 먼저 담고 있지만, `Resource` 자체를 AWS 전용 개념으로 해석하지 않는다. Azure/GCP 등 provider별 타입은 Provider Adapter와 shared type 확장 작업에서 추가한다.
 
 MVP에서 공통으로 사용할 `ResourceType` 값은 아래로 고정한다.
 
@@ -872,7 +872,7 @@ type ArchitectureDiagnostic = {
 };
 ```
 
-`contextual`은 확정된 영역 배치 또는 파라미터 변경 뒤에만 관련 리소스를 점검하고, 새 아이콘 생성 / drag 중에는 표시하지 않는다. `preview`와 `pre_deployment`는 지원 리소스를 전체 점검한다. 이 진단의 `warning`은 Terraform code 생성이나 Deployment 실행을 단독으로 차단하지 않으며, 차단 정책은 Pre-Deployment Check와 Deployment Safety Gate가 별도로 결정한다.
+`contextual`은 확정된 영역 배치 또는 파라미터 변경 뒤에만 관련 리소스를 점검하고, 새 아이콘 생성 / drag 중에는 표시하지 않는다. `preview`와 `pre_deployment`는 지원 리소스를 전체 점검한다. 이 진단의 `warning`은 Terraform code 생성이나 Deployment 실행을 단독으로 차단하지 않으며, 차단 정책은 배포 전 검사와 Deployment Safety Gate가 별도로 결정한다.
 
 Editor validation diagnostics는 Deployment의 `init`, `validate`, `plan`, `apply` stage와 섞지 않는다. Deployment 실행은 승인된 Terraform artifact와 AWS 연결을 기준으로 별도 안전 게이트를 가진다. Editor validation은 사용자 편집 코드가 저장 가능한지 확인하는 선행 검사일 뿐, 실제 cloud mutation을 의미하지 않는다.
 
@@ -965,7 +965,7 @@ Reverse Engineering 스캔은 삭제하지 않고 `awsConnectionId = null`로 �
 ## ProjectDeploymentTarget
 
 `0046_runtime_convergence.sql`부터 기존 `runtimeTargetKind`/`runtimeConfig`는 호환 입력으로
-계속 읽되, 저장 시 provider-neutral `runtimeTarget`과 `deploymentTargetFingerprint`를 함께
+계속 읽되, 저장 시 클라우드 공통 `runtimeTarget`과 `deploymentTargetFingerprint`를 함께
 기록한다. fingerprint 입력은 contract version, project, provider, account, region과 아래
 canonical target만 포함하며 `artifactFingerprint`는 포함하지 않는다.
 
@@ -987,7 +987,7 @@ target fingerprint가 달라진다.
 
 `ProjectDeploymentTarget`은 프로젝트가 실제 application을 배포할 단일 타깃이다. 프로젝트 ID가
 `project_deployment_targets`의 PK이므로 프로젝트마다 row는 하나만 존재한다. MVP는 AWS Provider Adapter를
-먼저 사용하지만, UI와 application release 계약은 provider-neutral 용어를 유지한다. 새 설정은 소유자가 가진
+먼저 사용하지만, UI와 application release 계약은 클라우드 공통 용어를 유지한다. 새 설정은 소유자가 가진
 `verified` connection과 그 connection의 region만 선택할 수 있다.
 
 ```ts
@@ -1129,7 +1129,7 @@ provider metadata의 이전 정상 revision을 `application_release_cleanup_plan
 
 ## ApplicationArtifact
 
-`ApplicationArtifact`는 Direct Deployment와 Git/CI/CD가 공유하는 provider-neutral application build 원장이다.
+`ApplicationArtifact`는 Direct Deployment와 Git/CI/CD가 공유하는 클라우드 공통 application build 원장이다.
 실제 image, zip, bundle, manifest, chart, machine image byte는 사용자 계정의 ECR/S3 또는 해당 provider storage에
 남기고, RDS `application_artifacts`에는 identity, provider location metadata, digest, 검증 상태만 저장한다.
 Redis Runtime Cache와 RDS row 어느 쪽도 provider 존재 여부의 기준이 아니다.
@@ -1367,7 +1367,7 @@ API 재시작으로 queued retry가 복구될 때도 worker mode는 `retry_front
 
 ## Deployment
 
-`Deployment`는 사용자가 승인한 IaC Preview를 실제 클라우드 리소스에 반영하는 실행 단위다.
+`Deployment`는 사용자가 승인한 인프라 코드 미리보기를 실제 클라우드 리소스에 반영하는 실행 단위다.
 
 ```ts
 type Deployment = {
@@ -1456,7 +1456,7 @@ type Deployment = {
 기존 `practice` 값을 `demo_web_service`로 변환한 뒤 PostgreSQL enum에서 제거한다.
 
 Direct Deployment의 외부 상태는 `validation`, `approval`, `deployment` 세 단계만 사용한다. 저장,
-Pre-Deployment Check, `terraform init`, `terraform plan`은 `validation` 내부 작업이며 실제 실행과
+배포 전 검사, `terraform init`, `terraform plan`은 `validation` 내부 작업이며 실제 실행과
 정리는 `deployment`에서 처리한다. 내부 Terraform stage와 로그는 기존 실행 증거로 그대로 보존한다.
 
 `POST /api/projects/:projectId/deployments/prepare`는 사용자가 저장한 `ProjectDraft.revision`을 정확히
@@ -1713,9 +1713,9 @@ Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재
 
 Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 high finding이 있어도 `deployments.isBlocked`를 세우지 않는다. High를 포함한 Pre-Deployment finding은 승인 차단 조건으로 사용하지 않고 검토 정보로 남기며, Plan이 존재하고 artifact/hash 안전 조건이 맞으면 사용자는 항상 승인할 수 있다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
-Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 기반 high finding은 Plan 생성 결과에 warning으로 보존하되 승인을 차단하지 않는다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
+배포 전 검사의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 기반 high finding은 Plan 생성 결과에 warning으로 보존하되 승인을 차단하지 않는다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
 
-MVP Direct Deployment Path live apply는 아래 Terraform resource type을 우선 지원 범위로 둔다.
+MVP 직접 배포 경로 live apply는 아래 Terraform resource type을 우선 지원 범위로 둔다.
 이외 resource type이 변경 대상에 포함되면 warning metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시하지만, 승인/배포 자체는 차단하지 않는다.
 
 - `aws_vpc`
@@ -1860,7 +1860,7 @@ subscription은 비활성화하고, 일시 실패는 30초, 2분, 10분, 30분 �
 
 ## Git/CI/CD Handoff
 
-`GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
+`GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. 직접 배포 경로를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
 ### Git/CI/CD readiness
 
@@ -1998,7 +1998,7 @@ Handoff 생성 직전 서버는 요청한 active `SourceRepository`를 현재 Bo
 Handoff 생성에 사용하는 `rdsEnabled`, `staticSiteUrl`, `apiBaseUrl`은 클라이언트 입력을 원천값으로 사용하지 않는다. 서버는 승인된 `sourceDeploymentId`가 가리키는 동일 프로젝트의 Architecture와 현재 확정 Deployment Target으로 세 값을 다시 계산한다. 이전 클라이언트 호환을 위해 요청 필드는 생략할 수 있지만, 전달된 `false`, 문자열, `null`은 서버 계산값과 정확히 같아야 한다. 다르면 provider를 호출하기 전에 HTTP 409 `GIT_CICD_HANDOFF_CONFIGURATION_STALE`을 반환한다. provider 입력, 저장하는 Static/API URL, `repositorySettingsPreview.variables.SKETCHCATCH_RDS_ENABLED`에는 항상 서버 계산값을 사용한다.
 
 `github` provider slice에서는 Terraform artifact metadata를 provider boundary로 넘겨 Source Repository PR 생성 요청 payload를 만든다.
-이 payload에는 PR title/body 초안, IaC Preview artifact 경로, plan summary, Pre-Deployment Check 확인 문구,
+이 payload에는 PR title/body 초안, 인프라 코드 미리보기 artifact 경로, plan summary, 배포 전 검사 확인 문구,
 리뷰 체크리스트 초안이 포함된다. provider 결과로 `pullRequestUrl`이 돌아오면 handoff record는 `status: "pr_created"`와
 PR URL을 저장한다. 실제 GitHub token, deploy key, CI secret 원문은 DB, shared type, 응답, 로그에 저장하지 않는다.
 pipeline polling/cache 연동은 별도 slice에서 다룬다.
@@ -2246,7 +2246,7 @@ type ReverseEngineeringScanResult = {
 - `scanErrors`: 일부 리소스를 읽지 못했을 때의 이유
 
 Reverse Engineering의 `원본`은 `architectureJson`에 담긴 Resource, 관계, 설정을 그대로 유지한다. Cloud provider에는
-Architecture Board 좌표가 없으므로 화면에 처음 보여주기 위한 결정론적 기본 위치만 계산한다. 이때 Resource 의미를
+설계 편집 화면 좌표가 없으므로 화면에 처음 보여주기 위한 결정론적 기본 위치만 계산한다. 이때 Resource 의미를
 추가 / 삭제 / 변경하지 않으며, Board Auto Arrange나 의미 변경을 허용한 Compiler 제안과 구분한다.
 
 화면의 `supported`/`review_only` 표시는 저장하는 상태가 아니라 읽기 시점의 presentation 값이다.
@@ -2277,7 +2277,7 @@ type ReverseEngineeringScanLogLine = {
 
 로그는 사용자에게 보여줄 수 있게 마스킹된 문장만 저장한다. 원본 오류나 민감한 값이 섞인 `rawMessage`는 저장하지 않는다.
 
-스캔 결과가 만든 Practice Architecture와 import suggestion은 사용자가 확인하기 전까지 기존 프로젝트 상태를 덮어쓰지 않는다.
+스캔 결과가 만든 설계 정보와 import suggestion은 사용자가 확인하기 전까지 기존 프로젝트 상태를 덮어쓰지 않는다.
 
 일부 서비스 조회가 실패해도 `discoveredResources`와 `architectureJson`에 성공적으로 읽은 결과가 있으면 스캔 결과는
 사용자가 볼 수 있다. `scanErrors`가 있다는 이유만으로 전체 결과를 실패 처리하거나 보드를 숨기지 않는다. 사용자 화면은
@@ -2289,11 +2289,11 @@ type ReverseEngineeringScanLogLine = {
 
 Redis 기반 Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration 같은 long-running workflow의 status/cache/log streaming 보조에 사용한다. Runtime Cache 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 저장한다.
 
-Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
+Runtime Cache는 사용자 설계 정보 Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
 
-Terraform 기반 Pre-Deployment Check는 정규화한 파일 이름 / 내용, Trivy version, checks bundle digest, SketchCatch 제외 rule 목록으로 SHA-256 cache key를 만든다. Trivy finding 결과는 process-local LRU와 Runtime Cache에 5분 동안 저장하며, 같은 API process에서 동일 key 검사가 동시에 요청되면 하나의 in-flight scan을 공유한다. Cache miss 또는 cache 장애 시 실제 Trivy 검사를 실행한다. Cached finding은 검사 재사용 결과일 뿐 severity나 Safety Gate 정책을 변경하지 않는다.
+Terraform 기반 배포 전 검사는 정규화한 파일 이름 / 내용, Trivy version, checks bundle digest, SketchCatch 제외 rule 목록으로 SHA-256 cache key를 만든다. Trivy finding 결과는 process-local LRU와 Runtime Cache에 5분 동안 저장하며, 같은 API process에서 동일 key 검사가 동시에 요청되면 하나의 in-flight scan을 공유한다. Cache miss 또는 cache 장애 시 실제 Trivy 검사를 실행한다. Cached finding은 검사 재사용 결과일 뿐 severity나 Safety Gate 정책을 변경하지 않는다.
 
-버튼 Pre-Deployment Check와 Direct Deployment Plan은 같은 기본 analyzer와 Trivy snapshot cache를 사용한다. Plan이 materialize한 Terraform artifact의 내용 SHA가 버튼 검사 때의 내용과 같으면 Trivy finding snapshot을 재사용하고, 아키텍처 기반 deterministic policy는 현재 `ArchitectureJson`으로 다시 계산한다. Terraform 내용이나 Trivy 정책 identity가 바뀐 경우에만 Trivy를 다시 실행한다.
+버튼 배포 전 검사와 Direct Deployment Plan은 같은 기본 analyzer와 Trivy snapshot cache를 사용한다. Plan이 materialize한 Terraform artifact의 내용 SHA가 버튼 검사 때의 내용과 같으면 Trivy finding snapshot을 재사용하고, 아키텍처 기반 deterministic policy는 현재 `ArchitectureJson`으로 다시 계산한다. Terraform 내용이나 Trivy 정책 identity가 바뀐 경우에만 Trivy를 다시 실행한다.
 
 API runtime은 `REDIS_URL`이 있고 `NODE_ENV !== "test"`일 때 Redis adapter를 사용한다. `REDIS_URL`이 없거나 테스트 환경이면 in-memory fallback을 사용한다. Redis 연결이나 명령이 실패해도 API workflow의 원천 기록은 RDS/S3 기준으로 유지되어야 하며, Runtime Cache adapter는 같은 process 안에서 가능한 fallback cache를 사용해 요청을 실패시키지 않는다.
 
@@ -2482,7 +2482,7 @@ rotation 중 previous key는 absolute `stoppedIssuingAt`을 기준으로 `create
 
 ### Live Observation Store v2
 
-v2 Store는 lifecycle, receipt 집계, fenced provider observation을 위한 전용 provider-neutral seam이다. 외부 Interface는 session 네 연산과 observer lease/commit, presenter lease 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사 / 초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고 production Redis Adapter는 같은 계약을 Redis TIME과 원자 Lua로 구현한다.
+v2 Store는 lifecycle, receipt 집계, fenced provider observation을 위한 전용 클라우드 공통 seam이다. 외부 Interface는 session 네 연산과 observer lease/commit, presenter lease 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사 / 초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고 production Redis Adapter는 같은 계약을 Redis TIME과 원자 Lua로 구현한다.
 
 ```ts
 type LiveObservationStore = {
@@ -2513,7 +2513,7 @@ create input은 canonical lowercase observation UUID, 검증된 DeploymentLiveOb
 
 모든 non-throwing result는 kind discriminant와 evaluatedAt을 가진다. evaluatedAt, createdAt, expiresAt, bucket, expiry/stop 경계는 한 operation에서 정확히 한 번 읽은 Store clock 값으로 계산한다. create는 created, active_exists, observation_id_conflict를 반환하고 read는 active, terminal, not_found를 반환한다. collect는 accepted, duplicate, rate_limited, event_limit_reached, gone, not_found를 반환하며 accepted 계열에는 live, gone에는 terminal session을 사용한다. stop은 stopped, already_terminal, not_found를 반환한다. malformed caller input은 LiveObservationStoreInputError, 잘못된 in-memory clock은 LiveObservationStoreClockError이고, future Redis 장애를 위한 LiveObservationStoreUnavailableError는 고정된 generic message만 사용한다.
 
-active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. `latestObservation.payload`는 아래 provider-neutral 공통 snapshot schema로 다시 파싱한 값만 허용하고 임의 JSON이나 provider credential을 받지 않는다. observer lease와 fencing token을 얻은 service만 새 snapshot을 commit한다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
+active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. `latestObservation.payload`는 아래 클라우드 공통 공통 snapshot schema로 다시 파싱한 값만 허용하고 임의 JSON이나 provider credential을 받지 않는다. observer lease와 fencing token을 얻은 service만 새 snapshot을 commit한다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
 
 ```ts
 type LiveObservationProviderState = "available" | "delayed" | "unavailable";
@@ -2539,7 +2539,7 @@ type LiveObservationProviderSnapshot = {
 
 ### Web Signal Dashboard presentation model
 
-Web의 Signal Dashboard는 새 server DTO나 DB persistence가 아니라 현재 `LiveObservationV2Snapshot`을 읽는 presentation model이다. AWS manifest와 raw provider payload는 API의 AWS Provider Adapter 경계에 남고, Web에는 provider-neutral snapshot과 마스킹된 runtime log만 전달된다.
+Web의 Signal Dashboard는 새 server DTO나 DB persistence가 아니라 현재 `LiveObservationV2Snapshot`을 읽는 presentation model이다. AWS manifest와 raw provider payload는 API의 AWS Provider Adapter 경계에 남고, Web에는 클라우드 공통 snapshot과 마스킹된 runtime log만 전달된다.
 
 ```ts
 type LiveObservationSignalPresentation = {
@@ -2556,7 +2556,7 @@ type LiveObservationSignalPresentation = {
 
 `actual`은 snapshot, immutable Deployment, 중앙 masker를 지난 runtime log에서 직접 읽은 값이다. `derived`는 current session의 실제 값에 고정 규칙을 적용한 값이며, `inferred`는 하나 이상의 evidence ID를 반드시 가진 가능성이다. `unknown`은 값을 0 / 정상 / 변화 없음으로 바꾸지 않고 비교 기준이나 데이터가 부족함을 표시한다. 요청 수가 0이면 `errorRate: 0`과 `availability: 100`도 정상 근거가 아니다. signal은 사용자 영향, 심각도, freshness, evidence quality, stable key 순서로 정렬해 최대 세 개만 노출한다. aggregate snapshot에는 관측 대상 Resource ID가 없으므로 type 일치만으로 관련 Resource를 만들지 않는다.
 
-Web session history는 browser memory에만 두며 `observationId`가 바뀌면 즉시 비운다. 최신 15분과 최대 120개 sample만 유지하고 새 페이지 진입 시 복원하지 않는다. missing metric은 sample에 기록하지 않으며 실제 값이 두 개 이상일 때만 작은 SVG history를 그린다. 정규화한 마스킹 runtime log의 opaque fingerprint만 같은 bounded history에 남겨 이전 관측과 비교할 수 있을 때만 단일 오류를 새 오류로 표시한다. 오류 / 경고 / 복구 / 확인 필요 로그는 fingerprint로 묶고 대표 원문은 닫힌 disclosure에서만 연다. 실제 배포 완료 / 신호 / 로그 시각 중 두 종류 이상이 있을 때만 접힌 사고 흐름을 표시하며, 인과관계로 단정하지 않는다. 이 UI는 AI 호출 / 새 polling / Terraform/Deployment/Project/Architecture Board mutation을 만들지 않는다.
+Web session history는 browser memory에만 두며 `observationId`가 바뀌면 즉시 비운다. 최신 15분과 최대 120개 sample만 유지하고 새 페이지 진입 시 복원하지 않는다. missing metric은 sample에 기록하지 않으며 실제 값이 두 개 이상일 때만 작은 SVG history를 그린다. 정규화한 마스킹 runtime log의 opaque fingerprint만 같은 bounded history에 남겨 이전 관측과 비교할 수 있을 때만 단일 오류를 새 오류로 표시한다. 오류 / 경고 / 복구 / 확인 필요 로그는 fingerprint로 묶고 대표 원문은 닫힌 disclosure에서만 연다. 실제 배포 완료 / 신호 / 로그 시각 중 두 종류 이상이 있을 때만 접힌 사고 흐름을 표시하며, 인과관계로 단정하지 않는다. 이 UI는 AI 호출 / 새 polling / Terraform/Deployment/Project/설계 편집 화면 mutation을 만들지 않는다.
 
 Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 120, session accepted event 10,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 실행한다. weighted burst는 candidateCurrentSecond + previousSecond \* (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
 
@@ -2900,7 +2900,7 @@ type CreateDesignSimulationRequest = {
 
 Live Observation UI는 최초 `warning` 이상 snapshot을 incident evidence로 유지한다. 사용자가 `Terraform 수정 적용`을 선택하면 정확히 하나의 ECS Application Auto Scaling Target에서 정수 `max_capacity`를 1 증가시키고 Project Draft 저장 성공 뒤에만 경고를 해제한다. 완료 배너에는 이전 값과 새 값, 재배포 후 정상 예상, 실제 인프라 미적용 상태를 함께 표시한다.
 
-Pre-Deployment Check 요청은 현재 Practice Architecture와 선택적으로 현재 Terraform editor 파일 목록을 함께 보낸다. Terraform syntax/schema diagnostics에 `error`가 있으면 프론트는 이 요청을 보내지 않고 diagnostics-only 결과를 즉시 표시한다.
+배포 전 검사 요청은 현재 설계 정보와 선택적으로 현재 Terraform editor 파일 목록을 함께 보낸다. Terraform syntax/schema diagnostics에 `error`가 있으면 프론트는 이 요청을 보내지 않고 diagnostics-only 결과를 즉시 표시한다.
 
 ```ts
 type AiPreDeploymentCheckRequest = {
@@ -2977,7 +2977,7 @@ type AiTerraformErrorExplanationResult = {
 };
 ```
 
-Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/IaC Preview를 평가하는 설명 DTO다. 에이전트 리뷰 성공 응답은 Amazon Q Business를 반드시 호출해 정상 결과를 받은 경우에만 반환하며, provider fallback을 정상 리뷰처럼 표시하지 않는다. AI 채팅의 에이전트 리뷰 탭 하단 버튼은 최신 Terraform 전체 파일 snapshot을 요청하며, 화면은 응답을 기다리는 동안 `Terraform 코드 구조 분석 -> 리소스 및 위험 점검 -> Amazon Q Well-Architected 검토 -> 검토 결과 정리` 단계를 보여준다. Amazon Q에는 3문장, 200~380자의 결론과 정해진 순서의 Well-Architected 6개 기준을 요청하되, 충분한 근거를 가진 더 긴 결론을 문장 수만으로 실패시키지 않는다. 완료된 응답은 줄바꿈과 `잘한 점`/`문제점` 표제를 제거해 정규화하며, 화면의 검토 요약은 가장 명확한 강점과 우선순위가 높은 문제를 기준별 결과에서 뽑아 표시한다. 각 기준은 위험도에 따라 `문제 / 필요한 조치` 또는 `잘된 점 / 확인된 설정`으로 보여주며, Terraform 속성은 의미를 풀어 쓴 한국어 문장으로 우선 표시한다. 근거가 없는 설정은 없다고 단정하지 않고 확인할 수 없다고 표현한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
+Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/인프라 코드 미리보기를 평가하는 설명 DTO다. 에이전트 리뷰 성공 응답은 Amazon Q Business를 반드시 호출해 정상 결과를 받은 경우에만 반환하며, provider fallback을 정상 리뷰처럼 표시하지 않는다. AI 채팅의 에이전트 리뷰 탭 하단 버튼은 최신 Terraform 전체 파일 snapshot을 요청하며, 화면은 응답을 기다리는 동안 `Terraform 코드 구조 분석 -> 리소스 및 위험 점검 -> Amazon Q Well-Architected 검토 -> 검토 결과 정리` 단계를 보여준다. Amazon Q에는 3문장, 200~380자의 결론과 정해진 순서의 Well-Architected 6개 기준을 요청하되, 충분한 근거를 가진 더 긴 결론을 문장 수만으로 실패시키지 않는다. 완료된 응답은 줄바꿈과 `잘한 점`/`문제점` 표제를 제거해 정규화하며, 화면의 검토 요약은 가장 명확한 강점과 우선순위가 높은 문제를 기준별 결과에서 뽑아 표시한다. 각 기준은 위험도에 따라 `문제 / 필요한 조치` 또는 `잘된 점 / 확인된 설정`으로 보여주며, Terraform 속성은 의미를 풀어 쓴 한국어 문장으로 우선 표시한다. 근거가 없는 설정은 없다고 단정하지 않고 확인할 수 없다고 표현한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
 
 ```ts
 type AiTerraformPreviewExplanationResult = {
@@ -2993,7 +2993,7 @@ type AiTerraformPreviewExplanationResult = {
 
 v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.trailing_comma`, `terraform.quoted_reference`, 그리고 닫는 중괄호 뒤에 불필요한 토큰이 붙은 `terraform.unexpected_token`이다. 마지막 경우에는 닫는 중괄호를 보존하고 뒤의 토큰만 제거할 수 있을 때만 적용 후보로 만든다. 독립된 알 수 없는 코드 줄처럼 의도를 단정할 수 없는 `terraform.unexpected_token`은 자동 삭제하지 않고 `safeFix.applicable: false` 또는 `diagnosticExplanation.canApply: false`로 내려간다. Amazon Q가 `codeSuggestion`을 반환하더라도 현재 진단 파일의 코드와 정확히 매칭되는 경우에만 적용 버튼을 활성화하며, provider 응답이 제안을 생략했을 때 삭제 제안을 임의로 합성하지 않는다.
 
-자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
+자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 설계 편집 화면 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
 
 채팅 라우팅은 리소스명과 자연스러운 명령형(`붙여`, `달아`, `연결`, `넣어`, `지워`)이 함께 있으면 기존 보드의 patch 요청으로 우선 해석한다. 반대로 `서비스 하나`, `구조 짜줘`, `웹앱 해보자`처럼 새 서비스 의도가 드러나면 기존 보드가 있어도 새 draft 요청으로 해석한다. 리소스명만 있는 입력은 여전히 clarification 대상이다. NAT Gateway 추가 patch는 빈 노드가 아니라 public subnet과 Elastic IP를 찾아 `subnetId`, `allocationId`, 연결 edge가 포함된 deployable bundle을 제안한다.
 
@@ -3348,13 +3348,13 @@ type CheckFinding = {
 
 `CheckFinding.riskFamily`은 같은 Resource에서 발생한 scanner rule을 사용자 의미 단위로 그룹화하는 안정적인 키다. `trivyRuleIds`는 그룹에 포함된 원본 Trivy rule ID를 보존하며 UI는 이를 하위 근거로 표시한다. 그룹 severity는 포함 rule 중 가장 높은 값을 사용한다.
 
-`CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. Pre-Deployment Check 응답은 deterministic finding을 먼저 반환하며 AI 설명을 기다리지 않는다. 사용자가 finding 카드를 펼치면 `/ai/safety-finding-explanation`으로 한 건을 지연 조회한다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
+`CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. 배포 전 검사 응답은 deterministic finding을 먼저 반환하며 AI 설명을 기다리지 않는다. 사용자가 finding 카드를 펼치면 `/ai/safety-finding-explanation`으로 한 건을 지연 조회한다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
 
 Terraform 파일이 있는 `POST /api/ai/pre-deployment-check`는 Public S3, 공개 SSH, Public RDS, IAM wildcard를 in-process deterministic gate로 먼저 검사하고 `deepScan.status: "running"`과 `scanId`를 즉시 반환한다. Trivy는 백그라운드에서 실행하며 `GET /api/ai/pre-deployment-check/:scanId`가 `running | complete | failed` 상태와 완료된 병합 결과를 반환한다. UI는 핵심 안전검사 완료, Trivy 심층검사 진행 중, 결과 병합 완료를 구분한다. High finding과 심층검사 진행 상태는 Plan 생성이나 승인을 막지 않으며, finding은 승인 전 검토 정보로 계속 표시한다.
 
 ## 팀 작업 규칙
 
-- 정현: Architecture Board는 `DiagramJson` 계약을 따른다.
+- 정현: 설계 편집 화면는 `DiagramJson` 계약을 따른다.
 - 시원: Terraform 변환은 `DiagramNode.parameters`를 입력으로 삼는다.
 - 채강: Deployment는 `TerraformArtifact`, `Deployment`, `DeploymentLog` 계약을 따른다.
 - 경근: AI 분석은 `ArchitectureJson`, `CheckFinding`, 비용 DTO를 따른다.

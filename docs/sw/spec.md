@@ -56,7 +56,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 
 ### Production infrastructure state
 
-- SketchCatch 자체 production infrastructure state는 사용자 project의 Terraform artifact/state와 분리한다.
+- SketchCatch 자체 운영 인프라 state는 사용자 project의 Terraform artifact/state와 분리한다.
 - 기존 ECS runtime backend key `production/ecs-foundation/terraform.tfstate`는 승인된 state migration 전까지 유지한다.
 - Route53/ACM은 `edge`, S3/RDS/Redis는 `data`, opt-in cold rollback은 `legacy-rollback` state로 격리한다.
 - S3 backend는 encryption, bucket Versioning, `use_lockfile = true`를 요구한다.
@@ -113,7 +113,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 ## 안전 계약
 
 - Terraform plan/apply/destroy는 명시적 Deployment 작업 또는 승인된 worker job에서만 실행한다.
-- 위 사용자 Deployment 계약은 SketchCatch production infrastructure Terraform과 별개이며, production infra는 전용 state와 운영자 approval을 사용한다.
+- 위 사용자 Deployment 계약은 SketchCatch 운영 인프라 Terraform과 별개이며, production infra는 전용 state와 운영자 approval을 사용한다.
 - API는 job 생성, 상태 조회, 승인, 취소 요청을 담당한다.
 - ECS `RunTask` worker task는 Terraform/Trivy 실행과 artifact/status 기록을 담당한다.
 - job 상태, lease, cancel flag는 RDS에 남긴다.

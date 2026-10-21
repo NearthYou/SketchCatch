@@ -10,7 +10,7 @@
 
 - 사용자 승인 없이 Terraform Apply, Destroy 또는 application release를 실행하지 않는다.
 - `terraform apply -target` 같은 부분 Apply를 도입하지 않는다.
-- Direct Deployment와 Git/CI/CD Deployment Path를 하나의 실행 상태로 합치지 않는다.
+- Direct Deployment와 Git과 CI/CD 배포 경로를 하나의 실행 상태로 합치지 않는다.
 - 프런트엔드에서 Terraform CLI나 AWS SDK를 실행하지 않는다.
 - 실제 AWS Apply/Destroy를 자동 검증에 포함하지 않는다. live 검증은 별도 승인과 cleanup 계획이 있을 때만 실행한다.
 
@@ -107,7 +107,7 @@ Plan 시작 시 프로젝트의 state baseline을 한 번 선택하고 그 ident
 
 권장 순서는 다음과 같다.
 
-1. `selectDeploymentStateBaseline()`을 Plan과 Apply가 함께 사용하는 provider-neutral helper로 이동한다.
+1. `selectDeploymentStateBaseline()`을 Plan과 Apply가 함께 사용하는 클라우드 공통 helper로 이동한다.
 2. Plan 전에 baseline state를 S3에서 내려받아 workspace에 복원한다.
 3. state lineage/serial과 baseline Deployment ID, object key를 Plan identity에 포함한다.
 4. 승인 snapshot에 해당 Plan의 state identity를 포함한다.
@@ -424,5 +424,5 @@ Plan state identity를 DB에 추가한다면 `apps/api/drizzle/**` migration이 
 - deployment worker는 `SIGTERM`/`SIGINT`를 operation `AbortSignal`로 전달하며 ECS worker `stopTimeout`을 120초로 설정했다.
 - Terraform Apply 성공 후 state upload가 끝나면 resource/output 저장보다 먼저 fenced state checkpoint를 남긴다. 결과 저장 실패는 `SUCCESS` warning으로 남기고 Terraform 성공을 `FAILED`로 뒤집지 않는다.
 - application output reconciliation 및 runtime release 예외는 `failureStage: "application_release"`로 저장한다.
-- 집중 Plan/Apply/worker 테스트 65개와 migration compatibility, production infrastructure structure, lint, typecheck, build, harness, diff 검사가 통과했다. 사용자 요청에 따라 전체 테스트는 실행하지 않았다.
+- 집중 Plan/Apply/worker 테스트 65개와 migration compatibility, 운영 인프라 structure, lint, typecheck, build, harness, diff 검사가 통과했다. 사용자 요청에 따라 전체 테스트는 실행하지 않았다.
 - 실제 AWS Apply/Destroy는 실행하지 않았다. 검증 명령과 결과는 `agent-progress.md`에 기록한다.

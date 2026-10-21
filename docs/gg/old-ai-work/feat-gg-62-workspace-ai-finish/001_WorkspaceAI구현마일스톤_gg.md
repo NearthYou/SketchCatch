@@ -25,8 +25,8 @@
 
 목표:
 
-- `ArchitectureJson`을 현재 Architecture Board가 쓰는 `DiagramJson`으로 바꾸는 변환 경계를 만든다.
-- 현재 Architecture Board 상태를 API 입력용 `ArchitectureJson`으로 바꾸는 변환 경계를 만든다.
+- `ArchitectureJson`을 현재 설계 편집 화면가 쓰는 `DiagramJson`으로 바꾸는 변환 경계를 만든다.
+- 현재 설계 편집 화면 상태를 API 입력용 `ArchitectureJson`으로 바꾸는 변환 경계를 만든다.
 - 보드 반영 노드는 jh Resource catalog의 `nodeDefaults`, `iconUrl`, `size`를 사용한다.
 
 TDD 기준:
@@ -59,8 +59,8 @@ TDD 기준:
 
 목표:
 
-- AI 패널에서 현재 Architecture Board 기준 Pre-Deployment Check를 실행한다.
-- AI 패널에서 현재 Architecture Board 기준 Design Simulation을 실행한다.
+- AI 패널에서 현재 설계 편집 화면 기준 배포 전 검사를 실행한다.
+- AI 패널에서 현재 설계 편집 화면 기준 Design Simulation을 실행한다.
 - 두 분석은 `보드에 반영` 직후 자동 실행하지 않는다.
 
 TDD 기준:

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** 승인된 `008_AWS템플릿구현설계_gg.md`를 기준으로 작업한다. 각 단계는 failing test → 실패 확인 → 최소 구현 → 통과 확인 순서로 진행한다.
 
-Goal: 여섯 AWS Template을 공통 `TemplateDefinition`에서 생성하고, 기본값으로 Terraform Preview / Pre-Deployment Check / Direct Deployment / cleanup까지 연결한다.
+Goal: 여섯 AWS Template을 공통 `TemplateDefinition`에서 생성하고, 기본값으로 Terraform Preview / 배포 전 검사 / Direct Deployment / cleanup까지 연결한다.
 
 Architecture: Template 정의와 Resource identity는 shared `packages/types`에서 관리한다. Web은 같은 정의로 Template 카탈로그와 `DiagramJson`을 만들고, API는 기존 Infrastructure Graph/Terraform renderer와 배포 안전 게이트를 재사용한다. EKS는 AWS infra와 Kubernetes workload provider 경계를 명시하고 하나의 논리적 Deployment 안에서 단계별 실행 시간을 기록한다.
 
@@ -108,7 +108,7 @@ Files:
 
 Produces:
 - Six Template cards using `TemplateDefinition` metadata.
-- One clone-safe `DiagramJson` builder for the dashboard page and Architecture Board modal.
+- One clone-safe `DiagramJson` builder for the dashboard page and 설계 편집 화면 modal.
 - Existing overwrite backup behavior preserved.
 - User-facing cards show supported providers, resource count, deployment readiness, and cost/security notes.
 
@@ -177,7 +177,7 @@ Files:
 - Test: relevant existing workspace and deployment tests, plus new focused tests beside changed pure helpers
 
 Produces:
-- A user can select any of the six Template definitions, apply it to a new or existing board with backup, preview Terraform, run Pre-Deployment Check, approve, and start Direct Deployment.
+- A user can select any of the six Template definitions, apply it to a new or existing board with backup, preview Terraform, run 배포 전 검사, approve, and start Direct Deployment.
 - Deployment setup uses the existing verified AWS connection gate and does not call AWS SDK or Terraform from the browser.
 - EKS displays its staged deployment requirement before the user approves.
 

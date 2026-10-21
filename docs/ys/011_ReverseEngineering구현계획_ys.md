@@ -4,24 +4,24 @@
 
 ## 목표
 
-AWS-first scanner를 만들되 제품 모델은 provider-neutral `ProviderAdapter` 경계로 유지한다. 기존 AWS 리소스를 Practice Architecture 후보로 복원하고, IaC import suggestion, risk/cost finding, Git/CI/CD handoff 준비 흐름으로 연결한다.
+AWS-first scanner를 만들되 제품 모델은 클라우드 공통 `ProviderAdapter` 경계로 유지한다. 기존 AWS 리소스를 설계 정보 후보로 복원하고, IaC import suggestion, risk/cost finding, Git/CI/CD handoff 준비 흐름으로 연결한다.
 
 완성된 흐름은 아래 기준을 만족해야 한다.
 
 - 기존 AWS resource가 `ReverseEngineeringScan` 결과로 수집된다.
-- scan result가 provider-neutral `ArchitectureJson` 후보로 변환된다.
+- scan result가 클라우드 공통 `ArchitectureJson` 후보로 변환된다.
 - Terraform import suggestion이 resource별로 표시된다.
-- scan result의 risk/cost finding이 Pre-Deployment Check와 같은 `CheckFinding` 체계로 보인다.
-- 사용자가 확인하기 전 기존 ProjectDraft나 Practice Architecture를 덮어쓰지 않는다.
+- scan result의 risk/cost finding이 배포 전 검사와 같은 `CheckFinding` 체계로 보인다.
+- 사용자가 확인하기 전 기존 ProjectDraft나 설계 정보를 덮어쓰지 않는다.
 - Git/CI/CD 실제 PR 생성은 별도 기능으로 두고, v1에서는 handoff-ready metadata까지만 만든다.
 
 ## 핵심 관점
 
-Reverse Engineering은 AWS 리소스 목록 조회가 아니라 기존 cloud state를 Practice Architecture로 복원하는 기능이다. 목록 화면은 결과 표현 중 하나일 뿐이고, 핵심 산출물은 provider-neutral architecture 후보, import suggestion, risk/cost finding이다.
+Reverse Engineering은 AWS 리소스 목록 조회가 아니라 기존 cloud state를 설계 정보로 복원하는 기능이다. 목록 화면은 결과 표현 중 하나일 뿐이고, 핵심 산출물은 클라우드 공통 architecture 후보, import suggestion, risk/cost finding이다.
 
-MVP는 AWS adapter로 시작한다. 다만 scan 결과는 `ProviderAdapter` 경계 안에서 provider-neutral `ResourceType`, 관계, config로 정규화하고, raw AWS response를 제품 계약으로 노출하지 않는다.
+MVP는 AWS adapter로 시작한다. 다만 scan 결과는 `ProviderAdapter` 경계 안에서 클라우드 공통 `ResourceType`, 관계, config로 정규화하고, raw AWS response를 제품 계약으로 노출하지 않는다.
 
-복원 결과는 이후 IaC Preview, Terraform import suggestion, Cost Risk, Git/CI/CD handoff 준비 흐름으로 이어진다. 사용자가 accept하기 전에는 기존 Practice Architecture나 ProjectDraft를 덮어쓰지 않는다.
+복원 결과는 이후 인프라 코드 미리보기, Terraform import suggestion, Cost Risk, Git/CI/CD handoff 준비 흐름으로 이어진다. 사용자가 accept하기 전에는 기존 설계 정보나 ProjectDraft를 덮어쓰지 않는다.
 
 ## 현재 구현 기반
 
@@ -42,7 +42,7 @@ MVP는 AWS adapter로 시작한다. 다만 scan 결과는 `ProviderAdapter` 경�
   - AWS Role 연결 metadata와 STS 검증 흐름이 있다.
   - 저장소에 raw AWS credential을 저장하지 않는다.
 - `apps/api/src/services/diagram-to-architecture.ts`
-  - 보드/terraform resource type을 provider-neutral `ResourceType`으로 바꾸는 매핑이 있다.
+  - 보드/terraform resource type을 클라우드 공통 `ResourceType`으로 바꾸는 매핑이 있다.
 
 현재 부족한 점은 scan status 저장소, provider adapter interface, AWS read-only scanner, import suggestion model, scan result UI가 없다는 것이다.
 
@@ -113,7 +113,7 @@ type ReverseEngineeringScanResult = {
 
 - raw AWS response 전체를 shared type이나 API response에 노출하지 않는다.
 - account-specific secret, credential, token은 type에 넣지 않는다.
-- `ResourceType`은 provider-neutral 값을 사용한다. 모르는 resource는 `"UNKNOWN"`으로 둔다.
+- `ResourceType`은 클라우드 공통 값을 사용한다. 모르는 resource는 `"UNKNOWN"`으로 둔다.
 
 ### 2. DB 저장소 추가
 
@@ -177,7 +177,7 @@ type ProviderAdapter = {
 
 MVP v1 scan 대상:
 
-AWS read-only describe/list 호출은 adapter 내부 책임으로 제한한다. service와 UI는 provider-neutral `DiscoveredResource`와 `ArchitectureJson`만 다루며, AWS resource list를 그대로 제품 결과로 노출하지 않는다.
+AWS read-only describe/list 호출은 adapter 내부 책임으로 제한한다. service와 UI는 클라우드 공통 `DiscoveredResource`와 `ArchitectureJson`만 다루며, AWS resource list를 그대로 제품 결과로 노출하지 않는다.
 
 - VPC
 - Subnet
@@ -222,8 +222,8 @@ node id 기준:
 
 - scan 성공만으로 기존 `ProjectDraft`를 덮어쓰지 않는다.
 - scan result에 `architectureJson` 후보를 저장한다.
-- 사용자가 "Practice Architecture로 적용"을 누르면 별도 accept API에서 `ArchitectureSnapshot.source = "imported"`로 저장한다.
-- ProjectDraft 반영은 Architecture Board 담당 흐름과 맞춰 후속으로 연결한다.
+- 사용자가 "설계 정보로 적용"을 누르면 별도 accept API에서 `ArchitectureSnapshot.source = "imported"`로 저장한다.
+- ProjectDraft 반영은 설계 편집 화면 담당 흐름과 맞춰 후속으로 연결한다.
 
 ### 6. Import suggestion 생성
 
@@ -293,10 +293,10 @@ scan result에서 바로 finding을 만든다.
 - scan 시작
 - pending/running/success/failed 표시
 - discovered resource 목록
-- 복원된 Practice Architecture preview
+- 복원된 설계 정보 preview
 - import suggestion 목록
 - risk/cost finding 목록
-- "Practice Architecture로 적용" 버튼
+- "설계 정보로 적용" 버튼
 - "Git/CI/CD handoff 준비" 상태 표시
 
 주의:
@@ -377,8 +377,8 @@ Web test:
 
 ## 완료 조건
 
-- AWS-first scan 결과가 provider-neutral `DiscoveredResource`로 정규화된다.
-- 기존 AWS 리소스가 Practice Architecture 후보로 복원된다.
+- AWS-first scan 결과가 클라우드 공통 `DiscoveredResource`로 정규화된다.
+- 기존 AWS 리소스가 설계 정보 후보로 복원된다.
 - Terraform import suggestion이 resource별로 생성된다.
 - scan result의 High risk와 Cost Risk가 `CheckFinding`으로 통합된다.
 - scan result는 사용자 확인 전 기존 프로젝트 상태를 덮어쓰지 않는다.

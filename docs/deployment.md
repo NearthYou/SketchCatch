@@ -8,8 +8,8 @@ SketchCatch 운영 환경에서는 Docker image를 ECR에 push하고 ECS/Fargate
 | ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | 운영 배포                 | SketchCatch 서비스 자체를 ECS/Fargate에 배포                              | Docker, ECR, ECS service update, ALB path routing                   |
 | Production infra IaC      | SketchCatch 자체 AWS infrastructure를 관리                                | 분리된 S3 state, native lockfile, manual plan/import/apply approval |
-| Direct Deployment Path    | SketchCatch가 사용자가 승인한 IaC Preview를 직접 실행                     | Terraform Plan/Apply/Destroy, approval, logs, cleanup               |
-| Git/CI/CD Deployment Path | SketchCatch가 IaC Preview를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review          |
+| 직접 배포 경로    | SketchCatch가 사용자가 승인한 인프라 코드 미리보기를 직접 실행                     | Terraform Plan/Apply/Destroy, approval, logs, cleanup               |
+| Git과 CI/CD 배포 경로 | SketchCatch가 인프라 코드 미리보기를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review          |
 
 ## ECS 배포 속도와 측정
 
@@ -66,7 +66,7 @@ AMAZON_Q_RETRIEVAL_APPLICATION_ID=<anonymous-q-application-id>
 
 `AMAZON_Q_RETRIEVAL_APPLICATION_ID`가 비어 있으면 기존 `AMAZON_Q_APPLICATION_ID`를 사용합니다. Architecture Draft는 Creator mode application ID나 Q Business 사용자 구독을 요구하지 않습니다. 선택된 패턴마다 `RETRIEVAL_MODE`를 한 번 호출하므로 API rate/cost limit과 provider metadata를 유지해야 합니다.
 
-Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
+직접 배포 경로의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
 
 - VPC
 - Public/Private Subnet
@@ -160,11 +160,11 @@ retention도 유지하며 active artifact나 active static prefix를 먼저 삭�
 - 실행 중 취소 요청은 가능하지만, `terraform apply` 도중 취소되면 AWS 리소스가 일부 생성됐을 수 있으므로 `FAILED`와 확인 필요 summary를 남깁니다.
 - Apply가 시작된 뒤 실패하거나 취소되면 가능한 경우 partial `terraform.tfstate`를 S3에 저장해 사용자가 명시 cleanup destroy를 실행할 수 있게 합니다.
 - 로컬 개발은 `local_process` mode로 Terraform worker를 API hot reload와 분리합니다. 운영 ECS worker mode와 마찬가지로 API 재시작 시 active worker를 보호하며, 명시적인 legacy `in_process` mode만 실행 주체를 잃은 `RUNNING` Deployment를 `FAILED`로 정리합니다.
-- Representative Use Journey나 리허설 후 생성 리소스 cleanup을 반드시 확인합니다.
+- 대표 사용 흐름나 리허설 후 생성 리소스 cleanup을 반드시 확인합니다.
 
 ### Direct Deployment 최적화 정책
 
-- 최적화 지원 여부는 provider-neutral `ResourceDefinition.capabilities.deployment`에서 판정합니다. Terraform managed resource는 desired-state 최적화 대상이며 data source, `UNKNOWN`, catalog-only resource는 명시적으로 제외합니다. application artifact 재사용은 Direct/GitOps 공통 Registry v1으로 구현하며 runtime no-op은 별도 후속 계층입니다.
+- 최적화 지원 여부는 클라우드 공통 `ResourceDefinition.capabilities.deployment`에서 판정합니다. Terraform managed resource는 desired-state 최적화 대상이며 data source, `UNKNOWN`, catalog-only resource는 명시적으로 제외합니다. application artifact 재사용은 Direct/GitOps 공통 Registry v1으로 구현하며 runtime no-op은 별도 후속 계층입니다.
 - Terraform bundle은 파일명 정렬, JSON key canonicalization, LF 개행으로 정규화합니다. desired-state fingerprint에는 provider lock/identity, 비밀값을 제외한 변수 이름, backend label, project/provider/account/region target, state lineage/serial을 포함합니다.
 - 공유 provider plugin cache와 기존 `.terraform.lock.hcl`을 재사용합니다. state가 있으면 Plan workspace에 복원하고 lineage/serial을 identity에 포함합니다. lock, target, state, Terraform content가 바뀌면 반드시 새 Plan을 실행합니다.
 - Plan 전 artifact, connection, architecture, current Plan, workspace 준비는 병렬화합니다. 정적 Terraform 안전 검사를 통과한 뒤에만 credential을 준비하며, credential/lock/state 준비도 서로 독립적으로 병렬화합니다.
@@ -181,15 +181,15 @@ retention도 유지하며 active artifact나 active static prefix를 먼저 삭�
 
 ## Git/CI/CD Deployment Path 정책
 
-Git/CI/CD Deployment Path는 운영 배포와 팀 리뷰를 위한 경로입니다. SketchCatch는 Terraform 파일을 Source Repository에 commit하거나 PR로 넘기고, 외부 pipeline 상태를 추적합니다.
+Git과 CI/CD 배포 경로는 운영 배포와 팀 리뷰를 위한 경로입니다. SketchCatch는 Terraform 파일을 Source Repository에 commit하거나 PR로 넘기고, 외부 pipeline 상태를 추적합니다.
 
 - Git/CI/CD handoff도 User-Accepted Change 이후에만 생성합니다.
 - Source Repository token, deploy key, CI secret 원문은 응답, 로그, DB에 저장하지 않습니다.
-- PR에는 IaC Preview, Plan 요약, Pre-Deployment Check 결과, Cost Analysis 요약을 연결합니다.
+- PR에는 인프라 코드 미리보기, Plan 요약, 배포 전 검사 결과, Cost Analysis 요약을 연결합니다.
 - 운영 apply는 외부 pipeline의 승인 job이나 조직 정책을 따를 수 있지만, SketchCatch는 승인 없는 apply를 권장하거나 자동 실행하지 않습니다.
 - 최초 Direct Deployment와 설치 PR은 Terraform / Workflow / Repository/AWS 설정을 준비합니다. 이후 App은 target branch push로, Infra는 사용자가 직접 실행한 `gh workflow run sketchcatch-infra.yml --ref main`으로 따로 배포합니다.
 - Infra 명령 실행은 Terraform Plan 후 같은 job의 같은 `tfplan`을 Apply하는 명시적 승인입니다. 이 흐름에 별도 PR, merge, GitHub Environment reviewer 승인을 추가하지 않습니다.
-- Direct Deployment Path와 Git/CI/CD Deployment Path는 서로 경쟁하는 선택지가 아니라 사용 맥락이 다른 실행 경로입니다.
+- 직접 배포 경로와 Git과 CI/CD 배포 경로는 서로 경쟁하는 선택지가 아니라 사용 맥락이 다른 실행 경로입니다.
 - Git/CI/CD 상태 polling과 long-running workflow status는 Redis Runtime Cache를 사용할 수 있지만, 최종 기록은 RDS/S3에 남깁니다.
 
 ### CI/CD 관측과 알림 운영 기준
@@ -410,7 +410,7 @@ preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_lis
 사용자에게 노출하는 흐름은 다음 세 단계다.
 
 1. `검증`: `Ctrl+S`/`Command+S` 또는 `저장하고 배포`로 Board와 Terraform working draft를 한 번의
-   ProjectDraft 저장으로 고정하고, Pre-Deployment Check와 Terraform Plan을 실행한다.
+   ProjectDraft 저장으로 고정하고, 배포 전 검사와 Terraform Plan을 실행한다.
 2. `승인`: 배포 범위, 변경량, blocker, 비용 / 보안 경고를 확인하고 준비 snapshot과 Plan을 승인한다.
 3. `배포`: 승인된 snapshot을 실행하고 상태, 릴리즈 버전, Output URL을 확인한다. Destroy도 같은
    `검증 → 승인 → 배포` 구조를 사용한다.
@@ -497,7 +497,7 @@ rollback도 저장된 baseline ID와 target fingerprint를 다시 대조한다.
 - Plan 실패 시 Apply 단계로 넘어가지 않습니다.
 - 승인 전 계정, region, 생성/수정/삭제 리소스, 비용/위험 요약을 표시합니다.
 - Plan 승인 화면의 최소 요약은 현재 `terraform show -json tfplan` 결과에서 생성합니다.
-- Pre-Deployment Check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체나 Plan 승인을 blocked로 만들지 않습니다. High warning이 있어도 사용자는 Plan을 승인할 수 있으며, finding은 승인 전 검토 정보로 계속 표시합니다.
+- 배포 전 검사와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체나 Plan 승인을 blocked로 만들지 않습니다. High warning이 있어도 사용자는 Plan을 승인할 수 있으며, finding은 승인 전 검토 정보로 계속 표시합니다.
 - Apply 성공 후 사용자가 확인할 수 있는 output을 표시합니다.
 - Apply 실패 시 Deployment를 `FAILED`와 `failureStage: "apply"`로 남깁니다.
 - AWS 연결 또는 STS credential 준비 실패는 `failureStage: "aws_connection"`으로 남깁니다.
@@ -596,7 +596,7 @@ API/web ECS service의 task revision은 GitHub Actions가 관리하고 Terraform
 
 ### SketchCatch production infrastructure Terraform
 
-Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed IaC로 전환할 구조를 `infra/aws/production`에 둡니다. 이 경로는 사용자의 Direct Deployment Path 및 Git/CI/CD Deployment Path와 state, credential, workflow를 공유하지 않습니다.
+Phase 9부터 SketchCatch 자체 운영 인프라를 Terraform-managed IaC로 전환할 구조를 `infra/aws/production`에 둡니다. 이 경로는 사용자의 직접 배포 경로 및 Git과 CI/CD 배포 경로와 state, credential, workflow를 공유하지 않습니다.
 
 | group             | root                                   | 범위                                                   | 기본 보호                                                                 |
 | ----------------- | -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
@@ -794,7 +794,7 @@ Redis Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integration �
 
 ## GitHub App 기반 Source Repository 연결
 
-Git/CI/CD Deployment Path의 운영 repository 연결은 GitHub App 설치 흐름을 기본 경로로 사용합니다. Web은 GitHub App state를 직접 만들지 않고 API가 발급한 install URL로 redirect만 실행합니다.
+Git과 CI/CD 배포 경로의 운영 repository 연결은 GitHub App 설치 흐름을 기본 경로로 사용합니다. Web은 GitHub App state를 직접 만들지 않고 API가 발급한 install URL로 redirect만 실행합니다.
 
 API runtime 필수 환경 변수:
 
@@ -834,11 +834,11 @@ API -> 기존 active GitHub repo soft deactivate 후 새 active repo 저장
 
 ## 운영 Redis / ElastiCache 연결
 
-Redis는 SketchCatch API의 내부 Runtime Cache입니다. 제품 resource catalog, Architecture Board, Terraform generator에는 Redis를 추가하지 않습니다.
+Redis는 SketchCatch API의 내부 Runtime Cache입니다. 제품 resource catalog, 설계 편집 화면, Terraform generator에는 Redis를 추가하지 않습니다.
 
 운영에서는 `infra/aws/cloudformation/runtime-cache-elasticache.yml`로 ElastiCache Redis를 생성한 뒤 output `RedisUrl`을 API runtime의 `REDIS_URL`로 주입합니다. 이 리소스는 비용이 발생하며, API runtime security group에서만 접근 가능하게 제한해야 합니다.
 
-ECS 전환 뒤에는 CloudFormation stack output `SecurityGroupId`를 production runtime Terraform의 `runtime_cache_security_group_id`에 입력합니다. review-only production Plan 워크플로는 `RedisUrl`과 `SecurityGroupId` output을 함께 가진 Runtime Cache stack을 정확히 하나만 허용하고, 보안 그룹이 complete runtime tfvars의 VPC에 속하는지 검증한 뒤 이 값을 자동 주입합니다. 장애 복구 검토에서는 `runtime_plan_scope=runtime-cache-ingress`로 두 ingress 규칙만 계획해 다른 runtime drift와 분리하고, 전체 검토에서는 `complete`를 사용합니다. runtime Terraform이 현재 ECS API 보안 그룹과, worker dispatch가 활성화된 경우 ECS worker 보안 그룹에서만 `runtime_cache_port`로 들어오는 ingress를 관리합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 연결이 없으면 plan을 실패시켜, ECS 이전 보안 그룹만 남은 상태에서 배포가 성공한 것처럼 보이지 않게 합니다.
+ECS 전환 뒤에는 CloudFormation stack output `SecurityGroupId`를 운영 실행 환경 Terraform의 `runtime_cache_security_group_id`에 입력합니다. review-only production Plan 워크플로는 `RedisUrl`과 `SecurityGroupId` output을 함께 가진 Runtime Cache stack을 정확히 하나만 허용하고, 보안 그룹이 complete runtime tfvars의 VPC에 속하는지 검증한 뒤 이 값을 자동 주입합니다. 장애 복구 검토에서는 `runtime_plan_scope=runtime-cache-ingress`로 두 ingress 규칙만 계획해 다른 runtime drift와 분리하고, 전체 검토에서는 `complete`를 사용합니다. runtime Terraform이 현재 ECS API 보안 그룹과, worker dispatch가 활성화된 경우 ECS worker 보안 그룹에서만 `runtime_cache_port`로 들어오는 ingress를 관리합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 연결이 없으면 plan을 실패시켜, ECS 이전 보안 그룹만 남은 상태에서 배포가 성공한 것처럼 보이지 않게 합니다.
 
 검증 대상:
 
@@ -902,7 +902,7 @@ logs:FilterLogEvents
 ecs:DescribeServices
 ```
 
-Diagram-to-Terraform의 Live Observation v2 output은 Terraform reference와 provider-neutral graph edge로 하나의 일관된 runtime을 증명할 때만 생성합니다. HTTPS:443 listener가 정확한 ALB, Target Group, ACM certificate를 참조하고, `name`이 certificate `domainName`과 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이어야 합니다. Target Group은 정확히 하나의 ECS Service 또는 ASG에 연결되어야 하고, ECS Application Auto Scaling Target은 선택된 Service를 `resourceId`로 참조해야 합니다. 로그 group은 선택된 runtime에서 ECS Service→Task Definition→Log Group 또는 ASG→Launch Template→Instance Profile→Role/Policy→Log Group의 소유 방향으로만 추적하며, 공유 support resource에서 sibling runtime 방향으로 역탐색하지 않습니다. ASG request alarm은 정확히 하나의 `alarmActions`→`aws_autoscaling_policy`→`autoscalingGroupName` 체인과 선택된 ALB/Target Group `arn_suffix` dimension을 모두 요구합니다. 추가 / 미해결 action, sibling ASG dimension/edge, 다른 Target Group dimension은 전체 evidence를 무효화합니다. ECS request threshold도 선택된 scaling target과 ALB/Target Group을 가리키는 정책이 정확히 하나일 때만 출력하고 중복 / 상충 정책은 graph 순서와 무관하게 생략합니다. 여러 runtime이 붙거나, 연결되지 않은 여러 runtime 중 하나를 골라야 하거나, coherent target이 둘 이상이면 모든 Live Observation output을 생략합니다. reference가 없는 legacy graph는 LB, Target Group, runtime이 각각 하나뿐이고 다른 연결과 충돌하지 않을 때만 호환합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, 단일 capacity target, `scale_out_threshold`와 선택적인 `log_group_name`/`log_group_names`입니다. ASG와 ECS capacity output이 동시에 존재하면 materializer도 모호한 evidence로 거부합니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only / DNS 누락 / certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
+Diagram-to-Terraform의 Live Observation v2 output은 Terraform reference와 클라우드 공통 graph edge로 하나의 일관된 runtime을 증명할 때만 생성합니다. HTTPS:443 listener가 정확한 ALB, Target Group, ACM certificate를 참조하고, `name`이 certificate `domainName`과 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이어야 합니다. Target Group은 정확히 하나의 ECS Service 또는 ASG에 연결되어야 하고, ECS Application Auto Scaling Target은 선택된 Service를 `resourceId`로 참조해야 합니다. 로그 group은 선택된 runtime에서 ECS Service→Task Definition→Log Group 또는 ASG→Launch Template→Instance Profile→Role/Policy→Log Group의 소유 방향으로만 추적하며, 공유 support resource에서 sibling runtime 방향으로 역탐색하지 않습니다. ASG request alarm은 정확히 하나의 `alarmActions`→`aws_autoscaling_policy`→`autoscalingGroupName` 체인과 선택된 ALB/Target Group `arn_suffix` dimension을 모두 요구합니다. 추가 / 미해결 action, sibling ASG dimension/edge, 다른 Target Group dimension은 전체 evidence를 무효화합니다. ECS request threshold도 선택된 scaling target과 ALB/Target Group을 가리키는 정책이 정확히 하나일 때만 출력하고 중복 / 상충 정책은 graph 순서와 무관하게 생략합니다. 여러 runtime이 붙거나, 연결되지 않은 여러 runtime 중 하나를 골라야 하거나, coherent target이 둘 이상이면 모든 Live Observation output을 생략합니다. reference가 없는 legacy graph는 LB, Target Group, runtime이 각각 하나뿐이고 다른 연결과 충돌하지 않을 때만 호환합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, 단일 capacity target, `scale_out_threshold`와 선택적인 `log_group_name`/`log_group_names`입니다. ASG와 ECS capacity output이 동시에 존재하면 materializer도 모호한 evidence로 거부합니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only / DNS 누락 / certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
 
 CloudWatch 관측은 선택된 동일 Target Group의 `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`를 합산해 request 수를 만들고, 같은 Target Group의 `TargetResponseTime` p95와 하나의 완료 60초 period로 정렬합니다. 각 query result가 유일한 `StatusCode=Complete`여야 하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable입니다. p95가 선택한 period는 response result의 최신 point만 비교하지 않고 전체 finite point에서 정확히 찾습니다. 같은 period에 하나 이상의 response class가 있어야 하며 status가 Complete인 sparse class만 0으로 취급합니다. 다른 period의 class를 합치거나 whole-ALB `RequestCount`를 분모로 사용하지 않습니다. ASG running은 `InService` instance, ECS/Fargate running은 service task count이며 healthy는 `DescribeTargetHealth`의 실제 healthy target 수를 사용합니다. STS와 AWS read는 5초 abort deadline을 공유합니다. metric이 60초보다 지연되거나 period가 어긋나거나 metric/capacity/log 조회가 실패하면 UI와 Store는 기존 숫자를 재사용하지 않고 정량 필드를 `null`로 표시합니다. CloudWatch Logs는 최근 5분 최대 50건만 읽고 credential-shaped 값은 저장 전 중앙 masker로 제거합니다.
 

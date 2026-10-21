@@ -2,7 +2,7 @@
 
 ## 목표
 
-SketchCatch의 Git/CI/CD Deployment Path는 사용자가 선택한 GitHub repository에 배포 PR을 만들고, PR merge 이후 GitHub Actions가 Terraform 인프라 배포와 앱 런타임 배포를 수행하는 흐름을 제공한다.
+SketchCatch의 Git과 CI/CD 배포 경로는 사용자가 선택한 GitHub repository에 배포 PR을 만들고, PR merge 이후 GitHub Actions가 Terraform 인프라 배포와 앱 런타임 배포를 수행하는 흐름을 제공한다.
 
 대표 흐름:
 

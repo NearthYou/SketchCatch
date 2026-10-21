@@ -1,6 +1,6 @@
 # GitCicdHandoff 계약/API 클론 코딩 가이드
 
-이 문서는 SketchCatch의 Git/CI/CD Deployment Path에서 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 v0 API 흐름을 설명한다. 확정 계약은 `docs/data-models.md`와 `packages/types/src/index.ts`를 우선한다.
+이 문서는 SketchCatch의 Git과 CI/CD 배포 경로에서 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 v0 API 흐름을 설명한다. 확정 계약은 `docs/data-models.md`와 `packages/types/src/index.ts`를 우선한다.
 
 ## 핵심 경계
 
@@ -12,7 +12,7 @@
 
 ## API 생명주기
 
-1. 사용자가 Practice Architecture와 Terraform Artifact를 확인하고 Git/CI/CD handoff를 승인한다.
+1. 사용자가 설계 정보와 Terraform Artifact를 확인하고 Git/CI/CD handoff를 승인한다.
 2. `POST /api/projects/:projectId/git-cicd-handoffs`가 project 접근권한, architecture 소속, uploaded Terraform artifact를 검증한다.
 3. API는 `internal` provider boundary를 호출한다. 현재 구현은 외부 GitHub 호출 없이 `draft` metadata를 반환한다.
 4. DB는 `git_cicd_handoffs`에 project, architecture, terraform artifact, repository metadata, 상태, 승인 evidence를 저장한다.

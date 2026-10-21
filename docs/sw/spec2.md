@@ -2,14 +2,14 @@
 
 ## 문서 목적
 
-SketchCatch의 부분 구현된 배포 기능을 데모 중심 흐름에서 실제 개발자가 지속적으로 사용할 수 있는 프로젝트 단위 배포 운영 기능으로 완성한다. Architecture Board 저장부터 Direct Deployment 또는 Git/CI/CD 배포, 릴리즈 식별, 실제 요청 관측, 이력, 완료 알림까지 하나의 일관된 계약으로 연결한다.
+SketchCatch의 부분 구현된 배포 기능을 데모 중심 흐름에서 실제 개발자가 지속적으로 사용할 수 있는 프로젝트 단위 배포 운영 기능으로 완성한다. 설계 편집 화면 저장부터 Direct Deployment 또는 Git/CI/CD 배포, 릴리즈 식별, 실제 요청 관측, 이력, 완료 알림까지 하나의 일관된 계약으로 연결한다.
 
 이 스펙은 저장소 분석 결과를 Amazon Q RAG에 직접 연결하는 작업과 RAG 기반 Fargate 추천 개선을 다루지 않는다. 해당 항목은 사용자의 명시적 제외 요청에 따라 현 상태를 유지한다.
 
 ## 제품 원칙
 
-- SketchCatch는 provider-neutral IaC operations service이며 AWS-only 제품으로 설명하지 않는다.
-- MVP 구현은 AWS-first, Terraform-first로 진행하되 도메인 계약은 provider-neutral로 유지한다.
+- SketchCatch는 클라우드 공통 IaC operations service이며 AWS-only 제품으로 설명하지 않는다.
+- MVP 구현은 AWS-first, Terraform-first로 진행하되 도메인 계약은 클라우드 공통로 유지한다.
 - 배포 단위는 환경이 아니라 프로젝트다. 한 프로젝트는 한 시점에 하나의 활성 배포 타깃을 가진다.
 - `staging`, `production` 같은 다중 환경 모델은 이번 범위에서 만들지 않는다.
 - 초기 전체 배포와 이후 앱만 재배포를 모두 지원한다.
@@ -21,7 +21,7 @@ SketchCatch의 부분 구현된 배포 기능을 데모 중심 흐름에서 실�
 
 1. 개발자가 소스 저장소와 프로젝트 배포 타깃을 연결한다.
 2. SketchCatch가 저장소 증거로 빌드 방식을 감지하고 개발자가 설정을 확인한다.
-3. 개발자가 Architecture Board를 편집하고 `Ctrl+S` 또는 `Command+S`로 저장한다.
+3. 개발자가 설계 편집 화면를 편집하고 `Ctrl+S` 또는 `Command+S`로 저장한다.
 4. 개발자가 `저장하고 바로 배포`를 눌러 최신 draft를 확정한다.
 5. 배포 콘솔이 `검증 → 승인 → 배포` 세 단계만 표시한다.
 6. Direct 또는 Git/CI/CD 경로가 선택된 scope를 실행하고 단계별 로그를 스트리밍한다.
@@ -38,13 +38,13 @@ SketchCatch의 부분 구현된 배포 기능을 데모 중심 흐름에서 실�
 - 저장소 기반 빌드 설정 감지와 개발자 확인
 - `infrastructure`, `application`, `full_stack` 배포 scope
 - Direct Deployment 3단계 흐름
-- Architecture Board `Ctrl+S`/`Command+S` 저장
+- 설계 편집 화면 `Ctrl+S`/`Command+S` 저장
 - `저장하고 바로 배포` 버튼과 저장 실패 차단
 - ECS/Fargate, EC2/ASG, Lambda, Static runtime GitOps 릴리즈
 - Terraform Preview, Plan, 승인, Apply/Destroy의 기존 안전 계약 유지
 - Direct/GitOps 공통 릴리즈 원장과 배포 이력
 - CI/CD 단계와 증분 로그
-- 인간용 버전, commit SHA, provider-neutral artifact digest
+- 인간용 버전, commit SHA, 클라우드 공통 artifact digest
 - 15분 공개 관측 세션, QR, 실제 요청 수집
 - CloudWatch Live Observation
 - 영속 Inbox, SSE, Web Push 완료 알림
@@ -171,7 +171,7 @@ PUT은 provider connection 접근 권한, region, runtime 종류, build config�
 ## Direct Deployment UX
 
 - Workspace 상단에 저장 상태와 `저장하고 바로 배포`를 함께 둔다.
-- Architecture Board에서 `Ctrl+S`/`Command+S`는 diagram과 Terraform draft를 서버까지 flush한다.
+- 설계 편집 화면에서 `Ctrl+S`/`Command+S`는 diagram과 Terraform draft를 서버까지 flush한다.
 - 배포 버튼은 저장 성공 뒤에만 콘솔을 열고 검증을 자동 시작한다.
 - 저장 실패, stale revision, validation blocker가 있으면 배포를 만들지 않는다.
 - 기본 화면에는 상태, scope, 변경 resource 수, blocker, 예상 비용, version, 주요 action, Output URL만 표시한다.
@@ -192,7 +192,7 @@ PUT은 provider connection 접근 권한, region, runtime 종류, build config�
 
 ### AWS build plane
 
-AWS connection bootstrap에 격리된 CodeBuild, 암호화 S3 artifact store, lifecycle이 적용된 ECR repository를 제공한다. 이 인프라는 SketchCatch 내부 실행 기반이며 사용자 Architecture Board Resource로 노출하지 않는다.
+AWS connection bootstrap에 격리된 CodeBuild, 암호화 S3 artifact store, lifecycle이 적용된 ECR repository를 제공한다. 이 인프라는 SketchCatch 내부 실행 기반이며 사용자 설계 편집 화면 Resource로 노출하지 않는다.
 
 ### ECS/Fargate
 
@@ -237,7 +237,7 @@ AWS connection bootstrap에 격리된 CodeBuild, 암호화 S3 artifact store, li
 - 요청 timeout은 3초이며 redirect를 따르지 않고 response body를 저장하지 않는다.
 - capability 원문은 URL, query string, RDS, localStorage, sessionStorage, 로그에 남기지 않는다.
 - server-verified manifest와 HMAC capability를 사용한다.
-- provider-neutral Store contract는 in-memory와 Redis adapter에서 같은 contract suite를 통과해야 한다.
+- 클라우드 공통 Store contract는 in-memory와 Redis adapter에서 같은 contract suite를 통과해야 한다.
 - AWS adapter는 CloudWatch 요청 수, 오류율, p95 latency, availability, capacity, 관련 로그를 공통 observation snapshot으로 정규화한다.
 - 기능 flag, Redis, 브라우저, 승인된 AWS sandbox gate가 준비되지 않으면 공개 세션을 생성하지 않는다.
 

@@ -2,7 +2,7 @@
 
 ## 한 줄 결론
 
-여섯 AWS Template을 단순한 보드 샘플이 아니라, 기본값으로 IaC Preview와 Direct Deployment까지 이어지는 공통 `TemplateDefinition` 기반의 배포 가능한 Practice Architecture로 구현한다.
+여섯 AWS Template을 단순한 보드 샘플이 아니라, 기본값으로 인프라 코드 미리보기와 Direct Deployment까지 이어지는 공통 `TemplateDefinition` 기반의 배포 가능한 설계 정보로 구현한다.
 
 ## 1. 이번 작업의 확정 범위
 
@@ -20,7 +20,7 @@
 - 기본값만으로 Terraform `validate`, `plan`, `apply` 경로를 구성할 수 있다.
 - 보드에서 리소스와 관계를 확인할 수 있다.
 - 사용자가 이름, 네트워크 범위, instance size, runtime, domain 같은 값을 바꿀 수 있다.
-- Cost Risk, Security Risk, 누락 설정이 Pre-Deployment Check에 연결된다.
+- Cost Risk, Security Risk, 누락 설정이 배포 전 검사에 연결된다.
 - 실제 배포 버튼을 Chrome에서 눌러 배포 완료 여부와 소요 시간을 확인할 수 있다.
 - 배포가 끝나면 같은 Deployment의 destroy 경로까지 확인해 비용이 남지 않도록 한다.
 
@@ -41,7 +41,7 @@
 
 ### Template
 
-사용자가 빈 보드 대신 선택할 수 있는 재사용 가능한 starter Practice Architecture다.
+사용자가 빈 보드 대신 선택할 수 있는 재사용 가능한 starter 설계 정보다.
 
 ### TemplateDefinition
 
@@ -57,15 +57,15 @@ Template 하나의 리소스 구성, 관계, Terraform identity, 기본 파라�
 
 ### 카탈로그 Resource 노드
 
-Architecture Board에서 사용자에게 보여주는 정식 Resource 노드다. 기존 Resource 카탈로그의 `ResourceDefinition`과 `ResourceItem`을 통해 생성하며, 카탈로그가 정한 AWS service icon, 표시 이름, 크기, style, parameter 입력과 drag/drop 동작을 그대로 사용한다.
+설계 편집 화면에서 사용자에게 보여주는 정식 Resource 노드다. 기존 Resource 카탈로그의 `ResourceDefinition`과 `ResourceItem`을 통해 생성하며, 카탈로그가 정한 AWS service icon, 표시 이름, 크기, style, parameter 입력과 drag/drop 동작을 그대로 사용한다.
 
 ### Raw Terraform Detail 노드
 
-Terraform `resource` 또는 `data` block의 주소와 설정을 직접 보드 노드로 만든 내부 구현 단위다. 일반 `AWS` fallback tile이나 `*_workspace` 같은 생성된 Terraform logical name이 그대로 보이는 형태가 여기에 해당한다. 이 노드는 IaC Preview 내부 표현으로만 사용할 수 있으며 Architecture Board에는 노출하지 않는다.
+Terraform `resource` 또는 `data` block의 주소와 설정을 직접 보드 노드로 만든 내부 구현 단위다. 일반 `AWS` fallback tile이나 `*_workspace` 같은 생성된 Terraform logical name이 그대로 보이는 형태가 여기에 해당한다. 이 노드는 인프라 코드 미리보기 내부 표현으로만 사용할 수 있으며 설계 편집 화면에는 노출하지 않는다.
 
 ## 4. 선택한 구조
 
-`TemplateDefinition`은 shared types에서 소비할 수 있는 provider-neutral 계약으로 둔다. AWS Template의 Terraform identity와 AWS 전용 기본값은 AWS Template adapter에 둔다.
+`TemplateDefinition`은 shared types에서 소비할 수 있는 클라우드 공통 계약으로 둔다. AWS Template의 Terraform identity와 AWS 전용 기본값은 AWS Template adapter에 둔다.
 
 흐름은 다음과 같다.
 
@@ -97,7 +97,7 @@ Template 카탈로그는 이 정의를 읽어 `DiagramJson`을 반환하고, 기
 
 - Template이 만드는 모든 사용자 가시 Resource는 반드시 기존 Resource 카탈로그에서 생성한 카탈로그 Resource 노드여야 한다.
 - `TemplateDefinition`에서 bare `DiagramNode`를 직접 만들거나 `iconUrl`이 없는 일반 `AWS` fallback tile을 사용자에게 노출하지 않는다.
-- 보드 label에는 Terraform logical name을 그대로 노출하지 않고 카탈로그의 사용자용 Resource 이름을 사용한다. Terraform address는 Resource metadata와 IaC Preview에서만 다룬다.
+- 보드 label에는 Terraform logical name을 그대로 노출하지 않고 카탈로그의 사용자용 Resource 이름을 사용한다. Terraform address는 Resource metadata와 인프라 코드 미리보기에서만 다룬다.
 - 필요한 Terraform resource type이 카탈로그에 없으면 fallback 노드로 진행하지 않는다. 먼저 `ResourceDefinition`, Resource catalog item, icon, parameter 계약을 추가한 다음 Template에서 재사용한다.
 - S3 Bucket Policy, Public Access Block, CloudFront OAC처럼 배포에는 필요하지만 사용자 보드에서 독립 Resource로 보여줄 가치가 낮은 세부 block은 내부 IaC 구성으로 유지하거나 카탈로그의 명시적 보조 Resource 표현을 사용한다. 어느 경우에도 raw Terraform 노드로 노출하지 않는다.
 - Template 적용 직후 Chrome에서 일반 `AWS` fallback tile과 `*_workspace` 형태의 가시 label이 하나라도 보이면 해당 Template은 배포 검증에 진입할 수 없다.
@@ -151,7 +151,7 @@ EKS cluster, cluster/node IAM role, managed node group, VPC/subnet/security grou
 1. Chrome에서 로그인 상태와 verified AWS connection 확인
 2. Template 선택
 3. 기본값을 변경하지 않고 보드와 Terraform Preview 확인
-4. Pre-Deployment Check와 승인 흐름 확인
+4. 배포 전 검사와 승인 흐름 확인
 5. 배포 버튼 클릭 시각 기록
 6. Chrome 화면, Deployment logs, terminal state 확인
 7. 성공 시 resources/outputs 확인
@@ -174,7 +174,7 @@ AWS 연결이 끊기거나 verified 상태가 아니면 live apply를 계속하�
 - 여섯 Template이 catalog에 나타난다.
 - 각 Template을 새 보드에 적용할 수 있다.
 - 각 Template의 사용자 가시 노드는 모두 기존 Resource 카탈로그의 icon, label, size, style을 사용한다.
-- 일반 `AWS` fallback tile과 Terraform logical name이 Architecture Board에 노출되지 않는다.
+- 일반 `AWS` fallback tile과 Terraform logical name이 설계 편집 화면에 노출되지 않는다.
 - 각 Template의 모든 renderable Resource가 `ResourceDefinition`에 존재한다.
 - 각 Template의 Terraform Preview가 기본값으로 생성된다.
 - 관련 단위 테스트와 `terraform validate`가 통과한다.

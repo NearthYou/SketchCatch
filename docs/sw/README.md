@@ -47,4 +47,4 @@ Terraform 변환과 배포 실행, Git/CI/CD, 상태 캐시의 구현 참고 문
 - 남겨야 할 계약은 `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `docs/deployment.md`로 이관한다.
 - workstream 전용 agent 규칙이 필요하면 별도 파일로 흩뜨리지 않고 해당 실행 문서에 합친다.
 - Terraform 실행, AWS SDK 호출, 배포 mutation은 API 또는 worker 경계에 둔다.
-- Redis는 내부 Runtime Cache이며 Practice Architecture Resource로 설명하지 않는다.
+- Redis는 내부 Runtime Cache이며 설계 정보 Resource로 설명하지 않는다.

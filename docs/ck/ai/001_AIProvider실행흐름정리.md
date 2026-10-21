@@ -6,7 +6,7 @@
 
 1. 사용자가 AI 기능을 실행했을 때 어떤 함수와 provider가 순서대로 호출되는지 알 수 있게 한다.
 2. Bedrock, Amazon Q Business, Amazon Transcribe가 각각 어떤 역할을 맡는지 설명한다.
-3. AI가 Architecture Board, Git, Deployment 상태를 직접 바꾸지 못하게 막는 비용, 보안, 승인 경계를 분명히 한다.
+3. AI가 설계 편집 화면, Git, Deployment 상태를 직접 바꾸지 못하게 막는 비용, 보안, 승인 경계를 분명히 한다.
 
 ## 1. AI Provider 흐름은 무엇인가
 
@@ -29,7 +29,7 @@ AI provider는 크게 네 종류로 나뉜다.
 
 | provider | 역할 |
 | --- | --- |
-| `bedrock` | 기본 LLM provider다. Requirement Prompt, Architecture Draft, Design Simulation, Pre-Deployment Check, Terraform Preview, Architecture Patch Preview 설명을 보강한다. |
+| `bedrock` | 기본 LLM provider다. Requirement Prompt, Architecture Draft, Design Simulation, 배포 전 검사, Terraform Preview, Architecture Patch Preview 설명을 보강한다. |
 | `amazon_q` | Terraform Error Explanation과 AWS/IAM/region/quota/운영 문제 설명을 보강한다. 설계 생성용으로 쓰지 않는다. |
 | `amazon_transcribe` | Voice Requirement Input을 텍스트로 전사한다. 전사 결과는 사용자 확인 전까지 Requirement Prompt가 아니다. |
 | `fallback` | AWS AI 호출이 막히거나 실패했을 때 rule 기반 설명을 반환한다. |
@@ -79,7 +79,7 @@ Requirement Prompt 입력
 | --- | --- | --- |
 | Architecture Draft 설명 | `POST /api/ai/architecture-draft` | Bedrock |
 | GitHub Architecture Draft 설명 | `POST /api/ai/github-architecture-draft` | Bedrock |
-| Pre-Deployment Check 설명 | `POST /api/ai/pre-deployment-check` | Bedrock |
+| 배포 전 검사 설명 | `POST /api/ai/pre-deployment-check` | Bedrock |
 | Design Simulation 설명 | `POST /api/ai/design-simulation` | Bedrock |
 | Terraform Preview 설명 | `POST /api/ai/terraform-preview-explanation` | Bedrock |
 | Terraform Error Explanation | `POST /api/ai/terraform-error-explanation` | Amazon Q 우선, Bedrock fallback |
@@ -105,7 +105,7 @@ Voice Requirement Input과 Architecture Patch Preview는 API 계약이 준비되
 | --- | --- |
 | `prompt` | Requirement Prompt 입력값 |
 | `draft` | Architecture Draft API 응답 |
-| `analysis` | Pre-Deployment Check API 응답 |
+| `analysis` | 배포 전 검사 API 응답 |
 | `designSimulation` | Design Simulation API 응답 |
 | `terraformPreview` | Terraform Preview API 응답 |
 | `terraformErrorExplanation` | Terraform Error Explanation API 응답 |
@@ -309,7 +309,7 @@ preDeploymentCheckBodySchema.parse
 -> createLlmExplanation({ target: "pre_deployment_check", result })
 ```
 
-Pre-Deployment Check의 finding, checklist, suggestion 결과가 먼저 만들어지고 Bedrock이 설명을 보강한다.
+배포 전 검사의 finding, checklist, suggestion 결과가 먼저 만들어지고 Bedrock이 설명을 보강한다.
 
 ### 6.4 Design Simulation route
 
@@ -938,7 +938,7 @@ AI 화면: http://localhost:3000/workspace/ai
 1. `AI_BILLING_MODE=aws_credit_only`를 설정한다.
 2. `BEDROCK_CREDIT_CONFIRMED=true`를 설정한다.
 3. `BEDROCK_MODEL_ID`를 설정한다.
-4. `/workspace/ai`에서 Architecture Draft, Pre-Deployment Check, Design Simulation, Terraform Preview를 실행한다.
+4. `/workspace/ai`에서 Architecture Draft, 배포 전 검사, Design Simulation, Terraform Preview를 실행한다.
 5. LLM 설명 badge가 Bedrock으로 표시되는지 확인한다.
 
 credit flag를 끄면 fallback badge가 표시되어야 한다.

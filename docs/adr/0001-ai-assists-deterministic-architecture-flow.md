@@ -1,6 +1,6 @@
 # AI assists deterministic architecture flow
 
-SketchCatch will use AI to turn natural-language infrastructure requirements into Architecture Drafts, explain IaC Preview output, and translate Pre-Deployment Check findings into user-facing design guidance. Deterministic graph validation, generators, and rule engines remain the source of truth for structured architecture data, IaC output, reproducible findings, and simulation assumptions. The current safety gate records High findings for review but does not automatically block Plan approval solely by severity; that enforcement remains planned. AI can improve design speed and reasoning, while deployable artifacts and execution still require reproducible project data, rules, and explicit user approval.
+SketchCatch will use AI to turn natural-language infrastructure requirements into Architecture Drafts, explain 인프라 코드 미리보기 output, and translate 배포 전 검사 findings into user-facing design guidance. Deterministic graph validation, generators, and rule engines remain the source of truth for structured architecture data, IaC output, reproducible findings, and simulation assumptions. The current safety gate records High findings for review but does not automatically block Plan approval solely by severity; that enforcement remains planned. AI can improve design speed and reasoning, while deployable artifacts and execution still require reproducible project data, rules, and explicit user approval.
 
 Considered Options
 

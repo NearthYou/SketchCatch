@@ -261,7 +261,7 @@ apps/web/app/workspace/AiWorkspaceClient.tsx
 http://127.0.0.1:3000/workspace/ai
 ```
 
-참고: `/workspace`는 실제 Architecture Board 작업대이고, gg AI 확인 화면은 `/workspace/ai`다.
+참고: `/workspace`는 실제 설계 편집 화면 작업대이고, gg AI 확인 화면은 `/workspace/ai`다.
 
 ### 자연어 초안 생성
 

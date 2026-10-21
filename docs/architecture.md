@@ -1,20 +1,18 @@
 # 아키텍처
 
-SketchCatch는 Next.js 웹과 Fastify API, Terraform Worker로 구성됩니다. pnpm workspace와 Turborepo로 관리하는 모노레포입니다. 현재 배포 대상은 AWS이며 다른 클라우드도 추가할 수 있도록 Provider Adapter로 실행 코드를 분리했습니다.
+사용자가 편집한 클라우드 구성을 Terraform 코드로 바꾸고 승인한 변경을 배포합니다. 브라우저는 설계와 코드 편집을 맡습니다. API는 데이터 저장과 배포 요청을 처리하고 별도 Worker가 Terraform을 실행합니다. 웹과 API는 pnpm workspace와 Turborepo로 함께 관리합니다.
 
 ## 운영 아키텍처
 
-![SketchCatch ECS Fargate와 데이터 저장소 및 배포 경로](../assets/sketchcatch-production-architecture.png)
+서비스 자체의 운영 환경과 사용자가 배포하는 AWS 환경을 구분합니다. SketchCatch의 웹과 API는 ECS Fargate에서 실행합니다. 사용자 배포는 작업마다 별도 Fargate Task를 시작하고 사용자가 연결한 AWS 역할의 권한으로 실행합니다.
 
-서울 리전에서 Web과 API를 ECS Fargate 서비스로 운영합니다. ALB는 일반 요청을 Web으로 보내고 `/api`와 health 요청은 API로 보냅니다.
+![웹과 API, 배포 Worker 및 사용자 AWS 환경의 연결 구조](../assets/sketchcatch-runtime.svg)
 
-- Web과 API는 Public Subnet에서 실행하며 ALB 요청만 받습니다. NAT Gateway는 사용하지 않습니다.
-- RDS PostgreSQL과 ElastiCache Redis는 Private Subnet에 둡니다.
-- API가 ECS RunTask로 Terraform Worker를 시작합니다. Worker는 사용자 계정의 역할을 AssumeRole로 받아 승인된 배포를 실행합니다.
-- Terraform 파일과 plan 및 state는 S3에 저장하고 실행 로그는 CloudWatch에 남깁니다.
-- GitHub Actions는 OIDC 임시 권한으로 ECR에 이미지를 올리고 ECS 서비스를 배포합니다.
+ALB는 일반 요청을 Web으로 보내고 `/api`와 health 요청은 API로 보냅니다. Web과 API는 서울 리전의 Public Subnet에서 ALB 요청만 받습니다. NAT Gateway는 사용하지 않습니다. RDS와 Redis는 Private Subnet에 둡니다.
 
-서비스 자체의 운영 인프라와 사용자가 배포하는 인프라는 별도로 관리합니다.
+API가 작업 번호를 기록한 뒤 Worker를 요청합니다. API가 재시작해도 이 번호로 실행 중인 Task를 찾아 같은 배포를 중복으로 시작하지 않게 합니다. [Worker 실행과 조회 코드](../apps/api/src/deployments/deployment-worker-dispatcher.ts)에서 `startedBy`에 같은 작업 번호를 사용하는 것을 확인할 수 있습니다.
+
+GitHub Actions는 OIDC 임시 권한으로 ECR에 이미지를 올리고 SketchCatch의 Web과 API를 배포합니다. 이 운영 배포는 위 그림의 사용자 배포와 권한 및 Terraform State를 공유하지 않습니다.
 
 ## 저장소 구조
 
@@ -26,7 +24,7 @@ flowchart TB
     UI["packages/ui\n공유 UI"]
     Types["packages/types\n공유 타입"]
     Infra["infra / deploy / .github\n운영 설정"]
-    Docs["docs\nSSOT 문서"]
+    Docs["docs\n기준 문서"]
   end
 
   Web --> Types
@@ -34,64 +32,63 @@ flowchart TB
   Web --> Api
   Api --> Types
   Api --> RDS["RDS PostgreSQL"]
-  Api --> S3["S3 artifacts"]
-  Api --> Cache["Redis Runtime Cache"]
+  Api --> S3["S3 파일 저장소"]
+  Api --> Cache["Redis 임시 상태"]
 ```
 
 주요 디렉터리:
 
-- `apps/web`: Architecture Board, IaC Preview, Pre-Deployment Check, Deployment 화면
+- `apps/web`: 설계 편집 화면, 인프라 코드 미리보기, 배포 전 검사, Deployment 화면
 - `apps/api`: 인증, 프로젝트, draft, Terraform 생성/검증, Deployment API
 - `packages/types`: API와 프론트가 공유하는 도메인 타입
-- `packages/ui`: 공유 presentational UI
+- `packages/ui`: 공유 화면 컴포넌트
 - `infra`, `deploy`, `.github`: 운영 배포와 AWS 운영 설정
-- `docs`: 제품/데이터/아키텍처/개발/배포 SSOT
+- `docs`: 제품과 데이터 모델, 아키텍처, 개발 및 배포 기준 문서
 
 ## 기술 스택
 
-| 영역          | 선택한 기술                          | 기준                                                                                   |
-| ------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
-| 패키지 관리   | pnpm workspace                       | 모노레포 패키지 연결                                                                   |
-| 빌드          | Turborepo                            | 앱/패키지 빌드 순서 관리                                                               |
-| 프론트엔드    | Next.js, React, TypeScript           | 작업 화면과 API 연동                                                                   |
-| API 서버      | Fastify, TypeScript                  | 명확한 route/service 분리                                                              |
-| DB            | RDS PostgreSQL                       | 프로젝트, 설계, 배포 이력 저장                                                         |
-| ORM           | Drizzle ORM                          | 타입 안전 DB schema와 migration                                                        |
-| 파일 저장     | S3                                   | Terraform, export, image, tfplan, state/output artifact                                |
-| Runtime Cache | Redis                                | Deployment, Reverse Engineering, Git/CI/CD 상태와 15분 Live Observation 세션 / 집계 보조 |
-| IaC           | Terraform                            | MVP 기준 IaC, 멀티 클라우드 확장 기반                                                  |
-| AI 계층       | OpenAI API, Bedrock, Amazon Q, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사                                  |
-| 운영 배포     | ECS/Fargate, ALB, ECR                | API/web 분리 서비스와 path routing                                                     |
-| CI/CD         | GitHub Actions, OIDC                 | 장기 AWS key 없는 운영 배포                                                            |
+| 용도 | 기술 | 사용 위치 |
+| --- | --- | --- |
+| 패키지와 빌드 관리 | pnpm workspace, Turborepo | 앱과 공유 패키지의 의존 관계 및 빌드 순서 |
+| 설계 편집 화면 | Next.js, React, TypeScript | 다이어그램과 코드 편집, 검토 및 승인 화면 |
+| API | Fastify, TypeScript | 요청 검증과 프로젝트 및 배포 처리 |
+| 데이터 | RDS PostgreSQL, Drizzle ORM | 프로젝트, 설계, 배포 이력과 스키마 변경 |
+| 파일 | S3 | Terraform 코드, Plan, State, 내보내기 파일과 이미지 |
+| 임시 상태 | Redis | 긴 작업의 진행 상태와 15분 관측 세션 |
+| 인프라 변경 | Terraform | 변경 계획과 승인된 자원 생성 및 수정, 삭제 |
+| AI 연동 | OpenAI API, Bedrock, Amazon Q, Amazon Transcribe | 설계 추천과 설명, 검토 및 음성 전사. 기능별 설정에 따라 사용 |
+| 서비스 실행 | ECS Fargate, ALB, ECR | Web과 API를 분리해 실행하고 요청 전달 |
+| 운영 배포 | GitHub Actions, OIDC | 장기 AWS 키 없이 빌드 및 배포 |
 
 ## 실행 경계
 
-| 책임                                           | 위치                                                | 금지                                                                 |
-| ---------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
-| UI 표시와 사용자 승인                          | `apps/web`                                          | AWS SDK 직접 호출, Terraform CLI 실행                                |
-| Architecture Board Compiler 제안 계산          | 초기에는 `apps/web`의 순수 in-process Module        | DB 직접 변경, 승인 없는 Board mutation, Deployment Safety Gate 우회  |
-| Terraform 생성/검증 API                        | `apps/api`                                          | 프론트에 실행 책임 위임                                              |
-| Terraform Plan/Apply/Destroy                   | `apps/api` 또는 ECS RunTask worker                  | 승인 없는 apply/destroy                                              |
-| SketchCatch production infra Plan/Import/Apply | 승인된 GitHub Actions/운영자 경로                   | product API/worker에서 호출, 승인 없는 state/resource mutation       |
-| AWS 연결 확인                                  | `apps/api` 또는 ECS RunTask worker                  | credential 응답/로그 노출                                            |
-| Provider Adapter와 Reverse Engineering         | `apps/api` 또는 ECS RunTask worker                  | provider별 credential/raw state 프론트 노출                          |
-| Git/CI/CD handoff와 상태 추적                  | `apps/api` 또는 ECS RunTask worker                  | 승인 없는 commit/apply, secret 저장                                  |
-| Runtime Cache 사용                             | `apps/api` 또는 ECS RunTask worker                  | 사용자 Practice Architecture Resource로 노출                         |
-| Live Observation UI                            | `apps/web`                                          | AWS SDK 호출, ASG desired capacity 직접 변경, 사용자 입력 target URL |
-| Live Observation 세션 / 관측                     | `apps/api`의 provider-neutral service + AWS adapter | token 로그/RDS 저장, 실패 시 sample AWS 상태 생성                    |
-| 파일 artifact 저장                             | S3 + RDS metadata                                   | Terraform 원문 RDS 영구 저장                                         |
+편집과 실행을 나누는 이유는 사용자가 검토한 내용만 클라우드에 반영하기 위해서입니다. AI의 추천이나 설계 미리보기는 저장 및 배포 권한을 갖지 않습니다.
 
-프론트엔드는 버튼과 상태를 보여줄 뿐 실제 클라우드 변경을 직접 수행하지 않는다. 실제 리소스 변경은 backend/worker에서 승인 게이트, 로그 마스킹, cleanup 경로를 갖춘 뒤 실행한다.
+| 작업 | 실행 위치 | 제한 |
+| --- | --- | --- |
+| 화면 표시와 승인 | `apps/web` | AWS SDK나 Terraform CLI 직접 실행 금지 |
+| 설계 변환 제안 | `apps/web` 내부 순수 함수 | DB 변경과 승인 없는 설계 저장 금지 |
+| Terraform 생성과 검증 | `apps/api` | 실행 책임을 브라우저에 넘기지 않음 |
+| Terraform Plan, Apply, Destroy | API 또는 ECS Worker | 승인 없는 Apply와 Destroy 금지 |
+| SketchCatch 운영 인프라 변경 | 승인된 GitHub Actions 또는 운영자 | 사용자 배포 API와 Worker에서 실행 금지 |
+| AWS 연결 확인과 자원 불러오기 | API 또는 ECS Worker | 자격 증명과 원본 State를 브라우저에 노출하지 않음 |
+| Git 변경과 CI/CD 연결 | API 또는 ECS Worker | 승인 없는 커밋과 배포 금지, 비밀값 저장 금지 |
+| Redis 상태 저장 | API 또는 ECS Worker | 사용자가 배포할 자원으로 취급하지 않음 |
+| 관측 화면 | `apps/web` | AWS 직접 호출과 ASG 용량 변경 금지, 임의 대상 URL 사용 금지 |
+| 관측 세션과 AWS 조회 | API 서비스와 AWS 연동 모듈 | 토큰을 로그와 RDS에 저장하지 않음, 조회 실패 시 가짜 상태 생성 금지 |
+| 파일 저장 | S3와 RDS 메타데이터 | 배포용 Terraform 원문을 RDS에 영구 저장하지 않음 |
 
-음성 Requirement Input은 Amazon Transcribe로 전사한 뒤 사용자 확인을 거쳐 Requirement Prompt가 된다. AI, Bedrock, Amazon Q Assistance는 추천과 설명을 보강하지만 Practice Architecture, IaC Preview, Git 변경, Deployment 실행을 사용자 수락 없이 변경하지 않는다.
+브라우저는 사용자가 승인한 요청을 API로 보냅니다. 실제 자원 변경은 API 또는 Worker에서 승인 검사와 로그 마스킹, 정리 절차를 갖춘 뒤 실행합니다.
 
-오류 분석과 에이전트 리뷰의 AWS credit provider 체인은 `apps/api`가 소유한다. Web은 provider를 직접 호출하거나 선택하지 않고, API가 반환한 최종 설명과 비밀값이 제거된 provider 시도 metadata만 표시한다.
+음성 입력은 Amazon Transcribe로 전사한 내용을 사용자가 확인한 뒤 요구사항으로 확정합니다. AI와 Bedrock, Amazon Q는 설계 및 수정안을 제안할 뿐 사용자 승인 없이 설계나 Git 저장소, 배포 상태를 바꾸지 않습니다.
 
-Architecture Board Compiler는 Resource / 관계 / 설정 / 소속 / 시각 표현을 모두 바꾼 제안을 계산할 수 있고 입력 요구사항이나 Provider / Terraform 유효성과 충돌하는 후보도 허용한다. 이 권한은 제안 계산에만 적용하며, Compiler Interface는 결과와 전체 diff / diagnostics / Compilation Distance를 반환할 뿐 현재 Board를 직접 저장하지 않는다.
+오류 분석과 에이전트 리뷰에 사용할 AI 제공자는 `apps/api`가 결정합니다. Web에는 최종 설명과 비밀값을 제거한 호출 기록만 돌려줍니다.
+
+설계 변환기는 자원과 연결 관계, 설정, 소속 및 배치를 바꾸는 후보를 계산합니다. 요구사항이나 Terraform 조건에 맞지 않는 후보도 진단 대상으로 만들 수 있습니다. 결과에는 전체 변경 내역과 진단, 기존 설계와의 차이를 나타내는 Compilation Distance를 포함합니다. 후보를 계산하는 단계에서는 현재 설계를 저장하거나 배포하지 않습니다.
 
 ## SketchCatch production infrastructure 관리 경계
 
-SketchCatch 자체 production infrastructure Terraform은 사용자가 만드는 Practice Architecture와 Direct Deployment/Git/CI/CD Deployment state에서 분리합니다.
+SketchCatch 자체 운영 인프라 Terraform은 사용자가 만드는 설계 정보와 Direct Deployment/Git/CI/CD Deployment state에서 분리합니다.
 
 ```text
 SketchCatch product Deployment
@@ -106,9 +103,9 @@ SketchCatch production infrastructure
 -> 운영자 승인 GitHub Environment
 ```
 
-production infrastructure는 S3 backend의 group별 key와 native lockfile을 사용합니다. 기존 ECS runtime root와 `production/ecs-foundation/terraform.tfstate` key는 state migration 승인 전까지 유지합니다. Route53/ACM, S3/RDS/Redis, cold rollback은 서로 다른 state로 격리하고, high-risk root에는 discovery, backup, ownership, zero-change plan 검토 전 resource/import block을 추가하지 않습니다.
+운영 인프라는 S3 backend의 group별 key와 native lockfile을 사용합니다. 기존 ECS runtime root와 `production/ecs-foundation/terraform.tfstate` key는 state migration 승인 전까지 유지합니다. Route53/ACM, S3/RDS/Redis, cold rollback은 서로 다른 state로 격리하고, high-risk root에는 discovery, backup, ownership, zero-change plan 검토 전 resource/import block을 추가하지 않습니다.
 
-production runtime은 cutover를 마쳤으며 ALB가 API/health path를 API service로, 나머지 path를 web service로 직접 전달합니다. legacy nginx ECS service와 target group, 기존 EC2와 ALB는 삭제되어 warm rollback은 제공하지 않습니다.
+운영 실행 환경은 cutover를 마쳤으며 ALB가 API/health path를 API service로, 나머지 path를 web service로 직접 전달합니다. legacy nginx ECS service와 target group, 기존 EC2와 ALB는 삭제되어 warm rollback은 제공하지 않습니다.
 
 CloudFormation이 소유한 resource는 stack이 남아 있는 동안 Terraform으로 중복 소유하지 않습니다. import도 state를 변경하는 live operation이므로 plan-only workflow와 별도 승인 경계를 통과한 후에만 실행합니다.
 
@@ -131,8 +128,10 @@ CloudFormation이 소유한 resource는 stack이 남아 있는 동안 Terraform�
 | ApplicationArtifact identity, digest, provider location, claim/lease           | RDS                                                |
 | 사용자 application artifact byte                                               | 사용자 ECR/S3 또는 provider storage                |
 | 다이어그램 이미지, export zip, thumbnail                                       | S3                                                 |
-| Redis Runtime Cache 데이터                                                     | Redis, 짧은 TTL                                    |
+| Redis 임시 상태 데이터                                                     | Redis, 짧은 TTL                                    |
 | Live Observation session, receipt dedup, 1초 bucket                            | Redis, 최대 15분 TTL                               |
+
+편집 중인 Terraform 초안은 복구를 위해 RDS에도 저장합니다. 배포 대상으로 확정한 파일과 Plan, State는 S3에 보관합니다.
 
 RDS는 원천 데이터와 metadata를 저장한다. SketchCatch S3는 Terraform, tfplan, export처럼 서비스가 생성한 파일성 산출물을 저장한다. 사용자 application artifact byte는 사용자 ECR/S3 또는 provider storage에 남기고 SketchCatch production ECR/S3로 복사하지 않는다.
 Redis는 Deployment, Reverse Engineering, Git/CI/CD Integration처럼 오래 걸리는 workflow 상태와 streaming-friendly metadata를 보조한다. Live Observation은 예외적으로 15분 세션, public token SHA-256 lookup, receipt dedup, 원자 count, 1초 bucket을 Redis에만 저장하며 영구 Deployment 기록으로 승격하지 않는다. Redis 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 남긴다.
@@ -159,16 +158,18 @@ flowchart LR
   History --> Observe["Live Observation\nlive event + CloudWatch + runtime actual"]
 ```
 
-Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표/리허설 경로다. 별도 데모 전용 기능을 만들지 않는다.
+대표 사용 흐름는 위 실제 서비스 흐름을 증명하는 발표/리허설 경로다. 별도 데모 전용 기능을 만들지 않는다.
 
 ## Deployment 최적화 경계
+
+같은 코드를 다시 배포한다고 해서 모든 단계를 생략할 수는 없습니다. Terraform 변경 계획, 애플리케이션 빌드 파일, 현재 실행 상태를 각각 확인합니다. 아래의 Runtime Convergence는 마지막 단계인 실제 실행 상태 확인을 뜻합니다.
 
 Runtime Convergence는 IaC desired-state 재사용 및 ApplicationArtifact 재사용 다음의 독립 계층이다.
 `artifactFingerprint`는 repository/build identity를, `deploymentTargetFingerprint`는 project/account/
 region과 orchestrator/compute/capacity/rollout/health 구성을 식별한다. 둘 중 하나라도 다르면 같은
 digest여도 runtime no-op으로 보지 않는다.
 
-API의 deep module은 provider-neutral adapter registry와 `RuntimeProviderGateway` port만 소유한다.
+API의 deep module은 클라우드 공통 adapter registry와 `RuntimeProviderGateway` port만 소유한다.
 각 adapter는 provider current state를 read-only로 읽고 target, artifact marker, digest/reference,
 health를 검증한 뒤 `already_active` 또는 안전한 rollout fallback을 반환한다. ECS, EC2, EKS,
 Kubernetes, Lambda, Static adapter 객체는 서로 분리하며 특히 EKS/Kubernetes를 ECS 구현에
@@ -181,7 +182,7 @@ project/account/region, marker, config, digest, health 중 하나를 검증할 �
 기존 Approval, Plan hash, Terraform artifact hash, state lineage/serial, rollback/cleanup/retention
 검증은 Runtime Convergence 바깥의 선행 / 후행 gate로 그대로 유지한다.
 
-Deployment 최적화의 지원 여부는 `packages/types`의 provider-neutral `ResourceDefinition.capabilities.deployment`를 기준으로 삼는다. Terraform managed resource는 검증된 desired-state 재사용을 지원하고, data source, `UNKNOWN`, catalog-only definition은 명시적으로 제외한다. AWS와 Kubernetes를 포함한 provider adapter는 같은 계약을 소비한다.
+Deployment 최적화의 지원 여부는 `packages/types`의 클라우드 공통 `ResourceDefinition.capabilities.deployment`를 기준으로 삼는다. Terraform managed resource는 검증된 desired-state 재사용을 지원하고, data source, `UNKNOWN`, catalog-only definition은 명시적으로 제외한다. AWS와 Kubernetes를 포함한 provider adapter는 같은 계약을 소비한다.
 
 최적화는 한 종류의 cache가 아니라 세 계층으로 분리한다.
 
@@ -201,19 +202,19 @@ Plan 준비에서는 Terraform artifact, connection, architecture, current Plan,
 
 ## API 범위
 
-현재 API 범위는 구현 상태에 따라 바뀔 수 있지만, 공통 원칙은 아래와 같다.
+API는 프로젝트와 설계, 배포 작업을 관리합니다. 요청 및 응답 필드의 기준은 아래 링크의 데이터 모델입니다.
 
 - 인증된 사용자는 프로젝트를 생성하고 조회한다.
 - 프로젝트는 `ArchitectureSnapshot`과 `ProjectDraft`를 가진다.
 - Terraform 생성 API는 `DiagramJson`을 입력으로 받는다.
-- Pre-Deployment Check는 비용/보안/설정 위험을 반환한다.
-- Deployment API는 생성, init, plan, approval, apply, logs, destroy 흐름으로 확장한다.
+- 배포 전 검사는 비용/보안/설정 위험을 반환한다.
+- Deployment API는 생성과 초기화, 변경 계획, 승인, 실행, 로그 조회와 자원 삭제를 처리합니다.
 - Live Observation API는 valid v2 manifest와 현재 verified connection을 가진 성공 Deployment에서만 15분 Store 세션을 만들고 인증 snapshot/SSE, capability-free audience URL, 제한된 public bootstrap/request를 제공한다.
-- Git/CI/CD Integration API는 Source Repository 연결, Terraform handoff, PR 생성, pipeline 상태 추적 흐름으로 확장한다.
+- Git/CI/CD API는 소스 저장소 연결과 Terraform 전달, PR 생성 및 실행 상태 추적을 처리합니다.
 - Repository Analysis API는 repository 원문을 실행하거나 저장하지 않는다. Board 생성 출처는 프로젝트당 현재 `repository_analysis_records` 한 건에 저장하고, 인증된 Source Repository의 마지막 AI Handoff는 `source_repositories`에 저장한다.
 - Public Repository Analysis 응답은 선택 branch의 실제 head SHA를 `repositoryRevision`으로 반환한다. GitHub App project state는 분석 target owner/name과 일회성 resume key를 서명하며 callback은 다른 repository로 fallback하지 않는다.
 - `GET /api/projects/:projectId/delivery-profile`은 GitHub installation, Board 분석 출처, active Source Repository, monitoring, 배포 타깃과 read-only readiness를 조합한다. 이 조회는 provider 설정, PR, Pipeline, cloud Resource와 배포 타깃을 변경하지 않는다.
-- Reverse Engineering API는 Provider Adapter를 통해 기존 cloud Resource를 스캔하고 Practice Architecture와 import suggestion을 반환한다.
+- Reverse Engineering API는 Provider Adapter를 통해 기존 cloud Resource를 스캔하고 설계 정보와 import suggestion을 반환한다.
 - 실제 AWS credential과 Terraform 실행 세부는 프론트에 노출하지 않는다.
 
 API DTO와 모델명은 [데이터 모델](./data-models.md)을 따른다.
@@ -221,6 +222,8 @@ API DTO와 모델명은 [데이터 모델](./data-models.md)을 따른다.
 Repository Analysis UI의 GitHub 왕복 복귀 상태는 Web `sessionStorage`에만 저장하는 30분짜리 schema v1 record다. callback은 서명 target과 exact owner/name이 일치하는 Repository만 연결하고 이 record의 key를 안전한 query로 돌려준다. 비공개 Repository는 복귀 뒤 인증 분석을 실행하고, 공개 분석 결과가 있으면 project, resume key와 target이 모두 일치할 때 상태를 복원한다. 배포 타깃과 monitoring은 callback에서 저장하지 않고 Workspace Delivery에서 사용자가 별도로 확인한다. GitHub JWT state, installation token, credential과 원본 evidence 파일 내용은 browser storage에 저장하지 않는다.
 
 ## Deployment/CI/CD 콘솔 상태 경계
+
+직접 배포 화면은 Terraform 실행을 보여 주고 Delivery 화면은 GitHub Actions 실행을 보여 줍니다. 같은 커밋이어도 인프라 변경과 앱 배포는 별도 실행으로 기록합니다. 늦게 도착한 조회 결과가 완료 상태를 덮어쓰지 않도록 갱신 순서를 검사합니다.
 
 Workspace는 Direct Deployment 실행 modal과 독립 `Delivery` panel을 구분한다. Direct 화면은 `Deployment`, Plan, Terraform Output과 Deployment log를 읽고, Delivery는 프로젝트 GitHub 연결, Source Repository, monitoring, 배포 타깃, readiness와 GitHub workflow run별 `GitCicdPipelineRun`을 함께 보여준다. 배포 modal의 CI/CD tab은 조회 요약과 `Delivery 열기`만 제공하며 같은 설정 editor를 중복 소유하지 않는다. 같은 commit SHA의 App / Infra run도 서로 다른 실행 기록이다. 이 UI 선택은 Deployment나 Pipeline Run 상태를 변경하지 않는다.
 
@@ -234,7 +237,7 @@ Git/CI/CD 관측의 영구 기준은 RDS다.
 
 Web은 화면이 보일 때 active Pipeline Run이 있으면 5초, 모두 terminal이면 30초 간격으로 인증 API를 polling한다. 자동 console polling은 RDS 목록만 읽고, 사용자의 수동 새로고침은 project-scoped discovery를 실행한다. CI/CD Logs는 선택한 run의 마지막 `sequence` 이후만 증분 조회한다. `logRevision`이 바뀌는 rerun에서는 sequence와 표시 log를 함께 초기화한다. Workspace-level observer는 콘솔을 닫아도 같은 project가 mount된 동안 project-scoped discovery를 먼저 실행하고 RDS 목록을 읽어 Direct/Pipeline terminal 전환을 같은 5초/30초 정책으로 관측한다. discovery가 stale이면 기존 observer baseline을 보존한다. document가 숨겨진 동안 화면 refresh와 log fetch는 provider 호출을 진행하지 않는다.
 
-API refresh는 GitHub Actions, job, commit file과 마스킹된 log를 read-only로 조회해 RDS record를 idempotent하게 갱신한다. Project discovery는 모든 enabled/valid target을 처리하며, branch run 목록은 최대 2 page와 최근 10 workflow run까지만 hydrate한다. 특정 run refresh는 GitHub workflow run ID와 attempt를 전달해 같은 commit의 다른 run을 함께 갱신하지 않는다. 같은 Source Repository와 monitoring target branch에서 가장 최근에 생성된 non-draft/non-cancelled `GitCicdHandoff`가 있으면, 사용자 수락 설정인 `staticSiteUrl`과 `apiBaseUrl`을 각각 Pipeline Run의 `appUrl`과 `apiUrl` provenance로 연결한다. `handoffId`, `appUrl`, `apiUrl`은 하나의 provenance tuple이다. 적용 가능한 handoff가 없으면 기존 tuple 전체를 보존하고, handoff가 있으면 두 URL이 null이어도 들어온 tuple 전체로 교체한다. URL은 username/password, query, fragment가 없는 절대 HTTP(S) entry/base URL만 허용하며 path와 port는 보존한다. 거부된 값은 Pipeline Run에 저장하지 않는다. provider 조회가 실패하면 마지막으로 저장된 status와 `lastRefreshedAt`을 보존하고 stale 응답을 반환한다. Redis Runtime Cache는 handoff/pipeline status의 짧은 보조 cache로 사용할 수 있지만 Pipeline Run, stage, log의 최종 기록을 대체하지 않는다.
+API refresh는 GitHub Actions, job, commit file과 마스킹된 log를 read-only로 조회해 RDS record를 idempotent하게 갱신한다. Project discovery는 모든 enabled/valid target을 처리하며, branch run 목록은 최대 2 page와 최근 10 workflow run까지만 hydrate한다. 특정 run refresh는 GitHub workflow run ID와 attempt를 전달해 같은 commit의 다른 run을 함께 갱신하지 않는다. 같은 Source Repository와 monitoring target branch에서 가장 최근에 생성된 non-draft/non-cancelled `GitCicdHandoff`가 있으면, 사용자 수락 설정인 `staticSiteUrl`과 `apiBaseUrl`을 각각 Pipeline Run의 `appUrl`과 `apiUrl` provenance로 연결한다. `handoffId`, `appUrl`, `apiUrl`은 하나의 provenance tuple이다. 적용 가능한 handoff가 없으면 기존 tuple 전체를 보존하고, handoff가 있으면 두 URL이 null이어도 들어온 tuple 전체로 교체한다. URL은 username/password, query, fragment가 없는 절대 HTTP(S) entry/base URL만 허용하며 path와 port는 보존한다. 거부된 값은 Pipeline Run에 저장하지 않는다. provider 조회가 실패하면 마지막으로 저장된 status와 `lastRefreshedAt`을 보존하고 stale 응답을 반환한다. Redis 임시 상태는 handoff/pipeline status의 짧은 보조 cache로 사용할 수 있지만 Pipeline Run, stage, log의 최종 기록을 대체하지 않는다.
 
 각 provider snapshot은 workflow run ID, attempt, execution kind, 갱신 시각으로 만든 `upstreamOrderingToken`과 로그 소유권을 나타내는 별도 `logRevision`을 가진다. RDS conditional upsert는 더 오래된 token과 같은 revision의 terminal-to-non-terminal 역행을 원자적으로 거부하고, 거부 시 stage/log write도 수행하지 않는다. 따라서 늦게 도착한 refresh가 완료 상태나 rerun log를 과거 상태로 되돌리지 않는다.
 
@@ -265,17 +268,19 @@ CI/CD Logs는 GitHub Actions의 build/deploy workflow 증거이며 Runtime appli
 
 ## Live Observation 실행 경계
 
+Live Observation은 배포한 앱의 요청과 실행 상태를 15분 동안 확인하는 기능입니다. 관측 실패를 정상 수치로 대체하지 않습니다. 용량 변경 제안을 수락해도 편집 중인 초안만 바뀌며 실제 AWS 변경에는 새 Plan과 승인이 필요합니다.
+
 공개 audience app URL은 capability 대신 non-secret collector URL만 query parameter로 전달한다. 배포 앱은 실제 check-in/heartbeat가 성공한 뒤 session-bound bootstrap credential을 메모리에만 받아 `/receipts`를 best-effort 호출한다. collector는 manifest의 정확한 audience application Origin과 capability를 다시 검증한 뒤 Store receipt만 반영하며 같은 ECS/ALB 요청을 다시 보내지 않는다. 레거시 내장 `/observe` 흐름의 `/requests`만 검증된 traffic endpoint의 2xx 뒤에 receipt를 반영한다. 별도 client IP limiter와 `Retry-After` 시간 잠금은 사용하지 않는다. 남는 보호 경계는 Store의 초당 20건, 10초 120건, 세션 10,000건 상한과 15분 세션 수명이며, 거부된 event ID는 즉시 다시 시도할 수 있다.
 
 공개 audience page는 URL에 capability를 넣지 않고 session-bound bootstrap credential을 메모리에만 보유한다. 여러 audience client는 같은 active session에서 bootstrap을 반복할 수 있다. 실제 요청은 ACM custom hostname의 CNAME이 manifest의 public AWS ALB DNS와 정확히 일치하는지 다시 조회하고, ALB의 모든 A/AAAA 응답이 public address인지 검증한 뒤 선택한 IP로 HTTPS 연결을 고정한다. DNS와 HTTPS는 하나의 3초 wall-clock deadline을 공유하고 HTTPS는 남은 시간만 explicit destroy timer로 사용한다. TLS SNI와 Host는 custom hostname을 유지하며 POST와 redirect 미허용 조건으로 전송하고, status headers를 받는 즉시 response/socket을 destroy하여 body를 drain하지 않으며 성공한 2xx 뒤에만 Store receipt를 반영한다. DNS 불일치, 빈 응답, 하나라도 private / loopback / link-local / metadata / multicast / reserved address가 포함된 응답은 upstream 연결 전에 generic unavailable로 차단한다. IPv6는 native global unicast만 허용하고 IETF special assignment, 6to4, 반환된 6bone, documentation, IPv4-mapped 범위를 차단한다. public write endpoint는 `/requests` 하나뿐이며 IP별 전역 한도는 ALB가 추가한 client IP의 SHA-256 fingerprint로만 집계한다.
 
-API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 provider-neutral snapshot port만 호출한다. URL의 Deployment ID와 Store session의 Deployment ID가 같은지 lease 전에 확인하고, verified manifest와 현재 verified AWS connection의 partition/region/account가 모두 일치할 때만 AWS target을 만든다. AWS adapter는 선택된 Target Group 범위의 CloudWatch `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`, `TargetResponseTime` p95, ASG `InService` 또는 ECS running capacity, ELB target health, bounded CloudWatch Logs를 조회한다. 각 CloudWatch query result가 유일하고 `StatusCode=Complete`일 때만 사용하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable이다. request 수는 p95가 선택한 완료 period를 각 response class의 전체 finite point에서 정확히 찾아 합산하고, 같은 period에 하나 이상의 다른 response class가 있어 period 존재가 증명된 sparse class만 0으로 취급한다. latency만 있거나 response class가 완전히 비어 있거나 다른 period의 class만 있으면 합치지 않으며 freshness는 period 종료 시각부터 계산한다. 동일 observation/target read는 settlement 이후 10초 동안 bounded cache하고 pending read는 TTL로 중복 시작하지 않는다. cache가 pending으로 가득 차면 fail-closed하고 STS와 모든 AWS read는 하나의 5초 abort deadline을 공유한다. observer lease와 fencing token을 획득한 service만 Store의 latest observation을 갱신한다. Store 장애는 GET의 `LIVE_OBSERVATION_CACHE_UNAVAILABLE` 503 또는 SSE의 단일 sanitized error event로 반환한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. `unavailable`은 정량값 없이 반환한다. `delayed`는 이전의 완전한 관측값을 재사용할 수 있지만 Web은 이를 최신 상태나 정상 판단으로 사용하지 않고 확인 중으로 표시한다.
+API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 클라우드 공통 snapshot port만 호출한다. URL의 Deployment ID와 Store session의 Deployment ID가 같은지 lease 전에 확인하고, verified manifest와 현재 verified AWS connection의 partition/region/account가 모두 일치할 때만 AWS target을 만든다. AWS adapter는 선택된 Target Group 범위의 CloudWatch `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`, `TargetResponseTime` p95, ASG `InService` 또는 ECS running capacity, ELB target health, bounded CloudWatch Logs를 조회한다. 각 CloudWatch query result가 유일하고 `StatusCode=Complete`일 때만 사용하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable이다. request 수는 p95가 선택한 완료 period를 각 response class의 전체 finite point에서 정확히 찾아 합산하고, 같은 period에 하나 이상의 다른 response class가 있어 period 존재가 증명된 sparse class만 0으로 취급한다. latency만 있거나 response class가 완전히 비어 있거나 다른 period의 class만 있으면 합치지 않으며 freshness는 period 종료 시각부터 계산한다. 동일 observation/target read는 settlement 이후 10초 동안 bounded cache하고 pending read는 TTL로 중복 시작하지 않는다. cache가 pending으로 가득 차면 fail-closed하고 STS와 모든 AWS read는 하나의 5초 abort deadline을 공유한다. observer lease와 fencing token을 획득한 service만 Store의 latest observation을 갱신한다. Store 장애는 GET의 `LIVE_OBSERVATION_CACHE_UNAVAILABLE` 503 또는 SSE의 단일 sanitized error event로 반환한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. `unavailable`은 정량값 없이 반환한다. `delayed`는 이전의 완전한 관측값을 재사용할 수 있지만 Web은 이를 최신 상태나 정상 판단으로 사용하지 않고 확인 중으로 표시한다.
 
-Web Signal Dashboard는 provider-neutral snapshot만 읽어 최대 세 개의 결정론적 신호를 만들며 새 polling이나 자동 변경을 만들지 않는다. Store가 계산한 pressure가 `warning` 이상이면 최초 snapshot을 incident evidence로 유지하고 배포 Architecture와 함께 기존 AI Design Simulation API에 전달한다. AI 분석은 읽기 전용 추천이다. 사용자가 `Project Draft 수정`을 명시적으로 승인한 경우에만 현재 Terraform 파일에서 정확히 하나의 `aws_appautoscaling_target`과 단일 정수 `max_capacity`를 확인해 값을 1 증가시키고 Project Draft 저장 성공을 검증한다. 대상이 없거나 여러 개이거나 변수 표현식이면 수동 검토로 중단하고, revision conflict나 저장 실패 때는 경고를 유지한다. 저장 성공 뒤에만 경고를 해제하며 실제 Provider snapshot, Deployment, AWS Resource, Plan/Apply 상태는 변경하지 않는다.
+Web Signal Dashboard는 클라우드 공통 snapshot만 읽어 최대 세 개의 결정론적 신호를 만들며 새 polling이나 자동 변경을 만들지 않는다. Store가 계산한 pressure가 `warning` 이상이면 최초 snapshot을 incident evidence로 유지하고 배포 Architecture와 함께 기존 AI Design Simulation API에 전달한다. AI 분석은 읽기 전용 추천이다. 사용자가 `Project Draft 수정`을 명시적으로 승인한 경우에만 현재 Terraform 파일에서 정확히 하나의 `aws_appautoscaling_target`과 단일 정수 `max_capacity`를 확인해 값을 1 증가시키고 Project Draft 저장 성공을 검증한다. 대상이 없거나 여러 개이거나 변수 표현식이면 수동 검토로 중단하고, revision conflict나 저장 실패 때는 경고를 유지한다. 저장 성공 뒤에만 경고를 해제하며 실제 Provider snapshot, Deployment, AWS Resource, Plan/Apply 상태는 변경하지 않는다.
 
 ## 멀티 클라우드 확장 방향
 
-MVP는 AWS Provider Adapter 기준이다. `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 provider-neutral 모델을 유지하고, provider별 차이는 adapter에 둔다. 장기적으로는 아래처럼 확장한다.
+MVP는 AWS Provider Adapter 기준이다. `Resource`, `Practice Architecture`, `InfrastructureGraph`, `Reverse Engineering`은 클라우드 공통 모델을 유지하고, provider별 차이는 adapter에 둔다. 장기적으로는 아래처럼 확장한다.
 
 | 단계 | 범위                                           |
 | ---- | ---------------------------------------------- |
@@ -311,7 +316,7 @@ Terraform은 diff, plan, apply, state, provider 확장 측면에서 제품 방�
 
 ### ADR-006: 운영 인프라 state의 관리 그룹별 분리
 
-ECS/ALB/ECR/IAM/CloudWatch runtime은 기존 state key를 유지하고, Route53/ACM은 `edge`, S3/RDS/Redis는 `data`, opt-in cold restore는 `legacy-rollback` state로 격리한다. 모든 state는 versioned S3 backend와 native lockfile을 사용한다. 사용자 Deployment state와 production infrastructure state는 어떤 실행 경로도 공유하지 않는다.
+ECS/ALB/ECR/IAM/CloudWatch runtime은 기존 state key를 유지하고, Route53/ACM은 `edge`, S3/RDS/Redis는 `data`, opt-in cold restore는 `legacy-rollback` state로 격리한다. 모든 state는 versioned S3 backend와 native lockfile을 사용한다. 사용자 Deployment state와 운영 인프라 state는 어떤 실행 경로도 공유하지 않는다.
 
 ### ADR-007: 저장소 빌드와 앱 배포 권한 분리
 
