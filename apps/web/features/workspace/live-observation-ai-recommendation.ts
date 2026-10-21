@@ -3,6 +3,7 @@ import type {
   CreateDesignSimulationRequest,
   LiveObservationV2Snapshot
 } from "@sketchcatch/types";
+import { getLiveObservationEffectiveTraffic } from "./live-observation-capacity-projection";
 
 const LIVE_OBSERVATION_DESIGN_ANALYSIS_DEFAULTS = {
   budgetLevel: "normal",
@@ -16,16 +17,18 @@ export function createLiveObservationDesignSimulationRequest(
   architectureJson: ArchitectureJson,
   snapshot: LiveObservationV2Snapshot | null
 ): CreateDesignSimulationRequest | null {
-  if (!snapshot || snapshot.live.pressureLevel === "normal") return null;
+  if (!snapshot) return null;
+  const traffic = getLiveObservationEffectiveTraffic(architectureJson, snapshot);
+  if (traffic.pressureLevel === "normal") return null;
 
   return {
     architectureJson,
     ...LIVE_OBSERVATION_DESIGN_ANALYSIS_DEFAULTS,
     liveObservation: {
       acceptedEventCount: snapshot.live.acceptedEventCount,
-      pressureLevel: snapshot.live.pressureLevel,
-      pressurePercent: snapshot.live.pressurePercent,
-      projectedRequestsPerMinute: snapshot.live.projectedRequestsPerMinute
+      pressureLevel: traffic.pressureLevel,
+      pressurePercent: traffic.pressurePercent,
+      projectedRequestsPerMinute: traffic.projectedRequestsPerMinute
     }
   };
 }

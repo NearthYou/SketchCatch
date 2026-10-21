@@ -497,7 +497,7 @@ export function createPostgresDirectApplicationReleaseRepository(
           !target.accountId
         ) {
           throw new DirectApplicationReleaseError(
-            "Direct deployment runtime does not match the confirmed project target"
+            "managed deployment runtime does not match the confirmed project target"
           );
         }
 
@@ -1818,7 +1818,7 @@ async function requireContext(
   repository: Pick<DirectApplicationReleaseRepository, "findContext">
 ): Promise<DirectApplicationReleaseContext> {
   const context = await repository.findContext(input.deploymentId, input.userId);
-  if (!context) throw new DirectApplicationReleaseError("Direct deployment target was not found");
+  if (!context) throw new DirectApplicationReleaseError("managed deployment target was not found");
   return context;
 }
 
@@ -1833,7 +1833,7 @@ function assertContextMatchesTarget(
     context.target.runtimeConfig?.runtimeTargetKind !== context.target.runtimeTargetKind
   ) {
     throw new DirectApplicationReleaseError(
-      "Direct deployment runtime does not match the confirmed project target"
+      "managed deployment runtime does not match the confirmed project target"
     );
   }
 }

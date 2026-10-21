@@ -12,7 +12,89 @@ const emptyDiagram: DiagramJson = {
   viewport: { x: 0, y: 0, zoom: 1 }
 };
 
-test("prepares saved Terraform files without a mounted editor component", async () => {
+// 배포 준비가 오래된 Terraform보다 현재 Board 값을 우선하는지 재현합니다.
+function scalingDiagram(targetValue: number): DiagramJson {
+  return {
+    edges: [],
+    nodes: [
+      {
+        id: "requests",
+        type: "APPLICATION_AUTO_SCALING_POLICY",
+        kind: "resource",
+        position: { x: 0, y: 0 },
+        size: { width: 96, height: 96 },
+        label: "요청 기준 자동 확장",
+        locked: false,
+        zIndex: 1,
+        parameters: {
+          fileName: "main.tf",
+          resourceName: "requests",
+          resourceType: "APPLICATION_AUTO_SCALING_POLICY",
+          values: {
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue
+            }
+          }
+        }
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+test("immediate deployment regenerates stale Terraform from the current Board before syncing", async () => {
+  const currentDiagram = scalingDiagram(5);
+  const staleTerraformCode = `resource "aws_appautoscaling_policy" "requests" {
+  target_tracking_scaling_policy_configuration {
+    target_value = 50
+  }
+}`;
+  const generatedTerraformCode = staleTerraformCode.replace(
+    "target_value = 50",
+    "target_value = 5"
+  );
+  let generated = false;
+
+  const prepared = await prepareWorkspaceTerraformSource(
+    {
+      diagramJson: currentDiagram,
+      terraformFiles: [{ fileName: "main.tf", terraformCode: staleTerraformCode }]
+    },
+    {
+      generate: async (diagramJson) => {
+        generated = true;
+        assert.deepEqual(
+          diagramJson.nodes[0]?.parameters?.values.targetTrackingScalingPolicyConfiguration,
+          { targetValue: 5 }
+        );
+        return { architectureDiagnostics: [], terraformCode: generatedTerraformCode };
+      },
+      sync: async ({ diagramJson, terraformFiles }) => {
+        const terraformCode = terraformFiles?.[0]?.terraformCode ?? "";
+
+        return {
+          diagnostics: [],
+          diagramJson: terraformCode.includes("target_value = 50")
+            ? scalingDiagram(50)
+            : diagramJson,
+          preservedResourceAddresses: [],
+          proposals: []
+        };
+      },
+      validate: async () => ({ diagnostics: [] })
+    }
+  );
+
+  assert.equal(generated, true);
+  assert.match(prepared.terraformCode, /target_value\s*=\s*5/u);
+  assert.doesNotMatch(prepared.terraformCode, /target_value\s*=\s*50/u);
+  assert.deepEqual(
+    prepared.diagramJson.nodes[0]?.parameters?.values.targetTrackingScalingPolicyConfiguration,
+    { targetValue: 5 }
+  );
+});
+
+test("regenerates saved Terraform files without a mounted editor component", async () => {
   let generated = false;
   const prepared = await prepareWorkspaceTerraformSource(
     {
@@ -27,7 +109,10 @@ test("prepares saved Terraform files without a mounted editor component", async 
     {
       generate: async () => {
         generated = true;
-        return { architectureDiagnostics: [], terraformCode: "" };
+        return {
+          architectureDiagnostics: [],
+          terraformCode: 'resource "aws_s3_bucket" "assets" {}'
+        };
       },
       sync: async ({ diagramJson }) => ({
         diagnostics: [],
@@ -39,7 +124,7 @@ test("prepares saved Terraform files without a mounted editor component", async 
     }
   );
 
-  assert.equal(generated, false);
+  assert.equal(generated, true);
   assert.equal(prepared.terraformFiles[0]?.fileName, "main.tf");
   assert.match(prepared.terraformCode, /aws_s3_bucket/);
 });

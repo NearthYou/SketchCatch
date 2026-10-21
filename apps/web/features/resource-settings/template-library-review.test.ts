@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   isBoardTemplateAvailable,
   listBoardTemplates,
+  listLegacyBoardTemplates,
   resolveApprovedBoardTemplateDiagram,
   reviewAvailableBoardTemplate
 } from "./template-library";
@@ -73,16 +74,17 @@ test("AWS onboarding template does not expose the Training prefix", () => {
   assert.equal(template.title, "AWS onboarding");
 });
 
-test("Live Observation template is the last item in the dashboard catalog", () => {
+test("Live Observation legacy fixture is not exposed in the dashboard catalog", () => {
   const templates = listBoardTemplates();
-  const template = templates.at(-1);
 
-  assert.equal(template?.id, "template-live-observation");
-  assert.equal(template?.title, "실시간 트래픽 · ASG 관측");
+  assert.equal(
+    templates.some((template) => template.id === "template-live-observation"),
+    false
+  );
 });
 
 test("Live Observation scaling policy omits the unbounded cooldown", () => {
-  const template = listBoardTemplates()
+  const template = listLegacyBoardTemplates()
     .filter(isBoardTemplateAvailable)
     .find((candidate) => candidate.id === "template-live-observation");
   const policy = template?.diagramJson.nodes.find(
@@ -95,7 +97,7 @@ test("Live Observation scaling policy omits the unbounded cooldown", () => {
 });
 
 test("Live Observation log group uses a unique prefix for each project deployment", () => {
-  const template = listBoardTemplates()
+  const template = listLegacyBoardTemplates()
     .filter(isBoardTemplateAvailable)
     .find((candidate) => candidate.id === "template-live-observation");
   const logGroup = template?.diagramJson.nodes.find(

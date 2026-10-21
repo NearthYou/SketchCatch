@@ -61,7 +61,8 @@ export type SaveProjectBuildEnvironmentInput = Omit<ProjectBuildEnvironmentRecor
 export type ProjectBuildEnvironmentRepository = {
   findPreparationContext(
     projectId: string,
-    userId: string
+    userId: string,
+    awsConnectionId?: string
   ): Promise<ProjectBuildEnvironmentPreparationContext | undefined>;
   findByProjectId(projectId: string): Promise<ProjectBuildEnvironmentRecord | undefined>;
   findRemovalContext(
@@ -175,7 +176,7 @@ export function createPostgresProjectBuildEnvironmentRepository(
   db: Database
 ): ProjectBuildEnvironmentRepository {
   return {
-    async findPreparationContext(projectId, userId) {
+    async findPreparationContext(projectId, userId, awsConnectionId) {
       const [project] = await db
         .select({ id: projects.id })
         .from(projects)
@@ -203,27 +204,35 @@ export function createPostgresProjectBuildEnvironmentRepository(
           )
         );
 
-      const [awsConnection] = await db
+      const [target] = await db
         .select({
-          id: awsConnections.id,
-          accountId: awsConnections.accountId,
-          roleArn: awsConnections.roleArn,
-          externalId: awsConnections.externalId,
-          region: awsConnections.region,
+          connectionId: projectDeploymentTargets.connectionId,
           confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig
         })
         .from(projectDeploymentTargets)
-        .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
-        .where(
-          and(
-            eq(projectDeploymentTargets.projectId, projectId),
-            eq(awsConnections.userId, userId),
-            eq(awsConnections.status, "verified"),
-            isNull(awsConnections.deletionStartedAt),
-            isNotNull(awsConnections.accountId),
-            isNotNull(awsConnections.roleArn)
-          )
-        );
+        .where(eq(projectDeploymentTargets.projectId, projectId));
+      const selectedAwsConnectionId = awsConnectionId ?? target?.connectionId;
+      const [awsConnection] = selectedAwsConnectionId
+        ? await db
+            .select({
+              id: awsConnections.id,
+              accountId: awsConnections.accountId,
+              roleArn: awsConnections.roleArn,
+              externalId: awsConnections.externalId,
+              region: awsConnections.region
+            })
+            .from(awsConnections)
+            .where(
+              and(
+                eq(awsConnections.id, selectedAwsConnectionId),
+                eq(awsConnections.userId, userId),
+                eq(awsConnections.status, "verified"),
+                isNull(awsConnections.deletionStartedAt),
+                isNotNull(awsConnections.accountId),
+                isNotNull(awsConnections.roleArn)
+              )
+            )
+        : [];
 
       const normalizedAwsConnection =
         awsConnection?.accountId && awsConnection.roleArn
@@ -251,7 +260,7 @@ export function createPostgresProjectBuildEnvironmentRepository(
         sourceRepository: sourceRepository ?? null,
         awsConnection: normalizedAwsConnection,
         codeConnection: codeConnection ?? null,
-        confirmedBuildConfig: awsConnection?.confirmedBuildConfig ?? null
+        confirmedBuildConfig: target?.confirmedBuildConfig ?? null
       };
     },
 
@@ -574,7 +583,12 @@ export function createPostgresProjectBuildEnvironmentRepository(
 }
 
 export async function prepareProjectBuildEnvironment(
-  input: { projectId: string; userId: string; architectureId?: string },
+  input: {
+    projectId: string;
+    userId: string;
+    architectureId?: string;
+    awsConnectionId?: string;
+  },
   repository: ProjectBuildEnvironmentRepository,
   gateway: ProjectBuildEnvironmentGateway,
   options: ProjectBuildEnvironmentServiceOptions = {}
@@ -912,10 +926,14 @@ export async function deleteProjectBuildEnvironment(
 }
 
 async function requirePreparationContext(
-  input: { projectId: string; userId: string },
+  input: { projectId: string; userId: string; awsConnectionId?: string },
   repository: ProjectBuildEnvironmentRepository
 ): Promise<RequiredPreparationContext> {
-  const context = await repository.findPreparationContext(input.projectId, input.userId);
+  const context = await repository.findPreparationContext(
+    input.projectId,
+    input.userId,
+    input.awsConnectionId
+  );
   if (!context) {
     throw new ProjectBuildEnvironmentError("PROJECT_NOT_FOUND", "Project not found", 404);
   }

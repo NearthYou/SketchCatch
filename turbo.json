@@ -7,7 +7,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -16,6 +16,7 @@
       "dependsOn": ["^typecheck"]
     },
     "test": {
+      "env": ["DATABASE_URL"],
       "dependsOn": ["^test"]
     }
   }

@@ -123,9 +123,10 @@ async function main(): Promise<void> {
       outputDirectory
     });
   } finally {
+    await cdp?.send("Browser.close").catch(() => undefined);
     cdp?.close();
     await stopChrome(chrome);
-    await rm(profileDirectory, { force: true, recursive: true });
+    await rm(profileDirectory, { force: true, recursive: true, maxRetries: 10, retryDelay: 250 });
   }
 }
 
@@ -280,7 +281,7 @@ async function getCaptureState(cdp: CdpConnection, sessionId: string): Promise<C
   };
 }
 
-export function decodeWebpDataUrl(dataUrl: string, moduleId: ModuleThumbnailId): Buffer {
+export function decodeWebpDataUrl(dataUrl: string, moduleId: string): Buffer {
   const encoded = /^data:image\/webp;base64,([A-Za-z0-9+/=]+)$/i.exec(dataUrl)?.[1];
   if (!encoded) {
     throw new Error(`${moduleId} ready marker does not contain a WebP data URL`);
@@ -309,7 +310,7 @@ export function decodeWebpDataUrl(dataUrl: string, moduleId: ModuleThumbnailId):
 
 function readWebpDimensions(
   image: Buffer,
-  moduleId: ModuleThumbnailId
+  moduleId: string
 ): { readonly height: number; readonly width: number } {
   let chunkOffset = 12;
 

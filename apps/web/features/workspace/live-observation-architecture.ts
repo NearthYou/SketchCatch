@@ -294,7 +294,7 @@ const LIVE_OBSERVATION_TERRAFORM_TYPES: Partial<Record<ResourceType, string>> = 
   LOAD_BALANCER_TARGET_GROUP: "aws_lb_target_group"
 };
 
-function recoverLiveObservationReferenceEdges(
+export function recoverLiveObservationReferenceEdges(
   architecture: ArchitectureJson
 ): ArchitectureJson {
   const edges = [...architecture.edges];

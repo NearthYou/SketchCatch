@@ -8,11 +8,11 @@ import type { CostPricingRateProvider } from "./services/cost-analysis.js";
 import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
-import { registerHealthRoutes } from "./routes/health.js";
+import { registerHealthRoutes, type HealthRouteOptions } from "./routes/health.js";
 import { maskDeploymentMessage } from "./deployments/log-masking.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
-import { registerProjectRoutes } from "./routes/projects.js";
+import { registerProjectRoutes, type ProjectRouteOptions } from "./routes/projects.js";
 import {
   registerProjectReleaseLedgerRoutes,
   type ProjectReleaseLedgerRouteOptions
@@ -65,6 +65,10 @@ import {
 import { createGitHubAppClient } from "./source-repositories/github-app-client.js";
 import { registerTerraformRoutes, type TerraformRouteOptions } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerAwsImportAccessRoutes,
+  type AwsImportAccessRouteOptions
+} from "./routes/aws-import-access.js";
 import {
   registerProjectBuildEnvironmentRoutes,
   type ProjectBuildEnvironmentRouteOptions
@@ -128,6 +132,7 @@ export function createApiLoggerOptions(
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  healthRoutes?: Pick<HealthRouteOptions, "getMigrationStatus" | "runtimeIdentity">;
   analyzePreDeploymentCheck?: AiRouteOptions["analyzePreDeploymentCheck"];
   createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
@@ -141,6 +146,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  projectRoutes?: Pick<ProjectRouteOptions, "applyExistingReverseEngineeringDraft">;
   projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
   projectBuildEnvironmentRoutes?: Pick<
     ProjectBuildEnvironmentRouteOptions,
@@ -179,6 +185,7 @@ export type BuildAppOptions = {
   >;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
+  awsImportAccessRoutes?: Pick<AwsImportAccessRouteOptions, "createService">;
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -314,7 +321,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     }
   });
 
-  app.register(registerHealthRoutes);
+  app.register(registerHealthRoutes, {
+    ...options.healthRoutes,
+    getDatabaseClient: getAppDatabaseClient
+  });
   app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache, getAppDatabaseClient));
   app.register(registerAuthRoutes, {
     prefix: "/api",
@@ -332,7 +342,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     projectAssetStorage: options.projectAssetStorage,
-    projectDeletionStorage: options.projectDeletionStorage
+    projectDeletionStorage: options.projectDeletionStorage,
+    ...options.projectRoutes
   });
   app.register(registerProjectReleaseLedgerRoutes, {
     prefix: "/api",
@@ -424,6 +435,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  // gg: AWS import-access command는 기존 connection route와 분리된 인증 plugin으로 등록합니다.
+  app.register(registerAwsImportAccessRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.awsImportAccessRoutes
   });
   app.register(registerProjectBuildEnvironmentRoutes, {
     prefix: "/api",

@@ -10,7 +10,7 @@ import {
   rm
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { requireS3BucketName } from "../config/env.js";
@@ -359,7 +359,7 @@ function assertArchiveEntriesWithinLimits(
   const observedFiles = new Set<string>();
   let expandedBytes = 0;
   let fileCount = 0;
-  for (const line of listing.split("\n")) {
+  for (const line of listing.split(/\r?\n/u)) {
     if (!line.trim()) continue;
     const match =
       /^(\S+)\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+\S+\s+(.+)$/u.exec(line) ??
@@ -422,6 +422,7 @@ function assertSafeArchivePath(value: string): void {
 }
 
 async function assertExtractedTreeContainsOnlyFilesAndDirectories(root: string): Promise<void> {
+  const resolvedRoot = resolve(root);
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   for (const entry of entries) {
     const parent = entry.parentPath;
@@ -431,7 +432,7 @@ async function assertExtractedTreeContainsOnlyFilesAndDirectories(root: string):
       throw new Error(`Release archive contains an unsupported file type: ${relative(root, path)}`);
     }
     const resolved = resolve(path);
-    if (resolved !== root && !resolved.startsWith(`${resolve(root)}/`)) {
+    if (resolved !== resolvedRoot && !resolved.startsWith(`${resolvedRoot}${sep}`)) {
       throw new Error("Release archive escaped its extraction directory");
     }
   }

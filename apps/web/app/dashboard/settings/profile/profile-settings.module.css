@@ -1,0 +1,258 @@
+.page {
+  display: grid;
+  width: 100%;
+  gap: 24px;
+}
+
+.pageHeader {
+  padding-bottom: 24px;
+  border-bottom: 1px solid #dcdee0;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  font-size: calc(30px + var(--presentation-font-size-increase));
+  line-height: 1.2;
+}
+
+.profileCard {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #e1e3e6;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.verificationCard {
+  width: min(100%, 620px);
+  margin: 24px auto 0;
+}
+
+.cardHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #eceef0;
+  background: #fafafa;
+}
+
+.headingIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.cardHeading h2 {
+  margin: 0;
+  font-size: calc(18px + var(--presentation-font-size-increase));
+}
+
+.cardHeading p {
+  margin: 6px 0 0;
+  color: #60646c;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  line-height: 1.55;
+}
+
+.form {
+  display: grid;
+  gap: 28px;
+  padding: 28px;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 20px;
+}
+
+.field,
+.fullWidthField {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.fullWidthField {
+  grid-column: 1 / -1;
+}
+
+.passwordFields {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+}
+
+.passwordFields .field {
+  align-content: start;
+}
+
+.passwordFields .field input {
+  height: 50px;
+  min-height: 50px;
+}
+
+.passwordFeedback {
+  display: grid;
+  min-height: 18px;
+  grid-column: 1 / -1;
+  gap: 4px;
+}
+
+.field > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+}
+
+.field input {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid #cfd2d6;
+  border-radius: 10px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #171717;
+  font: inherit;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  outline: none;
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+
+.field input:focus {
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.08);
+}
+
+.field input[aria-invalid="true"] {
+  border-color: #d92d20;
+}
+
+.errorMessage {
+  color: #d92d20;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+}
+
+.fieldHint {
+  color: #7a7e85;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+}
+
+.formError,
+.successMessage {
+  margin: -8px 0 0;
+  border-radius: 9px;
+  padding: 11px 13px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+}
+
+.formError {
+  border: 1px solid #f0b8b3;
+  background: #fff7f6;
+  color: #b42318;
+}
+
+.successMessage {
+  border: 1px solid #a7dec3;
+  background: #f0fff7;
+  color: #087443;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.cancelButton,
+.saveButton {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  padding: 0 20px;
+  font: inherit;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: var(--presentation-font-weight-bold);
+  text-decoration: none;
+}
+
+.cancelButton {
+  border: 1px solid #cfd2d6;
+  background: #ffffff;
+  color: #171717;
+}
+
+.saveButton {
+  border: 1px solid #171717;
+  background: #171717;
+  color: #ffffff;
+}
+
+.saveButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 720px) {
+  .page {
+    gap: 18px;
+  }
+
+  .pageHeader {
+    padding-bottom: 18px;
+  }
+
+  .pageHeader h1 {
+    font-size: calc(25px + var(--presentation-font-size-increase));
+  }
+
+  .verificationCard {
+    margin-top: 8px;
+  }
+
+  .cardHeading,
+  .form {
+    padding: 20px;
+  }
+
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .passwordFields {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .passwordFeedback {
+    grid-column: auto;
+    margin-top: -10px;
+  }
+
+  .fullWidthField {
+    grid-column: auto;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

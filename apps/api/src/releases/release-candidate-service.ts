@@ -501,7 +501,7 @@ function validateReference(input: {
   if ((input.deploymentId === null) === (input.pipelineRunId === null)) {
     throw new ReleaseCandidateError(
       "RELEASE_REFERENCE_INVALID",
-      "Exactly one direct deployment or Git pipeline run is required"
+      "Exactly one managed deployment or Git pipeline run is required"
     );
   }
 }

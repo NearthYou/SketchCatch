@@ -1,31 +1,25 @@
 # Session Handoff
 
-Use this file only for compact continuation context. Write it in English and reference durable artifacts instead of repeating them.
-
 ## Currently Verified
 
-- Branch `Refactor/jh/531-cicd-pr개선-및-편의성-추가` implements the minimal CI/CD setup convergence scope on top of `origin/dev` at `334e33c5`; the earlier written design commit is `a7e3e4e2`.
-- One Phase 3 action now persists a draft before applying GitHub Repository settings, a target-branch Environment policy, scoped AWS trust, and PR changes in order.
-- Partial handoffs resume with the same accepted Plan. Failed/cancelled Pipeline state creates a retry-only file and safe retry PR without Direct Destroy or redeployment.
-- Provider hardening preserves unrelated GitHub branches and IAM statements, avoids exact-state writes, verifies remote read-back, and requires persisted Repository/AWS evidence before Phase 3 completion.
-- Generated workflows reject a stale `SKETCHCATCH_PROJECT_ID` before external work and retain API error bodies.
-- Focused verification passes: API setup/provider 42, full Git/CI/CD API 246, readiness 96, Web 54, root lint, root typecheck, and all five production build tasks.
+- PR #558 is merged into dev at 45219559 after CI run 39606279718 passed. Release integration uses #590 and the existing dev-to-main PR #560.
+- The local full package test run passed: Types 78, Web 1393, API 2232 passed with two platform skips. Linux CI exercises filesystem symlinks and the POSIX cache test.
+- Root harness, lint, typecheck and five-package build passed. Sandbox 25, import-safety 30, capture-generator 5 and Terraform mocked plan checks 2 passed.
+- Main's reader documentation, demo-video label, contributor role, portfolio architecture image and three approved test removals are preserved. Canonical document links resolve.
 
 ## Changes This Session
 
-- Added the resumable setup API, persisted verification evidence, exact GitHub/AWS convergence, safe PR recovery, workflow project binding guard, and Phase 4 retry CTA.
-- Updated shared contracts and canonical data/deployment/architecture documentation.
-- No DB schema, Drizzle migration, dependency, worker, or lease change was added.
-- No live GitHub/AWS mutation, PR merge, Terraform Plan/Apply/Destroy, deployment, or push was performed.
-- The combined user approval covers Repository variables, Environment branch policy, the current scoped AWS trust statement, and PR preparation. It does not approve merge or Pipeline/cloud execution.
+- Repaired upload-negation and sizing interpretation, managed microservice selection, storage purpose separation, HTTPS coverage and generated transport placement.
+- Made archive metadata/path verification portable while retaining checksum, path, type and quota checks. Refreshed auth and import test fixtures without relaxing access checks.
+- Removed Security Group overlay bounds from the support-lane traffic envelope; genuine intrusion checks and the existing aggregate budget remain intact.
+- Recaptured 10 Module and 29 Template previews using the real local editor. Updated committed asset/diagram hashes and repaired capture scripts. Test CI now runs the complete package suite and deployment/capture safety tests.
 
 ## Broken Or Unverified
 
-- No changed local regression is known to be broken.
-- Live GitHub/AWS acceptance is intentionally unverified until the reviewed branch is deployed.
+- No production DB migration, ECS deployment, service restart, paid model call or real cloud operation was executed. Existing stopped services remain stopped.
+- Production authentication, new AWS import permissions and end-to-end Terraform execution have not been smoke-tested against a live account in this session.
+- Windows cannot create file symlinks without Developer Mode or elevation; that platform-specific test is explicitly skipped locally and remains enabled in Linux CI.
 
 ## Best Next Action
 
-1. Review and deploy this branch through the normal production workflow.
-2. Confirm the GitHub App installation has Administration and Variables Read/write plus Actions Read-only.
-3. Run one authorized production acceptance covering first setup and one failed-Pipeline retry.
+Use GitHub PR checks and the release page for publication status. Before any production deployment, recheck the running resource state and applied DB migration head, then follow docs/deployment.md for 0055 through 0057. Do not start stopped services merely to verify documentation or screenshots.

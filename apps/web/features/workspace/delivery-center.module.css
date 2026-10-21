@@ -186,7 +186,7 @@
 
 .phaseName {
   color: var(--cicd-text);
-  font-size: 20px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-bold);
   line-height: 1.2;
   overflow: hidden;
@@ -197,7 +197,7 @@
 .phaseStatus {
   color: var(--cicd-muted);
   display: block;
-  font-size: 14px;
+  font-size: calc(8px + var(--presentation-font-size-increase));
   font-weight: var(--presentation-font-weight-regular);
   line-height: 1.35;
   margin-top: 4px;
@@ -228,7 +228,7 @@
   color: #59616d;
   display: inline-flex;
   flex: 0 0 60px;
-  font-size: 30px;
+  font-size: calc(24px + var(--presentation-font-size-increase));
   font-variant-numeric: tabular-nums;
   font-weight: var(--presentation-font-weight-bold);
   height: 60px;
@@ -1155,17 +1155,17 @@
 
   .phaseMarker {
     flex-basis: 54px;
-    font-size: 27px;
+    font-size: calc(21px + var(--presentation-font-size-increase));
     height: 54px;
     width: 54px;
   }
 
   .phaseName {
-    font-size: 18px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
   }
 
   .phaseStatus {
-    font-size: 13px;
+    font-size: calc(7px + var(--presentation-font-size-increase));
   }
 }
 
@@ -1198,17 +1198,17 @@
 
   .phaseMarker {
     flex-basis: 50px;
-    font-size: 25px;
+    font-size: calc(19px + var(--presentation-font-size-increase));
     height: 50px;
     width: 50px;
   }
 
   .phaseName {
-    font-size: 16px;
+    font-size: calc(10px + var(--presentation-font-size-increase));
   }
 
   .phaseStatus {
-    font-size: 12px;
+    font-size: calc(7px + var(--presentation-font-size-increase));
   }
 }
 
@@ -1267,19 +1267,19 @@
   }
 
   .phaseName {
-    font-size: 18px;
+    font-size: calc(12px + var(--presentation-font-size-increase));
     overflow: visible;
     text-overflow: clip;
     white-space: normal;
   }
 
   .phaseStatus {
-    font-size: 13px;
+    font-size: calc(7px + var(--presentation-font-size-increase));
   }
 
   .phaseMarker {
     flex-basis: 48px;
-    font-size: 24px;
+    font-size: calc(18px + var(--presentation-font-size-increase));
     height: 48px;
     width: 48px;
   }

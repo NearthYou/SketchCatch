@@ -19,7 +19,17 @@ test("GET /health returns ok", async () => {
   });
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.json(), { status: "ok" });
+  const body = response.json() as {
+    status: string;
+    runtime: { apiRevision: string; contractVersion: string; databaseMigrationHead: string | null };
+  };
+  assert.equal(body.status, "ok");
+  assert.equal(typeof body.runtime.apiRevision, "string");
+  assert.equal(typeof body.runtime.contractVersion, "string");
+  assert.ok(
+    body.runtime.databaseMigrationHead === null ||
+      typeof body.runtime.databaseMigrationHead === "string"
+  );
 
   await app.close();
 });

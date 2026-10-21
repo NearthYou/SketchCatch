@@ -32,6 +32,8 @@ aws ecs describe-services --cluster sketchcatch-production-cluster --services sk
 
 DB 마이그레이션은 서비스 배포 중 자동 실행하지 않습니다. [Run Production Database Migrations](../.github/workflows/migrate.yml)를 수동 실행하며 호환성 검사와 RDS 스냅샷을 먼저 수행합니다. 기존 `practice` 값을 제거하는 마이그레이션은 해당 값을 새로 만들지 않는 API와 Worker를 먼저 배포한 뒤 적용합니다.
 
+v2.4.0의 AWS 조회 승인과 조회 결과 미리보기에는 `0055`부터 `0057`까지의 마이그레이션이 필요합니다. 테이블과 컬럼을 추가하는 변경입니다. 운영 DB의 적용 이력을 확인한 뒤 새 기능을 배포합니다. GitHub 릴리즈 발행만으로 DB에 적용되지는 않습니다.
+
 운영 Terraform은 [runtime](../infra/aws/terraform), [edge와 data](../infra/aws/production), 복구용 State로 나눕니다. 변경 전 대상 자원과 소유권, 백업 및 Plan을 검토합니다. Import도 실제 State 변경이므로 별도 승인이 필요합니다. CloudFormation이 소유한 자원을 Terraform이 동시에 소유하게 하지 않습니다.
 
 DNS와 IAM, 영구 저장소의 변경은 이미지 교체에 섞지 않습니다. 실행 설정은 [워크플로](../.github/workflows/deploy-ecs.yml)와 [인프라 안내](../infra/aws/production/README.md)에서 확인합니다.
@@ -56,5 +58,7 @@ DNS와 IAM, 영구 저장소의 변경은 이미지 교체에 섞지 않습니�
 - 취소 시 자식 프로세스 종료와 남은 State 저장을 확인합니다. 실제 종료를 확인하기 전에 새 실행을 시작하지 않습니다.
 - 실행 중이거나 성공한 배포, State가 남은 실패, 자원 삭제에 실패한 기록은 개수 제한만으로 지우지 않습니다.
 - Destroy는 사용자 배포의 소유권과 최신 State를 확인한 뒤 실행합니다. 삭제 실패 기록은 재시도에 필요하므로 남깁니다.
+
+AWS 연결 해제 시에는 SketchCatch 소유 태그를 확인한 관리 자원만 정리합니다. 일시적인 요청 제한과 통신 오류는 AWS SDK가 최초 요청을 포함해 최대 6회 시도합니다. IAM 삭제 충돌은 별도로 최대 7회 기다린 뒤 재시도합니다. 권한 거부와 소유권 불일치는 즉시 중단하고 이미 삭제된 자원은 성공으로 처리합니다.
 
 권한 범위와 실행 코드는 [Worker 요청](../apps/api/src/deployments/deployment-worker-dispatcher.ts), [운영 IAM 설정](../infra/aws/iam), [공유 데이터 모델](data-models.md)에서 확인합니다.

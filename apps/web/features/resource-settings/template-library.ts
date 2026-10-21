@@ -23,7 +23,7 @@ import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geom
 import { materializeTemplateDiagram } from "./template-resource-materializer";
 import { applyBoardTemplatePresentationCorrections } from "./template-presentation-corrections";
 import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
-import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
+import { getReferenceTemplateThumbnailAsset } from "./reference-template-thumbnail-manifest";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -765,7 +765,7 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
       description: descriptions[evidence.title] ?? "AWS 리소스를 조합한 인프라 구성 템플릿입니다.",
       id: entry.id,
       tags: ["AWS"],
-      thumbnailSrc: getBrainboardTemplateThumbnailAsset(entry.id).src,
+      thumbnailSrc: getReferenceTemplateThumbnailAsset(entry.id).src,
       title: evidence.title
     } as const;
 
@@ -780,15 +780,7 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
 
 const boardTemplates: readonly BoardTemplate[] = [
   ...repositoryBoardTemplates,
-  ...brainboardBoardTemplates,
-  ...legacyBoardTemplates
-    .filter((template) => template.id === "template-live-observation")
-    .map((template): AvailableBoardTemplate => ({
-      ...template,
-      availability: "available",
-      diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson)),
-      terraformFiles: []
-    }))
+  ...brainboardBoardTemplates
 ];
 
 // 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.

@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  SketchCatch internal Runtime Cache Redis for deployment log cursors and Git/CI/CD pipeline
+  SketchCatch internal Runtime Cache Redis for deployment log cursors and CI/CD pipeline
   status polling. This template creates cost-bearing ElastiCache resources and must not be used
-  as a user Practice Architecture resource.
+  as a user infrastructure resource.
 
 Parameters:
   VpcId:

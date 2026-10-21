@@ -3,7 +3,7 @@ export type ProjectAssetStorage = {
     objectKey: string;
     contentType: string;
     body: Buffer | string;
-  }): Promise<void>;
+  }): Promise<{ versionId?: string } | void>;
   getObject(input: { objectKey: string }): Promise<Buffer>;
   deleteObject(input: { objectKey: string }): Promise<void>;
   deleteObjectVersion?(input: { objectKey: string; versionId: string }): Promise<void>;

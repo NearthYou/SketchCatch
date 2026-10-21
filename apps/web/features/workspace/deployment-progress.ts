@@ -1,6 +1,7 @@
 import type {
   Deployment,
   DeploymentProgressSnapshot,
+  DeploymentScope,
   DeploymentStage
 } from "@sketchcatch/types";
 
@@ -8,7 +9,7 @@ export type DeploymentProgressOperation = "apply" | "destroy" | "destroy-plan" |
 
 type ProgressDeployment = Pick<
   Deployment,
-  "activeStage" | "currentPlanOperation" | "failureStage" | "id" | "status"
+  "activeStage" | "currentPlanOperation" | "failureStage" | "id" | "scope" | "status"
 >;
 
 export type DeploymentProgressPresentation = {
@@ -24,6 +25,7 @@ export type DeploymentProgressPresentationInput = {
   readonly deployment: ProgressDeployment | null;
   readonly isStarting: boolean;
   readonly operationHint: DeploymentProgressOperation | null;
+  readonly scopeHint?: DeploymentScope | null;
   readonly snapshot: DeploymentProgressSnapshot | null;
 };
 
@@ -35,6 +37,11 @@ const OPERATION_TITLES: Readonly<Record<DeploymentProgressOperation, string>> = 
 };
 
 const STARTING_ESTIMATED_PERCENT = 5;
+const APPLICATION_PLAN_TITLE = "앱 배포 준비 중";
+const APPLICATION_PLAN_DETAIL =
+  "앱 빌드와 릴리스에 필요한 변경사항을 확인하고 있습니다.";
+const APPLICATION_DEPLOY_TITLE = "앱 배포 중";
+const APPLICATION_DEPLOY_DETAIL = "검증된 앱 Artifact를 빌드하고 릴리스하고 있습니다.";
 
 const STAGE_ESTIMATED_PERCENT: Readonly<Record<DeploymentStage, number>> = {
   init: 15,
@@ -56,6 +63,11 @@ export function getDeploymentProgressPresentation(
       ? input.snapshot
       : null;
   const operation = resolveDeploymentProgressOperation(input.deployment, input.operationHint);
+  const scope = input.isStarting
+    ? (input.scopeHint ?? input.deployment?.scope)
+    : (input.deployment?.scope ?? input.scopeHint);
+  const isApplicationPlan = operation === "plan" && scope === "application";
+  const isApplicationExecution = operation === "apply" && scope === "application";
 
   if (snapshot?.measurement.kind === "complete") {
     const wasDestroyed = snapshot.status === "DESTROYED";
@@ -100,11 +112,11 @@ export function getDeploymentProgressPresentation(
     const { completedUnits, percent, totalUnits } = snapshot.measurement;
 
     return {
-      detail: `${getStageDetail(operation, activeStage)} ${completedUnits}/${totalUnits}개 완료`,
+      detail: `${getStageDetail(operation, activeStage, isApplicationPlan, isApplicationExecution)} ${completedUnits}/${totalUnits}개 완료`,
       mode: "determinate",
       operation,
       percent,
-      title: getStageTitle(operation, activeStage),
+      title: getStageTitle(operation, activeStage, isApplicationPlan, isApplicationExecution),
       valueLabel: `${percent}%`
     };
   }
@@ -117,11 +129,19 @@ export function getDeploymentProgressPresentation(
 
   if (!activeStage) {
     return {
-      detail: "실행 요청을 전달하고 Terraform 작업 환경을 준비하고 있습니다.",
+      detail: isApplicationPlan
+        ? "앱 배포 요청을 전달하고 빌드와 릴리스 환경을 준비하고 있습니다."
+        : isApplicationExecution
+          ? APPLICATION_DEPLOY_DETAIL
+          : "실행 요청을 전달하고 Terraform 작업 환경을 준비하고 있습니다.",
       mode: "estimated",
       operation,
       percent: STARTING_ESTIMATED_PERCENT,
-      title: OPERATION_TITLES[operation],
+      title: isApplicationPlan
+        ? APPLICATION_PLAN_TITLE
+        : isApplicationExecution
+          ? APPLICATION_DEPLOY_TITLE
+          : OPERATION_TITLES[operation],
       valueLabel: `약 ${STARTING_ESTIMATED_PERCENT}%`
     };
   }
@@ -129,11 +149,11 @@ export function getDeploymentProgressPresentation(
   const estimatedPercent = STAGE_ESTIMATED_PERCENT[activeStage];
 
   return {
-    detail: getStageDetail(operation, activeStage),
+    detail: getStageDetail(operation, activeStage, isApplicationPlan, isApplicationExecution),
     mode: "estimated",
     operation,
     percent: estimatedPercent,
-    title: getStageTitle(operation, activeStage),
+    title: getStageTitle(operation, activeStage, isApplicationPlan, isApplicationExecution),
     valueLabel: `약 ${estimatedPercent}%`
   };
 }
@@ -163,7 +183,9 @@ export function resolveDeploymentProgressOperation(
 
 function getStageDetail(
   operation: DeploymentProgressOperation,
-  activeStage: DeploymentStage
+  activeStage: DeploymentStage,
+  isApplicationPlan: boolean,
+  isApplicationExecution: boolean
 ): string {
   if (activeStage === "init") {
     return "Terraform 실행 환경과 Provider를 초기화하고 있습니다.";
@@ -174,6 +196,7 @@ function getStageDetail(
   }
 
   if (activeStage === "plan") {
+    if (isApplicationPlan) return APPLICATION_PLAN_DETAIL;
     return operation === "destroy-plan"
       ? "정리될 리소스와 삭제 순서를 계산하고 있습니다."
       : "생성·수정·삭제될 리소스를 계산하고 있습니다.";
@@ -187,6 +210,10 @@ function getStageDetail(
     return "애플리케이션 Artifact를 만들고 배포 상태를 확인하고 있습니다.";
   }
 
+  if (isApplicationExecution && activeStage === "apply") {
+    return APPLICATION_DEPLOY_DETAIL;
+  }
+
   if (activeStage === "rollback") {
     return "실패한 변경을 이전 상태로 되돌리고 있습니다.";
   }
@@ -198,12 +225,18 @@ function getStageDetail(
 
 function getStageTitle(
   operation: DeploymentProgressOperation,
-  activeStage: DeploymentStage
+  activeStage: DeploymentStage,
+  isApplicationPlan: boolean,
+  isApplicationExecution: boolean
 ): string {
   if (activeStage === "preflight") return "배포 전 안전 검사 중";
   if (activeStage === "application_release") return "애플리케이션 릴리즈 중";
   if (activeStage === "rollback") return "배포 롤백 중";
-  return OPERATION_TITLES[operation];
+  return isApplicationPlan
+    ? APPLICATION_PLAN_TITLE
+    : isApplicationExecution
+      ? APPLICATION_DEPLOY_TITLE
+      : OPERATION_TITLES[operation];
 }
 
 function isFailureStatus(status: Deployment["status"]): boolean {

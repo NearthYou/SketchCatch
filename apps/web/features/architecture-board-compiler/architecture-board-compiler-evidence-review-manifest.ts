@@ -8,7 +8,7 @@ export const ARCHITECTURE_BOARD_COMPILER_EVIDENCE_REVIEW_MANIFEST_VERSION =
   "architecture-board-compiler-evidence-review/v1";
 
 export const ARCHITECTURE_BOARD_COMPILER_EVIDENCE_REVIEW_CAPTURE_ROOT =
-  "docs/diagram-layout-reference/compiler-evidence-captures/v1";
+  "apps/web/test-fixtures/architecture-board-layout/compiler-evidence-captures/v1";
 
 const TARGET_REVIEW_COUNT = 8;
 const SOURCE_ORDER = ["repository", "brainboard"] as const;

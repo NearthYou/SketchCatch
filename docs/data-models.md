@@ -21,6 +21,7 @@
 | 모델 | 의미 |
 | --- | --- |
 | `AwsConnection` | 사용자가 연결하고 검증한 AWS 역할 |
+| `AwsImportAccess` | 기존 AWS 자원을 조회하기 위한 권한 설정과 승인, 처리 상태 |
 | `Deployment` | 특정 프로젝트의 Terraform 실행과 결과 |
 | `DeploymentJob` | API와 Worker가 추적하는 실행 작업 |
 | `DeploymentPlanArtifact` | 승인할 Plan 파일과 해시, 대상 및 상태 정보 |
@@ -41,6 +42,7 @@ Plan 승인에는 파일 해시뿐 아니라 프로젝트와 AWS 계정, 리전,
 | `GitCicdPipelineRun` | GitHub workflow run과 재시도별 실행 기록 |
 | `GitCicdPipelineStage`, `GitCicdPipelineLog` | 실행 단계와 순서가 있는 로그 |
 | `ReverseEngineeringScan` | 기존 자원 조회와 설계 복원 결과 |
+| `ReverseEngineeringScanPreview` | 설계에 반영하기 전의 조회 결과와 만료 시각, 반영 여부 |
 | `DeploymentNotification` | 배포 완료 알림과 수신함 상태 |
 
 같은 커밋의 앱 배포와 인프라 변경도 별도 실행으로 저장합니다. 늦게 도착한 조회 결과가 완료 상태를 되돌리지 못하게 갱신 순서를 검사합니다. 관측 세션은 Redis에 최대 15분 저장하며 영구 배포 기록을 대신하지 않습니다.

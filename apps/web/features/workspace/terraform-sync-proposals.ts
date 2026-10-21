@@ -78,7 +78,9 @@ export function rewriteTerraformReferencesForSyncProposals(
 ): TerraformVirtualFile[] {
   const rewrites = proposals
     .filter(
-      (proposal): proposal is Extract<TerraformDiagramChangeProposal, { kind: "rename_candidate" }> =>
+      (
+        proposal
+      ): proposal is Extract<TerraformDiagramChangeProposal, { kind: "rename_candidate" }> =>
         proposal.kind === "rename_candidate"
     )
     .map((proposal) => ({
@@ -255,7 +257,7 @@ function applyCreateProposal(
     kind: "resource",
     position: getCreateProposalPosition(diagramJson.nodes, proposal, nodeSize, metadata),
     size: nodeSize,
-    label: proposal.identity.resourceName,
+    label: catalogResource?.nodeDefaults.label ?? proposal.identity.resourceName,
     ...(catalogResource ? { iconUrl: catalogResource.iconUrl } : {}),
     locked: false,
     zIndex: 0,
@@ -287,7 +289,8 @@ function resolveCreateProposalNodeId(
 
   return createUniqueNodeId(
     nodes,
-    proposal.nodeId ?? `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
+    proposal.nodeId ??
+      `terraform-${proposal.identity.resourceType}-${proposal.identity.resourceName}`
   );
 }
 
@@ -332,7 +335,6 @@ function applyRenameProposal(
 
       return {
         ...node,
-        label: proposal.to.resourceName,
         parameters: {
           ...node.parameters,
           terraformBlockType: proposal.to.terraformBlockType,

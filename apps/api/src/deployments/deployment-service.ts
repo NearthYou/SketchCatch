@@ -25,6 +25,7 @@ import type {
   DeploymentSource,
   DeploymentStage,
   DeploymentStatus,
+  ReverseEngineeringScanResult,
   RuntimeTargetKind,
   TerraformOutput
 } from "@sketchcatch/types";
@@ -52,6 +53,7 @@ import {
   projectAssets,
   projects,
   releaseCandidates,
+  reverseEngineeringScans,
   terraformOutputs,
   touchUpdatedAt
 } from "../db/schema.js";
@@ -289,6 +291,19 @@ export type DeploymentRepository = {
     | Pick<typeof projectDrafts.$inferSelect, "revision" | "diagramJson" | "terraformFiles">
     | undefined
   >;
+  findAccessibleScan?(
+    projectId: string,
+    scanId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<
+    | {
+        id: string;
+        projectId: string;
+        status: string;
+        result: ReverseEngineeringScanResult | null;
+      }
+    | undefined
+  >;
   findProjectTargetForPreparation?(
     projectId: string
   ): Promise<
@@ -353,6 +368,11 @@ export type DeploymentRepository = {
   synchronizeDeploymentTargetAfterApply?(input: {
     projectId: string;
     deploymentId: string;
+    accessContext: ProjectAccessContext;
+  }): Promise<void>;
+  synchronizeDeploymentTargetBeforeApplicationRelease?(input: {
+    projectId: string;
+    awsConnectionId: string;
     accessContext: ProjectAccessContext;
   }): Promise<void>;
   completeDeploymentApply(
@@ -577,6 +597,22 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         userId: input.accessContext.userId
       });
     },
+    async synchronizeDeploymentTargetBeforeApplicationRelease(input) {
+      const [target] = await db
+        .select({ runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind })
+        .from(projectDeploymentTargets)
+        .where(eq(projectDeploymentTargets.projectId, input.projectId));
+      if (target && target.runtimeTargetKind !== "ecs_fargate") return;
+
+      const gitCicdReadinessService = createGitCicdReadinessService({
+        repository: createPostgresGitCicdReadinessRepository(db)
+      });
+      await gitCicdReadinessService.synchronizeDeploymentTargetBeforeApplicationRelease({
+        projectId: input.projectId,
+        userId: input.accessContext.userId,
+        expectedAwsConnectionId: input.awsConnectionId
+      });
+    },
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()
@@ -732,6 +768,27 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .from(projectDrafts)
         .where(eq(projectDrafts.projectId, projectId));
       return draft;
+    },
+
+    async findAccessibleScan(projectId, scanId, accessContext) {
+      const [scan] = await db
+        .select({
+          id: reverseEngineeringScans.id,
+          projectId: reverseEngineeringScans.projectId,
+          status: reverseEngineeringScans.status,
+          result: reverseEngineeringScans.result
+        })
+        .from(reverseEngineeringScans)
+        .innerJoin(projects, eq(reverseEngineeringScans.projectId, projects.id))
+        .where(
+          and(
+            eq(reverseEngineeringScans.id, scanId),
+            eq(reverseEngineeringScans.projectId, projectId),
+            eq(projects.userId, accessContext.userId),
+            isNull(reverseEngineeringScans.deletedAt)
+          )
+        );
+      return scan;
     },
 
     async findProjectTargetForPreparation(projectId) {

@@ -188,9 +188,10 @@ export function CicdConsoleScreen({
       selectGitCicdHandoffForSetup(
         handoffs,
         sourceDeployment?.id ?? null,
-        readiness?.approvedApplyPlanArtifactId ?? null
+        readiness?.approvedApplyPlanArtifactId ?? null,
+        repository?.id ?? null
       ),
-    [handoffs, readiness?.approvedApplyPlanArtifactId, sourceDeployment]
+    [handoffs, readiness?.approvedApplyPlanArtifactId, repository?.id, sourceDeployment]
   );
   const currentHandoff = useMemo(() => {
     const sorted = [...handoffs].sort((left, right) =>

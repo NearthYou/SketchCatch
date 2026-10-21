@@ -28,13 +28,16 @@ import {
   createTerraformDiagramRequestGuard,
   createTerraformFilesForRefresh,
   createTerraformFilesFromGeneratedCode,
+  createInitialTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
   getEffectivePreservedTerraformAddresses,
   getTerraformAddressesRemovedFromDiagram,
   getTerraformFileCode,
   getTerraformFileOptions,
+  getTerraformSourceClassificationAfterRefresh,
   hasAuthoritativeTerraformSource,
+  hasTerraformResourceBlocks,
   markTerraformSourceAuthoritative,
   parseTerraformFiles,
   removeTerraformBlocksAndDependentOutputsByAddress,
@@ -43,6 +46,7 @@ import {
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
 import { createTerraformDiagnosticLineNumbers } from "./terraform-diagnostic-line-highlights";
+import { createTerraformLineHighlightStyle } from "./terraform-editor-highlight-layout";
 import { applyTerraformEditorIndentation } from "./terraform-editor-indentation";
 import { createTerraformHighlightedLines } from "./terraform-code-highlighting";
 import {
@@ -66,7 +70,7 @@ import {
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
-const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
+const TERRAFORM_EDITOR_FALLBACK_LINE_HEIGHT = 28.8;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
 type TerraformPreviewExplanationScope = {
@@ -254,6 +258,7 @@ export const TerraformCodePanel = forwardRef<
       | undefined;
     readonly externalDiscardRequestId: number;
     readonly externalSaveRequestId: number;
+    readonly isMutationLocked: boolean;
     readonly isVisible: boolean;
     readonly onArchitectureDiagnosticsChange: (diagnostics: ArchitectureDiagnostic[]) => void;
     readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
@@ -275,6 +280,7 @@ export const TerraformCodePanel = forwardRef<
     externalTerraformFilesReplacement,
     externalDiscardRequestId,
     externalSaveRequestId,
+    isMutationLocked,
     isVisible,
     onArchitectureDiagnosticsChange,
     onDiagnosticsChange,
@@ -287,15 +293,22 @@ export const TerraformCodePanel = forwardRef<
   },
   ref
 ) {
+  const initialTerraformSourceFiles = createInitialTerraformFiles(
+    context.diagram,
+    initialTerraformFiles
+  );
+  const hasInitialTerraformResourceBlocks = hasTerraformResourceBlocks(
+    initialTerraformSourceFiles
+  );
   const initialTerraformFingerprint =
     initialTerraformFiles?.length && hasAuthoritativeTerraformSource(context.diagram)
       ? toTerraformRefreshFingerprint(context.diagram)
       : "";
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
-    initialTerraformFiles && initialTerraformFiles.length > 0
-      ? initialTerraformFiles.map((file) => ({ fileName: file.fileName, code: file.terraformCode }))
-      : createTerraformFilesFromGeneratedCode(context.diagram, "")
+    initialTerraformSourceFiles
   );
+  const mutationLockedRef = useRef(isMutationLocked);
+  mutationLockedRef.current = isMutationLocked;
   const terraformBaselineFilesRef = useRef<TerraformVirtualFile[]>(
     terraformFiles.map((file) => ({ ...file }))
   );
@@ -342,7 +355,8 @@ export const TerraformCodePanel = forwardRef<
   const latestExternalTerraformFilesReplacementIdRef = useRef<number | null>(null);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const classifiedPreservedResourceAddressesRef = useRef(new Set<string>());
-  const initialTerraformSourceClassifiedRef = useRef(!initialTerraformFiles?.length);
+  const initialTerraformSourceClassifiedRef = useRef(!hasInitialTerraformResourceBlocks);
+  const syntaxHighlightRef = useRef<HTMLPreElement | null>(null);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -462,17 +476,19 @@ export const TerraformCodePanel = forwardRef<
     [displayedTerraformCode]
   );
   const highlightedBlockStyle = highlightedBlock
-    ? {
-        height: `${Math.max(1, highlightedBlock.endLine - highlightedBlock.startLine + 1) * TERRAFORM_EDITOR_LINE_HEIGHT}px`,
-        top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (highlightedBlock.startLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
-      }
+    ? createTerraformLineHighlightStyle({
+        endLine: highlightedBlock.endLine,
+        scrollTop: codeScrollTop,
+        startLine: highlightedBlock.startLine
+      })
     : null;
   const sourceLineHighlightStyle =
     activeSourceHighlightLine !== null
-      ? {
-          height: `${TERRAFORM_EDITOR_LINE_HEIGHT}px`,
-          top: `${TERRAFORM_EDITOR_VERTICAL_PADDING + (activeSourceHighlightLine - 1) * TERRAFORM_EDITOR_LINE_HEIGHT - codeScrollTop}px`
-        }
+      ? createTerraformLineHighlightStyle({
+          endLine: activeSourceHighlightLine,
+          scrollTop: codeScrollTop,
+          startLine: activeSourceHighlightLine
+        })
       : null;
 
   const openTerraformSourceLocation = useCallback(
@@ -503,7 +519,7 @@ export const TerraformCodePanel = forwardRef<
   );
   const terraformSyntaxHighlightStyle = useMemo(
     () => ({
-      transform: `translate(${-codeScrollLeft}px, ${-codeScrollTop}px)`
+      transform: `translate3d(${-codeScrollLeft}px, ${-codeScrollTop}px, 0)`
     }),
     [codeScrollLeft, codeScrollTop]
   );
@@ -519,8 +535,11 @@ export const TerraformCodePanel = forwardRef<
     }
   }, []);
 
+  /** Board 적용 lock 전후의 비동기 생성 결과가 Terraform source를 덮지 않게 합니다. */
   const refreshTerraformCode = useCallback(
     async (diagramFingerprint: string, preserveExistingSource = true) => {
+      if (mutationLockedRef.current) return;
+
       const requestId = codeRequestIdRef.current + 1;
       const requestCodeVersion = codeVersionRef.current;
       const requestDiagram = diagramRequestGuardRef.current.capture();
@@ -535,6 +554,7 @@ export const TerraformCodePanel = forwardRef<
       setRequestState("loading");
 
       try {
+        const sourceWasClassified = initialTerraformSourceClassifiedRef.current;
         let nextClassifiedPreservedResourceAddresses =
           classifiedPreservedResourceAddressesRef.current;
         let shouldCommitInitialSourceClassification = false;
@@ -547,6 +567,7 @@ export const TerraformCodePanel = forwardRef<
           });
 
           if (
+            mutationLockedRef.current ||
             requestId !== codeRequestIdRef.current ||
             requestCodeVersion !== codeVersionRef.current ||
             requestDiagramRevision !== context.getDiagramRevision() ||
@@ -567,6 +588,7 @@ export const TerraformCodePanel = forwardRef<
         const generated = await generateTerraformCode(context.diagram);
 
         if (
+          mutationLockedRef.current ||
           requestId !== codeRequestIdRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
@@ -595,6 +617,7 @@ export const TerraformCodePanel = forwardRef<
           preservedResourceAddresses: effectivePreservedAddresses
         });
         if (
+          mutationLockedRef.current ||
           requestId !== codeRequestIdRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
@@ -603,10 +626,17 @@ export const TerraformCodePanel = forwardRef<
           return;
         }
 
+        initialTerraformSourceClassifiedRef.current =
+          getTerraformSourceClassificationAfterRefresh({
+            currentFiles: terraformFiles,
+            didClassifyCurrentSource: shouldCommitInitialSourceClassification,
+            nextFiles,
+            preserveExistingSource,
+            sourceWasClassified
+          });
         if (shouldCommitInitialSourceClassification) {
           classifiedPreservedResourceAddressesRef.current =
             nextClassifiedPreservedResourceAddresses;
-          initialTerraformSourceClassifiedRef.current = true;
         }
         codeVersionRef.current += 1;
         terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
@@ -628,6 +658,7 @@ export const TerraformCodePanel = forwardRef<
         onDirtyChange(false);
       } catch {
         if (
+          mutationLockedRef.current ||
           requestId !== codeRequestIdRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
@@ -673,7 +704,7 @@ export const TerraformCodePanel = forwardRef<
       files: terraformFiles
     });
 
-    if (requestCodeVersion !== codeVersionRef.current) {
+    if (mutationLockedRef.current || requestCodeVersion !== codeVersionRef.current) {
       return [createStaleTerraformValidationDiagnostic()];
     }
 
@@ -689,8 +720,11 @@ export const TerraformCodePanel = forwardRef<
     return validationDiagnostics;
   }, [combinedTerraformCode, onDiagnosticsChange, terraformFiles]);
 
+  /** lock이 열린 동안에만 Terraform과 Diagram을 함께 동기화합니다. */
   const syncTerraformCodeToDiagram =
     useCallback(async (): Promise<PreparedTerraformArtifactSource | null> => {
+      if (mutationLockedRef.current) return null;
+
       const requestCodeVersion = codeVersionRef.current;
       const requestDiagram = diagramRequestGuardRef.current.capture();
       const requestDiagramRevision = context.getDiagramRevision();
@@ -699,6 +733,7 @@ export const TerraformCodePanel = forwardRef<
         : [];
 
       if (
+        mutationLockedRef.current ||
         requestCodeVersion !== codeVersionRef.current ||
         requestDiagramRevision !== context.getDiagramRevision() ||
         !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -730,6 +765,7 @@ export const TerraformCodePanel = forwardRef<
       });
 
       if (
+        mutationLockedRef.current ||
         requestCodeVersion !== codeVersionRef.current ||
         requestDiagramRevision !== context.getDiagramRevision() ||
         !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -759,6 +795,7 @@ export const TerraformCodePanel = forwardRef<
         });
 
         if (
+          mutationLockedRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
           !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -785,6 +822,7 @@ export const TerraformCodePanel = forwardRef<
         });
 
         if (
+          mutationLockedRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
           !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -824,6 +862,7 @@ export const TerraformCodePanel = forwardRef<
       const authoritativeDiagramJson = markTerraformSourceAuthoritative(nextDiagramJson);
 
       if (
+        mutationLockedRef.current ||
         requestCodeVersion !== codeVersionRef.current ||
         requestDiagramRevision !== context.getDiagramRevision() ||
         !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -865,8 +904,9 @@ export const TerraformCodePanel = forwardRef<
       terraformFiles
     ]);
 
+  /** Board 적용 중에는 별도의 Terraform 저장을 시작하지 않습니다. */
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
-    if (requestState === "loading") {
+    if (requestState === "loading" || mutationLockedRef.current) {
       return false;
     }
 
@@ -902,11 +942,16 @@ export const TerraformCodePanel = forwardRef<
     }
   }, [hasTerraformCode, onDiagnosticsChange, requestState, runTerraformModuleValidation]);
 
+  /** AI 안전 수정도 같은 mutation lock과 비동기 stale 검사를 통과해야 반영합니다. */
   const applyTerraformSafeFixesToCode = useCallback(
     async (
       fixes: readonly TerraformSafeFixApplyItem[]
     ): Promise<TerraformSafeFixBatchResult> => {
-      if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
+      if (
+        requestState === "loading" ||
+        isPreparingTerraformArtifactRef.current ||
+        mutationLockedRef.current
+      ) {
         return {
           applied: false,
           files: terraformFiles,
@@ -946,6 +991,7 @@ export const TerraformCodePanel = forwardRef<
         });
 
         if (
+          mutationLockedRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
           !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -993,6 +1039,7 @@ export const TerraformCodePanel = forwardRef<
         });
 
         if (
+          mutationLockedRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
           !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -1034,6 +1081,7 @@ export const TerraformCodePanel = forwardRef<
         const authoritativeDiagramJson = markTerraformSourceAuthoritative(nextDiagramJson);
 
         if (
+          mutationLockedRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
           !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -1071,6 +1119,7 @@ export const TerraformCodePanel = forwardRef<
         };
       } catch (error) {
         if (
+          mutationLockedRef.current ||
           requestCodeVersion !== codeVersionRef.current ||
           requestDiagramRevision !== context.getDiagramRevision() ||
           !diagramRequestGuardRef.current.isCurrent(requestDiagram)
@@ -1129,6 +1178,10 @@ export const TerraformCodePanel = forwardRef<
       getTerraformFiles: () => terraformFiles,
       openTerraformSourceLocation,
       prepareTerraformArtifact: async () => {
+        if (mutationLockedRef.current) {
+          throw new Error("Board 정리안 적용이 끝난 뒤 다시 시도해 주세요.");
+        }
+
         if (!hasTerraformCode) {
           throw new Error("저장할 Terraform 코드가 없습니다.");
         }
@@ -1175,6 +1228,7 @@ export const TerraformCodePanel = forwardRef<
     const replacement = externalTerraformFilesReplacement;
 
     if (
+      isMutationLocked ||
       !replacement ||
       latestExternalTerraformFilesReplacementIdRef.current === replacement.id ||
       currentDiagramFingerprint !== replacement.diagramFingerprint
@@ -1193,10 +1247,11 @@ export const TerraformCodePanel = forwardRef<
           }))
         : createTerraformFilesFromGeneratedCode(context.diagram, "");
     const hasSourceSeed = replacement.files.length > 0;
+    const hasSourceResourceBlocks = hasTerraformResourceBlocks(nextFiles);
 
     terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
     classifiedPreservedResourceAddressesRef.current = new Set();
-    initialTerraformSourceClassifiedRef.current = !hasSourceSeed;
+    initialTerraformSourceClassifiedRef.current = !hasSourceResourceBlocks;
     latestDiagramResourceAddressesRef.current = getDiagramTerraformAddresses(context.diagram);
     latestDiagramFingerprintRef.current = hasSourceSeed ? replacement.diagramFingerprint : "";
     latestSuccessfulTerraformPreviewFingerprintRef.current = hasSourceSeed
@@ -1224,6 +1279,7 @@ export const TerraformCodePanel = forwardRef<
     context.diagram,
     currentDiagramFingerprint,
     externalTerraformFilesReplacement,
+    isMutationLocked,
     onDiagnosticsChange,
     onDirtyChange,
     onTerraformFilesChange,
@@ -1260,6 +1316,8 @@ export const TerraformCodePanel = forwardRef<
   }, [context.terraformRefreshRequestId, currentDiagramFingerprint, refreshTerraformCode]);
 
   useEffect(() => {
+    if (isMutationLocked) return;
+
     const previousAddresses = latestDiagramResourceAddressesRef.current;
     latestDiagramResourceAddressesRef.current = currentDiagramResourceAddresses;
 
@@ -1311,6 +1369,7 @@ export const TerraformCodePanel = forwardRef<
     currentDiagramFingerprint,
     currentDiagramResourceAddresses,
     hasLocalEdits,
+    isMutationLocked,
     onDiagnosticsChange,
     onDirtyChange,
     terraformFiles
@@ -1353,7 +1412,7 @@ export const TerraformCodePanel = forwardRef<
       const targetLine = Math.max(1, Math.min(line, lineCount));
       const lineHeight =
         Number.parseFloat(window.getComputedStyle(textarea).lineHeight) ||
-        TERRAFORM_EDITOR_LINE_HEIGHT;
+        TERRAFORM_EDITOR_FALLBACK_LINE_HEIGHT;
       const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
       const cursorOffset = getTerraformLineStartOffset(code, targetLine);
 
@@ -1395,7 +1454,7 @@ export const TerraformCodePanel = forwardRef<
     const textarea = textareaRef.current;
     const lineHeight =
       Number.parseFloat(window.getComputedStyle(textarea).lineHeight) ||
-      TERRAFORM_EDITOR_LINE_HEIGHT;
+      TERRAFORM_EDITOR_FALLBACK_LINE_HEIGHT;
     const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING + (selectedBlock.startLine - 1) * lineHeight;
     const blockHeight =
       Math.max(1, selectedBlock.endLine - selectedBlock.startLine + 1) * lineHeight;
@@ -1468,7 +1527,10 @@ export const TerraformCodePanel = forwardRef<
     }
   }
 
+  /** read-only lock 중 발생한 늦은 입력 event를 상태 변경 전에 버립니다. */
   function handleCodeChange(nextCode: string): void {
+    if (mutationLockedRef.current) return;
+
     codeVersionRef.current += 1;
     const nextFiles = terraformFiles.map((file) => {
       if (inspectedBlock && file.fileName === inspectedBlock.fileName) {
@@ -1500,7 +1562,13 @@ export const TerraformCodePanel = forwardRef<
     setStatusMessage("수정 중");
   }
 
+  /** lock 중 Tab·저장 shortcut까지 포함한 편집 key를 처리하지 않습니다. */
   function handleCodeKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
+    if (mutationLockedRef.current) {
+      event.preventDefault();
+      return;
+    }
+
     if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       const textarea = event.currentTarget;
@@ -1534,7 +1602,10 @@ export const TerraformCodePanel = forwardRef<
     }
   }
 
+  /** 잠긴 동안 새 virtual file이 선택 동작으로 생기지 않게 합니다. */
   function selectTerraformFile(fileName: string): void {
+    if (mutationLockedRef.current) return;
+
     setTerraformFiles((currentFiles) =>
       currentFiles.some((file) => file.fileName === fileName)
         ? currentFiles
@@ -1552,6 +1623,7 @@ export const TerraformCodePanel = forwardRef<
   return (
     <div
       className={styles.terraformPanel}
+      aria-busy={isMutationLocked}
       onFocusCapture={handleTerraformFocusAiInteraction}
       onPointerDown={onTerraformAiInteraction}
     >
@@ -1588,13 +1660,18 @@ export const TerraformCodePanel = forwardRef<
           handleKeyDown: handleCodeKeyDown,
           handleScroll: handleCodeScroll
         }}
-        refs={{ lineNumbers: lineNumberRef, textarea: textareaRef }}
+        refs={{
+          lineNumbers: lineNumberRef,
+          syntaxHighlight: syntaxHighlightRef,
+          textarea: textareaRef
+        }}
         state={{
           code: displayedTerraformCode,
           diagnosticLineNumbers: diagnosticLineNumberSet,
           highlightedBlockAddress: highlightedBlock?.address ?? null,
           highlightedBlockStyle,
           highlightedLines: highlightedTerraformLines,
+          isMutationLocked,
           lineNumbers,
           sourceLineHighlightStyle,
           syntaxHighlightStyle: terraformSyntaxHighlightStyle

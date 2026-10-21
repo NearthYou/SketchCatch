@@ -40,6 +40,32 @@ test("IAM Policy data source summary uses the data schema instead of the resourc
   ]);
 });
 
+test("Template Resource 목록은 Terraform local name보다 사용자 표시 이름을 우선한다", () => {
+  const node: DiagramNode = {
+    id: "eks-cluster-role",
+    kind: "resource",
+    label: "EKS Cluster IAM Role",
+    locked: false,
+    parameters: {
+      fileName: "main",
+      resourceName: "iam-cluster",
+      resourceType: "aws_iam_role",
+      terraformBlockType: "resource",
+      values: {}
+    },
+    position: { x: 0, y: 0 },
+    size: { width: 48, height: 48 },
+    type: "aws_iam_role",
+    zIndex: 0
+  };
+
+  const [summary] = buildResourceListItems([node], terraformParameterCatalog);
+
+  assert.ok(summary);
+  assert.equal(summary.displayName, "EKS Cluster IAM Role");
+  assert.equal(summary.terraformAddress, "aws_iam_role.iam-cluster");
+});
+
 test("Reverse Engineering Resource 목록은 보존한 AWS 원본 식별자를 화면에 노출하지 않는다", () => {
   const node: DiagramNode = {
     id: "imported-lambda",

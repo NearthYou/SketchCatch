@@ -6,7 +6,8 @@ import {
   type DiagramJson,
   type DiagramNode,
   type DiagramNodeParameters,
-  type TerraformDiagnostic
+  type TerraformDiagnostic,
+  type TerraformSyncFileInput
 } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 
@@ -244,6 +245,19 @@ export function createTerraformFilesFromGeneratedCode(
       code,
       fileName
     }));
+}
+
+/** Keeps every supplied seed file; only a truly empty seed falls back to generated providers. */
+export function createInitialTerraformFiles(
+  diagramJson: DiagramEditorPanelContext["diagram"],
+  initialFiles: readonly TerraformSyncFileInput[] | undefined
+): TerraformVirtualFile[] {
+  return initialFiles && initialFiles.length > 0
+    ? initialFiles.map((file) => ({
+        fileName: file.fileName,
+        code: file.terraformCode
+      }))
+    : createTerraformFilesFromGeneratedCode(diagramJson, "");
 }
 
 export function mergeGeneratedTerraformFiles(
@@ -703,6 +717,42 @@ export function createTerraformFilesForRefresh({
     generatedFiles,
     preservedResourceAddresses
   );
+}
+
+/** Provider declarations alone are not a Terraform resource seed that needs classification. */
+export function hasTerraformResourceBlocks(
+  files: readonly TerraformVirtualFile[]
+): boolean {
+  return parseTerraformFiles(files).length > 0;
+}
+
+/** Marks newly generated or replaced resource sources for classification on the next refresh. */
+export function getTerraformSourceClassificationAfterRefresh({
+  currentFiles,
+  didClassifyCurrentSource,
+  nextFiles,
+  preserveExistingSource,
+  sourceWasClassified
+}: {
+  readonly currentFiles: readonly TerraformVirtualFile[];
+  readonly didClassifyCurrentSource: boolean;
+  readonly nextFiles: readonly TerraformVirtualFile[];
+  readonly preserveExistingSource: boolean;
+  readonly sourceWasClassified: boolean;
+}): boolean {
+  if (didClassifyCurrentSource) {
+    return true;
+  }
+
+  if (!hasTerraformResourceBlocks(nextFiles)) {
+    return true;
+  }
+
+  if (!preserveExistingSource || !hasTerraformResourceBlocks(currentFiles)) {
+    return false;
+  }
+
+  return sourceWasClassified;
 }
 
 function upsertGeneratedTerraformOutputs(

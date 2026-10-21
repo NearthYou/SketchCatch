@@ -76,7 +76,7 @@ test("readiness refresh maps transient evidence failures to a stable 503 code", 
   assert.equal(response.statusCode, 503);
   assert.deepEqual(response.json(), {
     error: "GIT_CICD_READINESS_REFRESH_FAILED",
-    message: "Git/CI/CD readiness evidence could not be refreshed"
+    message: "CI/CD readiness evidence could not be refreshed"
   });
   assert.doesNotMatch(response.body, /temporary S3 failure|internal details/u);
 

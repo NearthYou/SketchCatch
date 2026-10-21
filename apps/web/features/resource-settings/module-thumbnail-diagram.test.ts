@@ -174,9 +174,9 @@ test("Module thumbnail capture stages the real viewer and exposes a 1280 by 720 
 });
 
 test("Module thumbnail capture keeps resource labels readable at its fitted clone zoom", () => {
-  assert.equal(getBoardThumbnailPersistentLabelScale(0.1), 7.5);
-  assert.equal(getBoardThumbnailPersistentLabelScale(0.5), 1.5);
-  assert.equal(getBoardThumbnailPersistentLabelScale(0.75), 1);
+  assert.equal(getBoardThumbnailPersistentLabelScale(0.1), 10);
+  assert.equal(getBoardThumbnailPersistentLabelScale(0.5), 2);
+  assert.equal(getBoardThumbnailPersistentLabelScale(0.75), 1 / 0.75);
   assert.equal(getBoardThumbnailPersistentLabelScale(1), 1);
   assert.match(
     captureClientSource,

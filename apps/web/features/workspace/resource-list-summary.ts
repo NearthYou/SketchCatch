@@ -112,8 +112,7 @@ function buildTerraformResourceListItem(
 }
 
 function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string): string {
-  const resourceName = node.parameters?.resourceName?.trim() ?? "";
-  return resourceName || node.label || resourceType;
+  return node.label.trim() || node.parameters?.resourceName?.trim() || resourceType;
 }
 
 function buildTerraformResourceRows(

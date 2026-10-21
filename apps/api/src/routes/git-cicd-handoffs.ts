@@ -895,10 +895,10 @@ function shouldRefreshGitHubPipelineStatus(handoff: GitCicdHandoffRecord): boole
 
 const unconfiguredGitCicdRunProvider: GitCicdRunProvider = {
   async listSnapshots() {
-    throw new Error("Git/CI/CD Pipeline Run provider is not configured");
+    throw new Error("CI/CD Pipeline Run provider is not configured");
   },
   async listCommitFiles() {
-    throw new Error("Git/CI/CD Pipeline Run provider is not configured");
+    throw new Error("CI/CD Pipeline Run provider is not configured");
   }
 };
 

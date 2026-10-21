@@ -67,6 +67,7 @@ import {
   isArchitectureDraftClarification,
   isArchitecturePatchClarification,
   readAiStartProjectDraft,
+  resolveAiStartEntryDraft,
   storeApprovedAiStartMessages,
   trimAiStartMessages,
   type AiStartExistingProject,
@@ -117,9 +118,11 @@ function reportWorkspaceAiError(stage: WorkspaceAiErrorStage, error: unknown): v
 }
 
 export function useAiStartWorkflow({
-  existingProject
+  existingProject,
+  initialProjectName
 }: {
   readonly existingProject?: AiStartExistingProject | undefined;
+  readonly initialProjectName?: string | undefined;
 } = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -174,14 +177,12 @@ export function useAiStartWorkflow({
   });
 
   useEffect(() => {
-    const storedDraft =
-      existingProjectId && existingProjectName
-        ? {
-            projectName: existingProjectName,
-            startMode: "ai" as const,
-            updatedAt: new Date().toISOString()
-          }
-        : readAiStartProjectDraft();
+    const storedDraft = resolveAiStartEntryDraft({
+      existingProjectName:
+        existingProjectId && existingProjectName ? existingProjectName : undefined,
+      initialProjectName,
+      storedDraft: readAiStartProjectDraft()
+    });
 
     if (storedDraft === null) {
       router.replace("/workspace/new");
@@ -196,7 +197,7 @@ export function useAiStartWorkflow({
         `${storedDraft.projectName}에 필요한 구조를 알려주세요.`
       )
     ]);
-  }, [existingProjectId, existingProjectName, router]);
+  }, [existingProjectId, existingProjectName, initialProjectName, router]);
 
   useEffect(() => {
     return () => {
@@ -325,7 +326,7 @@ export function useAiStartWorkflow({
   ): Promise<void> {
     beginRequest();
 
-    if (getAiStartDraftTransport(existingProjectId) === "json") {
+    if (getAiStartDraftTransport(request) === "json") {
       abortActiveDraftRequest();
       rememberDraftRequest(request);
       const controller = requestRegistryRef.current.begin("draft");
@@ -457,7 +458,7 @@ export function useAiStartWorkflow({
   }
 
   function publishDraftProgressState(nextState: DraftProgressState): void {
-    setProgressSnapshot(nextState.visibleSnapshot);
+    setProgressSnapshot(nextState.requestSnapshot);
     setProgressStatus(nextState.status);
   }
 

@@ -7,17 +7,30 @@ export type SignedAwsQueryInput = {
   action: string;
   version: string;
   credentials: TerraformAwsCredentialEnv;
+  parameters?: Partial<Record<"NextToken" | "Marker", string>>;
 };
 
-// AWS Query API 요청을 SigV4로 서명해서 XML 응답을 받아옵니다.
+/** gg: Action/Version과 allowlisted page token만 body에 넣어 AWS Query 요청을 서명합니다. */
 export async function sendAwsQuery(
   input: SignedAwsQueryInput,
   fetchXml: typeof fetch
 ): Promise<string> {
-  const body = new URLSearchParams({
+  const parameters = new URLSearchParams({
     Action: input.action,
     Version: input.version
-  }).toString();
+  });
+  for (const [key, value] of Object.entries(input.parameters ?? {})) {
+    if (
+      (key !== "NextToken" && key !== "Marker") ||
+      typeof value !== "string" ||
+      value.length === 0 ||
+      value.length > 16_384
+    ) {
+      throw new Error("Unsupported AWS Query pagination parameter.");
+    }
+    parameters.set(key, value);
+  }
+  const body = parameters.toString();
   const endpoint = `https://${input.service}.${input.region}.amazonaws.com/`;
   const signedHeaders = signAwsQueryRequest({
     ...input,

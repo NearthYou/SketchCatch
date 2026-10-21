@@ -156,13 +156,38 @@ test("deployment preparation validates the exact merged Terraform artifact witho
   assert.doesNotMatch(rightPanelSource, /skipValidation:\s*true/);
 });
 
-test("Direct Deployment uses prepare, approve, and execute with three external phases", () => {
+test("managed deployment uses prepare, approve, and execute with three external phases", () => {
   assert.match(directDeploymentSource, /prepareDeployment\(\{/);
   assert.match(directDeploymentSource, /approveDeploymentPlan\(selectedDeployment\.id\)/);
   assert.match(directDeploymentSource, /executeDeployment\(selectedDeployment\.id\)/);
   assert.doesNotMatch(directDeploymentSource, /selectedLiveProfile|liveProfileOptions/);
   assert.match(directDeploymentSource, /stepId === "validation"/);
   assert.match(directDeploymentSource, /stepId === "approval"/);
+});
+
+test("application-only deployment continues from one user action without a manual approval step", () => {
+  const completionStart = directDeploymentSource.indexOf(
+    "async function completeApplicationDeployment"
+  );
+  const reviewStart = directDeploymentSource.indexOf(
+    "async function startDeploymentReview",
+    completionStart
+  );
+  const planActionStart = directDeploymentSource.indexOf(
+    "async function startTerraformPlan",
+    reviewStart
+  );
+  const completionSource = directDeploymentSource.slice(completionStart, reviewStart);
+  const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
+
+  assert.ok(completionStart > -1);
+  assert.ok(reviewStart > completionStart);
+  assert.match(completionSource, /approveDeploymentPlan\(plannedDeployment\.id\)/);
+  assert.match(completionSource, /executeDeployment\(approvedDeployment\.id\)/);
+  assert.doesNotMatch(reviewSource, /completeApplicationDeployment\(plannedDeployment\)/);
+  assert.match(directDeploymentSource, /completeApplicationDeployment\(selectedDeployment\)/);
+  assert.match(directDeploymentSource, /shouldShowApplyButton && selectedDeployment\?\.scope !== "application"/);
+  assert.match(directDeploymentSource, /isApplicationOnlyFlow[\s\S]*"앱 배포 중"[\s\S]*"앱 배포"/);
 });
 
 test("approval owns the Plan summary while execution keeps final target confirmation", () => {
@@ -344,6 +369,25 @@ test("deployment review delegates build preparation and repository verification 
   assert.doesNotMatch(reviewSource, /runDeploymentInit|queuedApplyPlan/);
 });
 
+test("application-only deployment waits for the durable Plan before automatic approval", () => {
+  const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
+  const planActionStart = directDeploymentSource.indexOf(
+    "async function startTerraformPlan",
+    reviewStart
+  );
+  const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
+
+  assert.doesNotMatch(reviewSource, /completeApplicationDeployment\(plannedDeployment\)/);
+  assert.match(
+    reviewSource,
+    /plannedDeployment\.scope !== "application"[\s\S]*pendingAutoAdvanceDeploymentIdRef\.current = ""/
+  );
+  assert.match(
+    directDeploymentSource,
+    /pendingAutoAdvanceDeploymentIdRef\.current === selectedDeployment\.id[\s\S]*selectedDeployment\.scope === "application"[\s\S]*selectedDeployment\.currentPlanArtifactId[\s\S]*completeApplicationDeployment\(selectedDeployment\)/
+  );
+});
+
 test("durable Plan polling refreshes Repository verification after worker completion", () => {
   const runtimeLoadStart = directDeploymentSource.indexOf("const loadDeploymentRuntimeSnapshot");
   const runtimeApplyStart = directDeploymentSource.indexOf(
@@ -421,7 +465,7 @@ test("terminal application failures hide stale approval and remain visible from 
   );
 });
 
-test("full-stack validation checks the confirmed target and opens its setup surface", () => {
+test("full-stack validation checks the confirmed target and prepared Terraform files", () => {
   const targetCheckIndex = directDeploymentSource.indexOf("getProjectDeploymentTarget(projectId)");
   const artifactPreparationIndex = directDeploymentSource.indexOf(
     "onPrepareDeploymentArtifacts()",
@@ -443,7 +487,7 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   assert.ok(runtimeSecretPrerequisiteCheckIndex > artifactPreparationIndex);
   assert.match(
     directDeploymentSource,
-    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson/
+    /getDeploymentRuntimeSecretPrerequisite\(\{[\s\S]*?diagramJson: preparedArtifacts\.diagramJson,[\s\S]*?terraformFiles: preparedArtifacts\.terraformFiles/
   );
   assert.match(directDeploymentSource, /CI\/CD 설정으로 이동/);
   assert.match(directDeploymentSource, /onOpenDeliverySetup/);
@@ -454,10 +498,10 @@ test("full-stack validation checks the confirmed target and opens its setup surf
   );
 });
 
-test("runtime Secret mismatch offers a direct Repository reanalysis path", () => {
+test("runtime Secret mismatch returns to the current Terraform editor", () => {
   assert.match(directDeploymentSource, /deploymentTargetPrerequisite\.action/);
-  assert.match(directDeploymentSource, /Repository 다시 분석/);
-  assert.match(directDeploymentSource, /\/workspace\/repository/);
+  assert.match(directDeploymentSource, /Terraform 코드 수정/);
+  assert.doesNotMatch(directDeploymentSource, /Repository 다시 분석|Fixed Template Board/);
   assert.match(deploymentShellSource, /projectName=\{projectName\}/);
   assert.match(managerSource, /requiredRuntimeSecrets:\s*template\.requiredRuntimeSecrets/);
 });
@@ -487,7 +531,7 @@ test("a current request error does not suppress the selected deployment failure"
 });
 
 test("changed drafts keep cleanup available beside save and validation", () => {
-  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const actionsStart = directDeploymentSource.indexOf("function renderCleanupPlanActions");
   const validationStart = directDeploymentSource.indexOf(
     'if (stepId === "validation")',
     actionsStart
@@ -496,12 +540,13 @@ test("changed drafts keep cleanup available beside save and validation", () => {
     'if (stepId === "approval")',
     validationStart
   );
-  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+  const validationSource = directDeploymentSource.slice(actionsStart, approvalStart);
 
   assert.ok(actionsStart > -1);
   assert.ok(validationStart > -1);
   assert.ok(approvalStart > validationStart);
   assert.match(validationSource, /startTerraformDestroyPlan/);
+  assert.match(validationSource, /!hasCurrentPlan[\s\S]*renderCleanupPlanActions\(\)[\s\S]*검증 실행/);
   assert.match(validationSource, /저장 후 검증/);
   assert.doesNotMatch(validationSource, /검증 단계에서는 실제 리소스를 변경하지 않습니다/);
 });
@@ -556,7 +601,7 @@ test("deployment action buttons fit their label without clipping", () => {
   const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
   const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
   const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
-  const actionRailStart = workspaceStyles.indexOf("/* Direct Deployment action rail */");
+  const actionRailStart = workspaceStyles.indexOf("/* managed deployment action rail */");
   const executiveConsoleStart = workspaceStyles.indexOf(
     "/* Approved blue executive deployment console */",
     actionRailStart
@@ -617,19 +662,19 @@ test("reload restores the persisted ProjectDraft revision instead of assuming ch
   assert.match(rightPanelSource, /projectDraftRevision=\{projectDraftRevision\}/);
 });
 
-test("Direct Deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
+test("managed deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
   assert.match(directDeploymentSource, /PARTIALLY_FAILED/);
   assert.match(directDeploymentSource, /같은 빌드 결과로 웹 배포 재시도/);
   assert.match(directDeploymentSource, /retryDeploymentFrontend\(selectedDeployment\.id\)/);
   assert.match(directDeploymentSource, /현재 주소와 QR, Live Observation은 계속 사용할 수 있지만/);
 });
 
-test("Direct Deployment auto-selects the verified AWS connection without rendering a selector", () => {
+test("managed deployment auto-selects the verified AWS connection without rendering a selector", () => {
   assert.doesNotMatch(directDeploymentSource, /ariaLabel="AWS 연결 선택"/);
   assert.match(directDeploymentSource, /awsConnectionId: selectedAwsConnectionId/);
 });
 
-test("Direct Deployment omits the removed deployment context and run-details sections", () => {
+test("managed deployment omits the removed deployment context and run-details sections", () => {
   assert.doesNotMatch(directDeploymentSource, /deploymentContextPanel/);
   assert.doesNotMatch(directDeploymentSource, /deployment-run-details|실행 세부정보/);
 });
@@ -662,6 +707,23 @@ test("Deployment screen follows the approved operational hierarchy", () => {
   assert.match(historySource, /selectedHistoryDeploymentId\.length > 0/);
   assert.match(historySource, /setSelectedHistoryDeploymentId\(""\)/);
   assert.doesNotMatch(historySource, /성공한 배포의 변경 내용과 실행 결과를 확인합니다/);
+});
+
+test("Deployment approval and History use the shared import-aware change summary", () => {
+  assert.match(
+    directDeploymentSource,
+    /import \{[\s\S]*formatDeploymentPlanChangeSummary[\s\S]*\} from "\.\/deployment-presentation";/
+  );
+  assert.match(
+    directDeploymentSource,
+    /<InfoRow\s+label="변경 사항"\s+value=\{formatDeploymentPlanChangeSummary\(summary\)\}/
+  );
+  assert.equal(
+    directDeploymentSource.match(
+      /formatDeploymentPlanChangeSummary\(deployment\.planSummary\)/gu
+    )?.length,
+    2
+  );
 });
 
 test("Deployment console global header owns refresh and close tools", () => {
@@ -713,6 +775,17 @@ test("automatic deployment scope stays unresolved until the current Plan resolve
   assert.match(setupSource, /resolveDeploymentReadinessScope\(/);
   assert.match(setupSource, /검증 후 결정/);
   assert.doesNotMatch(setupSource, /selectedDeployment\?\.scope \?\? "infrastructure"/);
+});
+
+test("manual deployment scope changes discard the previous Plan before another execution", () => {
+  assert.match(
+    directDeploymentSource,
+    /function beginDeploymentScope\([\s\S]*?setSelectedScope\(scope\);[\s\S]*?setSelectedDeploymentId\(""\);[\s\S]*?setShowApplyConfirmation\(false\);[\s\S]*?setSelectedDirectStepId\("validation"\);/
+  );
+  assert.match(directDeploymentSource, /label: "인프라만"/);
+  assert.match(directDeploymentSource, /label: "앱만"/);
+  assert.match(directDeploymentSource, /label: "인프라 \+ 앱 함께"/);
+  assert.match(directDeploymentSource, /앱만 이어서 배포/);
 });
 
 test("deployment console horizontal container margin uses a valid length", () => {

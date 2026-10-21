@@ -39,7 +39,7 @@ export function createDesignSimulationFallbackExplanation(
   };
 }
 
-// LLM 없이도 Pre-Deployment Check의 finding과 checklist를 쉬운 요약으로 보여줍니다.
+// LLM 없이도 deployment check의 finding과 checklist를 쉬운 요약으로 보여줍니다.
 export function createPreDeploymentCheckFallbackExplanation(
   result: AiPreDeploymentAnalysisResult,
   fallbackReason: LlmExplanationFallbackReason
@@ -165,7 +165,7 @@ function createArchitectureDraftNextActions(result: AiArchitectureDraftResult): 
     result.metadata.guardrailWarnings !== undefined && result.metadata.guardrailWarnings.length > 0
       ? "warning 항목을 먼저 읽고 운영 조건과 맞는지 확인하세요."
       : undefined,
-    "IaC Preview와 Pre-Deployment Check를 이어서 실행하세요."
+    "IaC Preview와 deployment check를 이어서 실행하세요."
   ].filter(isNonEmptyString);
 
   return actions.slice(0, 5);
@@ -182,7 +182,7 @@ function createPreDeploymentCheckHighlights(result: AiPreDeploymentAnalysisResul
   ].filter(isNonEmptyString);
 
   if (highlights.length === 0) {
-    return ["현재 rule 기반 Pre-Deployment Check에서 막는 항목은 없습니다."];
+    return ["현재 rule 기반 deployment check에서 막는 항목은 없습니다."];
   }
 
   return highlights.slice(0, 5);
@@ -199,7 +199,7 @@ function createPreDeploymentCheckNextActions(result: AiPreDeploymentAnalysisResu
     return nextActions;
   }
 
-  return ["Architecture Board 설정을 확인한 뒤 Pre-Deployment Check를 다시 실행하세요."];
+  return ["Architecture Board 설정을 확인한 뒤 deployment check를 다시 실행하세요."];
 }
 
 // stage, category, 원인, 관련 Resource만 남겨 원본 오류보다 짧은 highlight를 만듭니다.

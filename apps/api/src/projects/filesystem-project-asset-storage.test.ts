@@ -175,8 +175,7 @@ test("filesystem storage rejects symlink parents and final objects", async (t) =
 
   await mkdir(rootDirectory, { recursive: true });
   await writeFile(outsideFile, "outside", "utf8");
-  await symlink(outsideDirectory, join(rootDirectory, "linked-parent"), "dir");
-  await symlink(outsideFile, join(rootDirectory, "linked-object"), "file");
+  await symlink(outsideDirectory, join(rootDirectory, "linked-parent"), process.platform === "win32" ? "junction" : "dir");
 
   await assert.rejects(
     storage.putObject({
@@ -186,6 +185,16 @@ test("filesystem storage rejects symlink parents and final objects", async (t) =
     }),
     /symlink/i
   );
+
+  try {
+    await symlink(outsideFile, join(rootDirectory, "linked-object"), "file");
+  } catch (error) {
+    if (process.platform === "win32" && error instanceof Error && "code" in error && error.code === "EPERM") {
+      t.skip("Windows file symlinks require Developer Mode or elevated privileges; Linux CI runs this check.");
+      return;
+    }
+    throw error;
+  }
 
   for (const operation of [
     () =>
@@ -212,7 +221,7 @@ test("filesystem storage rejects a symlinked intermediate while creating its roo
     rootDirectory: join(linkedIntermediate, "project-assets")
   });
 
-  await symlink(outsideDirectory, linkedIntermediate, "dir");
+  await symlink(outsideDirectory, linkedIntermediate, process.platform === "win32" ? "junction" : "dir");
 
   await assert.rejects(
     storage.putObject({
@@ -235,7 +244,7 @@ test("filesystem storage rejects a symlinked root ancestor when the full root al
   });
 
   await mkdir(outsideRoot, { mode: 0o700 });
-  await symlink(outsideDirectory, linkedIntermediate, "dir");
+  await symlink(outsideDirectory, linkedIntermediate, process.platform === "win32" ? "junction" : "dir");
 
   await assert.rejects(
     storage.putObject({

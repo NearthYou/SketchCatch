@@ -13,14 +13,12 @@ This folder contains infrastructure configuration, AWS templates, IAM policies, 
 
 ## Architecture Rules
 
-1. Production steady state uses Docker, ECR, ECS/Fargate, ALB, RDS, and GitHub Actions. Warm EC2/SSM/Nginx rollback infrastructure is retired; recovery uses reviewed cold artifacts and an opt-in Terraform runbook.
-2. Production deployment does not use Docker Compose.
-3. Keep RDS for structured project data and S3 for file artifacts.
-4. Prefer templates and policies that are readable by the team over overly clever infrastructure code.
-5. Keep SketchCatch production infrastructure separate from user Practice Architecture Resources and user Deployment artifacts.
-6. Treat Redis, if provisioned for SketchCatch, as internal Runtime Cache infrastructure for workflow status, polling, and streaming support.
-7. Provider Adapter examples may start with AWS, but do not document SketchCatch as an AWS-only product.
-8. SketchCatch production infrastructure Terraform must use operator-approved state groups and must not run through user Deployment execution.
+1. Keep RDS for structured project data and S3 for file artifacts.
+2. Prefer templates and policies that are readable by the team over overly clever infrastructure code.
+3. Keep SketchCatch production infrastructure separate from user infrastructure resources and user Deployment artifacts.
+4. Treat Redis, if provisioned for SketchCatch, as internal Runtime Cache infrastructure for workflow status, polling, and streaming support.
+5. Provider Adapter examples may start with AWS, but do not document SketchCatch as an AWS-only product.
+6. SketchCatch production infrastructure Terraform must use operator-approved state groups and must not run through user Deployment execution.
 
 ## Review Checklist
 

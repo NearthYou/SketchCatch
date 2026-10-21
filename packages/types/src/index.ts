@@ -41,7 +41,9 @@ export type ApiErrorCode =
   | "LIVE_OBSERVATION_GONE"
   | "LIVE_OBSERVATION_NOT_FOUND"
   | "LIVE_OBSERVATION_OUTPUT_INVALID"
-  | "LIVE_OBSERVATION_RATE_LIMITED";
+  | "LIVE_OBSERVATION_RATE_LIMITED"
+  | "REVERSE_ENGINEERING_AWS_SETTINGS_REQUIRED"
+  | "REVERSE_ENGINEERING_SCAN_RETRYABLE";
 
 export type ApiErrorResponse = {
   error: ApiErrorCode;
@@ -337,6 +339,26 @@ export type AuthResponse = {
 
 export type CurrentUserResponse = {
   user: User;
+  canChangePassword: boolean;
+};
+
+export type ProfilePasswordVerificationRequest = {
+  currentPassword: string;
+};
+
+export type ProfilePasswordVerificationResponse = {
+  expiresInSeconds: number;
+};
+
+export type UpdateProfileRequest = {
+  nickname: string;
+  newPassword?: string | undefined;
+  newPasswordConfirmation?: string | undefined;
+};
+
+export type UpdateProfileResponse = {
+  user: User;
+  session?: AuthSession | undefined;
 };
 
 export type Project = {
@@ -361,6 +383,32 @@ export type CreateProjectRequest = {
   description?: string | undefined;
 };
 
+export type ReverseEngineeringSourceKind = "saved_scan" | "preview_scan";
+
+export type ReverseEngineeringSourceReference = {
+  sourceScanId: string;
+  draftId: string;
+  sourceNodeIds?: string[] | undefined;
+  sourceKind?: ReverseEngineeringSourceKind | undefined;
+};
+
+export type CreateReverseEngineeringProjectRequest = CreateProjectRequest & {
+  diagramJson: DiagramJson;
+  architectureJson: ArchitectureJson;
+  reverseEngineering: {
+    previewId: string;
+    draftId: string;
+    sourceNodeIds: string[];
+    importDecision: ReverseEngineeringImportDecisionRequest;
+  };
+};
+
+export type CreateReverseEngineeringProjectResponse = {
+  project: Project;
+  draft: ProjectDraft;
+  architecture: ArchitectureSnapshot;
+};
+
 export type ProjectDeletePreviewMode =
   | "plain"
   | "planned"
@@ -371,8 +419,11 @@ export type ProjectDeletePreviewMode =
 
 export type ProjectDeleteAction = "delete_project" | "delete_project_only" | "destroy_then_delete";
 
+/** Runs the project-owned AWS build cleanup before the project record is removed. */
+export type ProjectManagedCleanupDeleteAction = "delete_project_with_managed_cleanup";
+
 export type DeleteProjectRequest = {
-  action: Exclude<ProjectDeleteAction, "destroy_then_delete">;
+  action: Exclude<ProjectDeleteAction, "destroy_then_delete"> | ProjectManagedCleanupDeleteAction;
 };
 
 export type ProjectDeletePreview = {
@@ -445,12 +496,7 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
-  reverseEngineering?:
-    | {
-        sourceScanId: string;
-        draftId: string;
-      }
-    | undefined;
+  reverseEngineering?: ReverseEngineeringSourceReference | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -837,9 +883,7 @@ export type GitCicdReadinessItemKey =
   | "monitoring_config"
   | "deployment_target";
 
-export type GitCicdDeploymentTargetReadinessKey =
-  | "aws_connection"
-  | "build_config";
+export type GitCicdDeploymentTargetReadinessKey = "aws_connection" | "build_config";
 
 export type GitCicdReadinessAction =
   | "approve_apply_plan"
@@ -1774,10 +1818,7 @@ export type ProjectBuildEnvironmentStatus =
   | "verification_failed"
   | "disconnected";
 
-export type ProjectRepositoryAccessVerificationStatus =
-  | "not_checked"
-  | "verified"
-  | "failed";
+export type ProjectRepositoryAccessVerificationStatus = "not_checked" | "verified" | "failed";
 
 export type ProjectBuildEnvironment = {
   id: string;
@@ -2040,6 +2081,10 @@ export type DeploymentPlanSummary = {
   updateCount: number;
   deleteCount: number;
   replaceCount: number;
+  /** Older persisted summaries omit this field and are interpreted as zero imports. */
+  importCount?: number;
+  /** Import summaries with a missing or older marker must be regenerated before reuse or approval. */
+  importSafetyGateVersion?: 1 | 2;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
 };
@@ -2146,6 +2191,56 @@ export type Template = {
 };
 
 export type AwsConnectionStatus = "pending" | "verified" | "failed";
+
+export type AwsImportAccessStatus =
+  | "check_required"
+  | "manager_approval_required"
+  | "manager_checking"
+  | "policy_approval_required"
+  | "policy_working"
+  | "checking_reads"
+  | "ready"
+  | "limited"
+  | "update_required"
+  | "retry_required"
+  | "connection_required"
+  | "cleanup_policy_required"
+  | "cleanup_manager_required"
+  | "cleanup_checking"
+  | "cleanup_required"
+  | "cleanup_complete";
+
+export type AwsImportAccessNextAction =
+  | "prepare_manager"
+  | "check_manager"
+  | "preview_policy"
+  | "apply_policy"
+  | "check_reads"
+  | "open_settings"
+  | "delete_policy_stack"
+  | "delete_manager_stack"
+  | "check_cleanup"
+  | "retry";
+
+export type AwsImportAccessState = {
+  connectionId: string;
+  status: AwsImportAccessStatus;
+  nextAction: AwsImportAccessNextAction | null;
+  cleanupAvailable: boolean;
+  coreReady: boolean;
+  limitedServiceLabels: string[];
+  lastCheckedAt: IsoDateTimeString | null;
+  operationId: string | null;
+  safeSummary: string | null;
+};
+
+export type AwsImportAccessCommandResponse = {
+  operationId: string;
+  state: AwsImportAccessState;
+  nextAction: AwsImportAccessNextAction | null;
+  consoleUrl?: string;
+  managerTemplateUrl?: string;
+};
 
 export type AwsConnection = {
   id: string;
@@ -2352,6 +2447,20 @@ export type ReverseEngineeringImportSuggestionStatus =
   | "unsupported_resource_type"
   | "manual_review";
 
+export type ReverseEngineeringImportDecisionMode = "import_existing" | "observe_only";
+
+export type ReverseEngineeringImportDecision = {
+  version: 1;
+  mode: ReverseEngineeringImportDecisionMode;
+  statusAtConfirmation: ReverseEngineeringImportSuggestionStatus;
+};
+
+export type ReverseEngineeringImportDecisionRequest = {
+  version: 1;
+  selectedReadyResourceIds: string[];
+  acknowledgedReviewOnlyResourceIds: string[];
+};
+
 export type DiscoveredResource = {
   id: string;
   provider: CloudProvider;
@@ -2399,6 +2508,8 @@ export type ReverseEngineeringImportSuggestion = {
 
 export type ReverseEngineeringScanErrorReason =
   | "permission_denied"
+  | "not_configured"
+  | "unsupported"
   | "invalid_region"
   | "expired_credential"
   | "throttled"
@@ -2407,11 +2518,41 @@ export type ReverseEngineeringScanErrorReason =
 
 export type ReverseEngineeringScanError = {
   id: string;
+  /** Safe AWS service identifier used to group partial scan coverage. */
+  serviceKey?: string | undefined;
+  /** Safe provider resource types affected by this failure. Never contains an ARN or resource ID. */
+  affectedProviderResourceTypes?: string[] | undefined;
+  /** Safe IAM action names for AWS API operations that failed during this scan. */
+  failedAwsApiActions?: string[] | undefined;
   resourceType: ResourceType | "UNKNOWN";
   stage: ReverseEngineeringScanStage;
   reason: ReverseEngineeringScanErrorReason;
   message: string;
   retryable: boolean;
+};
+
+export type ReverseEngineeringServiceCoverage = {
+  status: "complete" | "partial";
+  unavailableServices: Array<{
+    serviceKey: string;
+    displayName: string;
+    reason: "permission_required" | "not_configured" | "retry";
+    remedy: "open_settings" | "retry";
+    /** Safe provider resource types affected by this service-level coverage gap. */
+    affectedProviderResourceTypes?: string[] | undefined;
+    /** Safe IAM action names for AWS API operations that could not be read. */
+    failedAwsApiActions?: string[] | undefined;
+  }>;
+  /**
+   * AWS의 목록 조회 방식 자체가 지원하지 않는 발견된 종류입니다.
+   * 권한 부족이나 재시도가 필요한 읽기 실패와는 별도로 표시합니다.
+   */
+  capabilityLimits?: Array<{
+    serviceKey: string;
+    displayName: string;
+    reason: "not_supported";
+    affectedProviderResourceTypes?: string[] | undefined;
+  }> | undefined;
 };
 
 export type ReverseEngineeringScanLogLine = {
@@ -2433,6 +2574,8 @@ export type ReverseEngineeringScanResult = {
   analysisExclusions: ReverseEngineeringAnalysisExclusion[];
   importSuggestions: ReverseEngineeringImportSuggestion[];
   scanErrors: ReverseEngineeringScanError[];
+  /** Safe service-level coverage returned by current Reverse Engineering scans. */
+  coverage?: ReverseEngineeringServiceCoverage | undefined;
 };
 
 export type CreateReverseEngineeringScanRequest = {
@@ -2444,6 +2587,12 @@ export type CreateReverseEngineeringScanRequest = {
 export type ReverseEngineeringScanResponse = {
   scan: ReverseEngineeringScan;
   result?: ReverseEngineeringScanResult | undefined;
+};
+
+export type ReverseEngineeringPreviewScanResponse = {
+  previewId: string;
+  scan: ReverseEngineeringScan;
+  result: ReverseEngineeringScanResult;
 };
 
 export type ReverseEngineeringScanListResponse = {
@@ -3861,6 +4010,21 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  /** Reverse Engineering이 만든 표시 전용 그룹이며 실제 AWS 포함 관계로 사용하지 않습니다. */
+  reverseEngineeringInfrastructureFrame?:
+    | {
+        source: "aws_scan";
+        groupBy:
+          | "project"
+          | "service"
+          | "environment"
+          | "vpc"
+          | "relationship"
+          | "common";
+        groupKey: string;
+        memberNodeIds: string[];
+      }
+    | undefined;
   areaAutoSizeBaseline?:
     | {
         position: {
@@ -3898,6 +4062,7 @@ export type DiagramNodeMetadata = {
         source: "aws_scan";
         protectedValueKeys: string[];
         editableValueKeys: string[];
+        importDecision?: ReverseEngineeringImportDecision | undefined;
       }
     | undefined;
 };
@@ -4209,6 +4374,21 @@ export type SaveProjectDraftRequest = {
   terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
+/** Existing Project에 Reverse Engineering 후보를 서버 검증 뒤 적용하는 exact request입니다. */
+export type ApplyReverseEngineeringDraftRequest = {
+  expectedRevision: number;
+  sourceScanId: string;
+  sourceDraftId: string;
+  sourceNodeIds: string[];
+  sourceEdgeIds: string[];
+  sourceDiagram: DiagramJson;
+  sourceFingerprint: string;
+  candidateDiagram: DiagramJson;
+  candidateArchitectureJson: ArchitectureJson;
+  importDecision: ReverseEngineeringImportDecisionRequest;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
+};
+
 export type ProjectDraftResponse = {
   draft: ProjectDraft | null;
 };
@@ -4390,4 +4570,6 @@ export type TerraformSyncToDiagramResponse = {
 };
 
 export * from "./architecture-technology-stack.ts";
+export * from "./board-auto-organize-contract.ts";
 export * from "./runtime-convergence.ts";
+export { hasCheckInSigningSecretTerraformContract } from "./runtime-secret-contract.ts";

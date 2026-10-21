@@ -183,6 +183,42 @@ test("convertArchitectureJsonToDiagramJson preserves authored Terraform identity
   assert.equal(diagramJson.nodes[0]?.metadata?.parentAreaNodeId, "managed-services");
 });
 
+test("AI scaling patch values are materialized for the resource settings fields", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    edges: [],
+    nodes: [
+      {
+        config: {
+          terraformResourceType: "aws_appautoscaling_policy",
+          targetTrackingScalingPolicyConfiguration: [
+            {
+              targetValue: 5,
+              predefinedMetricSpecification: [
+                { predefinedMetricType: "ECSServiceAverageCPUUtilization" }
+              ]
+            }
+          ]
+        },
+        id: "ecs-scaling-policy",
+        label: "ECS Auto Scaling",
+        positionX: 0,
+        positionY: 0,
+        type: "APPLICATION_AUTO_SCALING_POLICY"
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    diagramJson.nodes[0]?.parameters?.values.targetTrackingScalingPolicyConfiguration,
+    {
+      targetValue: 5,
+      predefinedMetricSpecification: {
+        predefinedMetricType: "ECSServiceAverageCPUUtilization"
+      }
+    }
+  );
+});
+
 test("explicit companion Terraform resources do not inherit parent resource defaults", () => {
   const diagramJson = convertArchitectureJsonToDiagramJson({
     nodes: [
@@ -3348,6 +3384,15 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
       taskSecurityGroup
   );
   assert.ok(githubActions);
+  for (const templateResource of diagramJson.nodes.filter(
+    (node) => node.kind === "resource" && node.id.startsWith(`fixed-template-${templateId}-`)
+  )) {
+    assert.doesNotMatch(
+      templateResource.parameters?.resourceName ?? "",
+      /fixed_template_ecs_fargate_container_app/u,
+      templateResource.id
+    );
+  }
   assert.equal(nodeById.has(`fixed-template-${templateId}-presentation-user`), false);
   assert.ok(definitionOpsGroup);
   assert.ok(globalIamGroup);
